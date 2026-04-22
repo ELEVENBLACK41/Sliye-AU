@@ -1,4 +1,22 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+这是一个还处在思想方面得项目，打算利用Next和express或KOA去做一个企业级后台权限策略引擎，权限设计，接口权限，颗粒化到按钮权限，埋点等，或者是一个审计引擎谁在什么时候
+对哪个数据
+做了什么操作操作前后数据 diff
+支持回滚（undo）Redis缓存，接口限流，任务调度类似：
+
+定时任务
+异步任务
+重试机制
+发邮件
+数据同步
+报表生成
+WebSocket：
+
+实时通知
+审批流更新
+在线状态
+或者再加一些AI辅助功能，ai决策，aisse流式传输，
+利用好Next得SSR和水合
 
 ## Getting Started
 
