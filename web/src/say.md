@@ -1,4 +1,4 @@
-apps/web/
+web/
 ├── app/                                # Next.js App Router（路由层）
 │   ├── (auth)/                         # 登录注册模块分组
 │   │   ├── login/
