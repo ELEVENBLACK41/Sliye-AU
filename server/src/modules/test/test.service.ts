@@ -1,0 +1,18 @@
+/*
+ * @Author: shaoliye
+ * @Date: 2026-04-24 15:34:43
+ * @Email: shaoliye@fengmap.com
+ * @LastEditTime: 2026-04-24 15:39:13
+ * @LastEditors: shaoliye
+ * @LastEditorsEmail: shaoliye@fengmap.com
+ * @Description:
+ * @Copyright: Copyright 1990 - 2026
+ */
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class TestService {
+  getTest() {
+    return { msg: 'hello nest my name is shaoliye this is a test message' };
+  }
+}
