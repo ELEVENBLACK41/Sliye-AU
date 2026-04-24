@@ -2,7 +2,7 @@
  * @Author: shaoliye
  * @Date: 2026-04-24 15:41:31
  * @Email: shaoliye@fengmap.com
- * @LastEditTime: 2026-04-24 15:41:44
+ * @LastEditTime: 2026-04-24 16:34:38
  * @LastEditors: shaoliye
  * @LastEditorsEmail: shaoliye@fengmap.com
  * @Description: 
@@ -10,8 +10,12 @@
  */
 
 export async function GET() {
-  const res = await fetch('http://localhost:3001/test')
+  const res = await fetch(`${process.env.NEST_BASE_URL}/test`)
   const data = await res.json()
 
-  return Response.json(data)
+  return Response.json({
+  code: 0,
+  data,
+  message: 'success'
+})
 }
