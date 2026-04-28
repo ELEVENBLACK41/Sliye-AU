@@ -2,7 +2,7 @@
  * @Author: shaoliye
  * @Date: 2026-04-24 15:34:05
  * @Email: shaoliye@fengmap.com
- * @LastEditTime: 2026-04-24 15:38:13
+ * @LastEditTime: 2026-04-28 17:27:24
  * @LastEditors: shaoliye
  * @LastEditorsEmail: shaoliye@fengmap.com
  * @Description:
@@ -18,5 +18,10 @@ export class TestController {
   @Get()
   getTest() {
     return this.testService.getTest();
+  }
+
+  @Get('test1')
+  getTest1() {
+    return this.testService.getTest1();
   }
 }

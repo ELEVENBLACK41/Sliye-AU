@@ -13,6 +13,10 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class TestService {
   getTest() {
-    return { msg: 'hello nest my name is shaoliye this is a test message' };
+    return { msg: 'hello nest my name is shaoliye this is a test message1232' };
+  }
+
+  getTest1() {
+    return { msg: 'hello nest my name is shaoliye this is a test message11111231231' };
   }
 }
