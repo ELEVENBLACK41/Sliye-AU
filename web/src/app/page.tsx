@@ -2,7 +2,7 @@
  * @Author: shaoliye
  * @Date: 2026-04-24 13:43:49
  * @Email: shaoliye@fengmap.com
- * @LastEditTime: 2026-04-24 16:09:56
+ * @LastEditTime: 2026-04-29 11:15:23
  * @LastEditors: shaoliye
  * @LastEditorsEmail: shaoliye@fengmap.com
  * @Description: 
@@ -13,7 +13,6 @@ import Link from "next/link";
 import { getTest } from '@/features/test'
 export default async function Home() {
   const data = await getTest()
-
   return (
     <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
