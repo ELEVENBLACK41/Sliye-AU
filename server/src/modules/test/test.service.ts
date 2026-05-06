@@ -2,7 +2,7 @@
  * @Author: shaoliye
  * @Date: 2026-04-24 15:34:43
  * @Email: shaoliye@fengmap.com
- * @LastEditTime: 2026-05-06 00:00:00
+ * @LastEditTime: 2026-05-06 16:54:41
  * @LastEditors: shaoliye
  * @LastEditorsEmail: shaoliye@fengmap.com
  * @Description:
@@ -16,7 +16,15 @@ export class TestService {
   constructor(private readonly prisma: PrismaService) {}
 
   getTest() {
-    return { msg: 'hello nest my name is shaoliye this is a test message1232' };
+    return this.prisma.user.findMany({
+      orderBy: { id: 'asc' },
+      include: {
+        posts: {
+          select: { id: true, title: true, content: true, published: true },
+          orderBy: { id: 'asc' },
+        },
+      },
+    });
   }
 
   getTest1() {
