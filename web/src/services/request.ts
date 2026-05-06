@@ -1,5 +1,5 @@
 // services/request.ts
-export async function request(url: string, options?: RequestInit) {
+export async function request<T = unknown>(url: string, options?: RequestInit): Promise<T> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
 
   const res = await fetch(`${baseUrl}${url}`, {
@@ -10,5 +10,5 @@ export async function request(url: string, options?: RequestInit) {
     throw new Error(`Request error: ${res.status}`)
   }
 
-  return res.json()
+  return res.json() as Promise<T>
 }

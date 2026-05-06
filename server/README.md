@@ -1,98 +1,208 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Server — NestJS 后端服务
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+## 目录
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+- [项目简介](#项目简介)
+- [技术栈](#技术栈)
+- [目录结构](#目录结构)
+- [快速启动](#快速启动)
+- [环境变量](#环境变量)
+- [接口列表](#接口列表)
+- [统一响应格式](#统一响应格式)
+- [规范评审](#规范评审)
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 项目简介
 
-## Project setup
+基于 **NestJS 11 + Prisma 7 + PostgreSQL** 搭建的 REST API 后端服务，作为 NextNest 全栈脚手架的服务端部分，运行于 `3001` 端口，供 Next.js BFF 层代理调用。
 
-```bash
-$ pnpm install
+---
+
+## 技术栈
+
+| 分类 | 技术 |
+|------|------|
+| 框架 | NestJS 11 |
+| 语言 | TypeScript 5 |
+| ORM | Prisma 7（Driver Adapter 模式） |
+| 数据库 | PostgreSQL |
+| 数据库连接 | `@prisma/adapter-pg` + `pg` |
+| 配置管理 | `@nestjs/config` |
+| HTTP 平台 | Express（默认） |
+| 构建 | `@nestjs/cli` |
+| 代码规范 | ESLint + Prettier |
+
+---
+
+## 目录结构
+
+```
+server/
+├── prisma/                     # Prisma 数据库相关
+│   ├── schema.prisma           # 数据模型定义
+│   ├── prisma.config.ts        # Prisma 7 数据源配置（替代 schema url）
+│   └── migrations/             # 数据库迁移历史
+│
+├── src/
+│   ├── main.ts                 # 应用入口：注册全局 Filter / Interceptor
+│   ├── app.module.ts           # 根模块：汇总所有功能模块
+│   │
+│   ├── database/               # 数据库基础设施层
+│   │   ├── prisma.module.ts    # 全局 Prisma 模块（@Global）
+│   │   └── prisma.service.ts   # PrismaService：管理连接生命周期
+│   │
+│   ├── common/                 # 跨模块公共基础设施
+│   │   ├── interceptors/       # 拦截器（统一响应格式）
+│   │   ├── filters/            # 异常过滤器（统一异常格式）
+│   │   ├── guards/             # 守卫（鉴权 / 权限）[待扩展]
+│   │   ├── pipes/              # 管道（入参校验 / 转换）[待扩展]
+│   │   ├── decorators/         # 自定义装饰器 [待扩展]
+│   │   └── utils/              # 工具函数 [待扩展]
+│   │
+│   ├── config/                 # 配置层（env 解析、类型化配置）[待扩展]
+│   │
+│   ├── modules/                # 业务功能模块
+│   │   ├── test/               # 测试模块（开发调试用）
+│   │   ├── user/               # 用户模块 [待扩展]
+│   │   ├── auth/               # 认证模块 [待扩展]
+│   │   └── audit/              # 审计日志模块 [待扩展]
+│   │
+│   ├── types/                  # 全局共享类型定义 [待扩展]
+│   └── generated/              # Prisma 自动生成的客户端（勿手动编辑）
+│
+└── test/                       # E2E 测试
 ```
 
-## Compile and run the project
+---
+
+## 快速启动
+
+### 前置条件
+
+- Node.js ≥ 22
+- pnpm ≥ 9
+- PostgreSQL 数据库（本地或远程）
+
+### 安装依赖
 
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+pnpm install
 ```
 
-## Run tests
+### 配置环境变量
 
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+# 编辑 .env，设置 DATABASE_URL
+DATABASE_URL="postgresql://user:pass@localhost:5432/dbname?schema=public"
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 数据库迁移
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+pnpm prisma migrate dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### 启动开发服务
 
-## Resources
+```bash
+pnpm dev
+# 等同于: nest start --watch
+# 监听端口: 3001
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+### 构建生产包
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+pnpm build
+node dist/src/main.js
+```
 
-## Support
+---
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## 环境变量
 
-## Stay in touch
+| 变量名 | 说明 | 示例 |
+|--------|------|------|
+| `DATABASE_URL` | PostgreSQL 连接串 | `postgresql://user:pass@localhost:5432/dbname?schema=public` |
+| `PORT` | 服务监听端口（可选，默认 3001） | `3001` |
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+---
 
-## License
+## 接口列表
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+> 所有响应均包装为统一格式，见下节。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/test` | 心跳测试 |
+| GET | `/test/test1` | 心跳测试 2 |
+| GET | `/test/users` | 查询用户列表（含文章），表空自动 seed |
+
+---
+
+## 统一响应格式
+
+### 成功
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": { "..." : "..." },
+  "timestamp": 1778041000929
+}
+```
+
+### 失败
+
+```json
+{
+  "code": 404,
+  "message": "Cannot GET /xxx",
+  "data": null,
+  "timestamp": 1778041000929
+}
+```
+
+> - `code: 0` 代表业务成功
+> - `code` 为 HTTP 状态码代表异常
+> - `timestamp` 为服务端响应时刻的 Unix 毫秒时间戳
+
+---
+
+## 规范评审
+
+> 以下是对当前代码库与大厂 NestJS 最佳实践的对比评审。
+
+### ✅ 已达标
+
+| 规范项 | 说明 |
+|--------|------|
+| 模块化分层架构 | 按 `database / common / modules / config` 四层划分，职责清晰 |
+| 全局统一响应格式 | `TransformInterceptor` 封装所有成功响应 |
+| 全局统一异常处理 | `AllExceptionsFilter` 捕获全量异常，避免裸露堆栈 |
+| 数据库连接生命周期管理 | `PrismaService` 实现 `OnModuleInit / OnModuleDestroy`，支持优雅关闭 |
+| 全局 PrismaModule | `@Global()` 装饰，避免在每个业务模块重复导入 |
+| 配置全局化 | `ConfigModule.forRoot({ isGlobal: true })` |
+| Prisma 7 适配 | 使用 `@prisma/adapter-pg` Driver Adapter 模式 |
+| 文件头注释 | 每个文件均有作者、日期、描述等标准注释头 |
+| 跨域支持 | `app.enableCors()` 已开启 |
+| Logger 使用 | 使用 NestJS 内置 `Logger` 而非 `console.log` |
+| Controller / Service 分离 | 控制器只做路由映射，业务逻辑下沉到 Service |
+| 构建产物资源复制 | `nest-cli.json` 配置 assets 将 `generated/` 正确复制到 `dist/` |
+
+### ⚠️ 待改进（成长路线）
+
+| 规范项 | 当前状态 | 建议 |
+|--------|----------|------|
+| 入参校验 | `pipes/` 目录为空，接口无 DTO 校验 | 安装 `class-validator + class-transformer`，为每个接口定义请求 DTO |
+| API 版本控制 | 无版本前缀 | 使用 `app.setGlobalPrefix('api/v1')` 或路由级版本控制 |
+| Swagger 文档 | 无接口文档 | 集成 `@nestjs/swagger`，自动生成 OpenAPI 文档 |
+| 认证鉴权 | `auth/guards/` 目录均为空 | 集成 JWT（`@nestjs/passport` + `passport-jwt`） |
+| TypeScript strict 模式 | `noImplicitAny: false` | 逐步开启，消除隐式 `any` |
+| Seed 数据与业务代码混合 | `TestService.getUsers()` 内含 seed 逻辑 | 独立 `prisma/seed.ts`，通过 `prisma db seed` 命令执行 |
+| 环境变量类型安全 | `DATABASE_URL` 为 `string \| undefined` | 用 `Joi` 在启动时校验必填项，防止空值运行时崩溃 |
+| `start:prod` 路径错误 | `package.json` 中写的是 `dist/main` | 应改为 `dist/src/main` |
+| 测试覆盖 | 无业务单元测试 | 补充 `*.spec.ts` 单元测试和 E2E 测试 |
+| 异常过滤器 any 类型 | `exception.getResponse() as any` | 使用类型收窄替代 `as any` |

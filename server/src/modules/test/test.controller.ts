@@ -2,7 +2,7 @@
  * @Author: shaoliye
  * @Date: 2026-04-24 15:34:05
  * @Email: shaoliye@fengmap.com
- * @LastEditTime: 2026-04-28 17:27:24
+ * @LastEditTime: 2026-05-06 00:00:00
  * @LastEditors: shaoliye
  * @LastEditorsEmail: shaoliye@fengmap.com
  * @Description:
@@ -23,5 +23,15 @@ export class TestController {
   @Get('test1')
   getTest1() {
     return this.testService.getTest1();
+  }
+
+  /**
+   * GET /test/users
+   * 获取用户列表（含关联文章）。
+   * 若表中无数据，自动写入种子数据后再返回。
+   */
+  @Get('users')
+  getUsers() {
+    return this.testService.getUsers();
   }
 }

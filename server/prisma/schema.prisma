@@ -4,9 +4,9 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
-  moduleFormat    = "cjs"
+  provider     = "prisma-client-js"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
@@ -18,6 +18,9 @@ model User {
   email String  @unique
   name  String?
   posts Post[]
+
+  roles UserRole[]
+  permissions UserPermission[]
 }
 
 model Post {
@@ -27,4 +30,54 @@ model Post {
   published Boolean? @default(false)
   author    User?    @relation(fields: [authorId], references: [id])
   authorId  Int?
+}
+
+model Role {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique   // admin / user / viewer
+  desc      String?
+
+  users     UserRole[]
+  perms     RolePermission[]
+}
+
+model Permission {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique   // user:create / user:delete
+  desc      String?
+
+  roles     RolePermission[]
+}
+
+model UserRole {
+  userId Int
+  roleId Int
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId Int
+  permId Int
+
+  role Role @relation(fields: [roleId], references: [id])
+  perm Permission @relation(fields: [permId], references: [id])
+
+  @@id([roleId, permId])
+}
+
+model UserPermission {
+  id        Int    @id @default(autoincrement())
+  userId    Int
+  permCode  String
+
+  effect    Int    // 1=允许 0=禁止（核心）
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([permCode])
 }
