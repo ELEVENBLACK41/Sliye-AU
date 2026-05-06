@@ -1,16 +1,12 @@
 /*
  * @Author: shaoliye
- * @Date: 2026-04-24 15:41:31
- * @Email: shaoliye@fengmap.com
- * @LastEditTime: 2026-04-24 16:34:38
- * @LastEditors: shaoliye
- * @LastEditorsEmail: shaoliye@fengmap.com
- * @Description: 
+ * @Date: 2026-05-06 00:00:00
+ * @Description: BFF 代理路由 — 转发到 NestJS GET /test/users
  * @Copyright: Copyright 1990 - 2026
  */
 
 export async function GET() {
-  const res = await fetch(`${process.env.NEST_BASE_URL}/test`)
+  const res = await fetch(`${process.env.NEST_BASE_URL}/test/users`)
 
   if (!res.ok) {
     return Response.json(
