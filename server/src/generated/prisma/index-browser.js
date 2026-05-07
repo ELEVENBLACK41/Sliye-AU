@@ -160,7 +160,22 @@ exports.Prisma.UserPermissionScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
   permCode: 'permCode',
-  effect: 'effect'
+  effect: 'effect',
+  expiresAt: 'expiresAt',
+  sourceRequestId: 'sourceRequestId'
+};
+
+exports.Prisma.PermissionRequestScalarFieldEnum = {
+  id: 'id',
+  requesterId: 'requesterId',
+  permCode: 'permCode',
+  reason: 'reason',
+  status: 'status',
+  approverId: 'approverId',
+  approvalNote: 'approvalNote',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt',
+  reviewedAt: 'reviewedAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -177,7 +192,12 @@ exports.Prisma.NullsOrder = {
   first: 'first',
   last: 'last'
 };
-
+exports.RequestStatus = exports.$Enums.RequestStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  REVOKED: 'REVOKED'
+};
 
 exports.Prisma.ModelName = {
   User: 'User',
@@ -186,7 +206,8 @@ exports.Prisma.ModelName = {
   Permission: 'Permission',
   UserRole: 'UserRole',
   RolePermission: 'RolePermission',
-  UserPermission: 'UserPermission'
+  UserPermission: 'UserPermission',
+  PermissionRequest: 'PermissionRequest'
 };
 
 /**

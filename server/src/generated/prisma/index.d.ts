@@ -48,6 +48,30 @@ export type RolePermission = $Result.DefaultSelection<Prisma.$RolePermissionPayl
  * 
  */
 export type UserPermission = $Result.DefaultSelection<Prisma.$UserPermissionPayload>
+/**
+ * Model PermissionRequest
+ * 
+ */
+export type PermissionRequest = $Result.DefaultSelection<Prisma.$PermissionRequestPayload>
+
+/**
+ * Enums
+ */
+export namespace $Enums {
+  export const RequestStatus: {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  REVOKED: 'REVOKED'
+};
+
+export type RequestStatus = (typeof RequestStatus)[keyof typeof RequestStatus]
+
+}
+
+export type RequestStatus = $Enums.RequestStatus
+
+export const RequestStatus: typeof $Enums.RequestStatus
 
 /**
  * ##  Prisma Client ʲˢ
@@ -239,6 +263,16 @@ export class PrismaClient<
     * ```
     */
   get userPermission(): Prisma.UserPermissionDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.permissionRequest`: Exposes CRUD operations for the **PermissionRequest** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more PermissionRequests
+    * const permissionRequests = await prisma.permissionRequest.findMany()
+    * ```
+    */
+  get permissionRequest(): Prisma.PermissionRequestDelegate<ExtArgs, ClientOptions>;
 }
 
 export namespace Prisma {
@@ -679,7 +713,8 @@ export namespace Prisma {
     Permission: 'Permission',
     UserRole: 'UserRole',
     RolePermission: 'RolePermission',
-    UserPermission: 'UserPermission'
+    UserPermission: 'UserPermission',
+    PermissionRequest: 'PermissionRequest'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -695,7 +730,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "user" | "post" | "role" | "permission" | "userRole" | "rolePermission" | "userPermission"
+      modelProps: "user" | "post" | "role" | "permission" | "userRole" | "rolePermission" | "userPermission" | "permissionRequest"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -1217,6 +1252,80 @@ export namespace Prisma {
           }
         }
       }
+      PermissionRequest: {
+        payload: Prisma.$PermissionRequestPayload<ExtArgs>
+        fields: Prisma.PermissionRequestFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.PermissionRequestFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.PermissionRequestFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>
+          }
+          findFirst: {
+            args: Prisma.PermissionRequestFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.PermissionRequestFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>
+          }
+          findMany: {
+            args: Prisma.PermissionRequestFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>[]
+          }
+          create: {
+            args: Prisma.PermissionRequestCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>
+          }
+          createMany: {
+            args: Prisma.PermissionRequestCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.PermissionRequestCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>[]
+          }
+          delete: {
+            args: Prisma.PermissionRequestDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>
+          }
+          update: {
+            args: Prisma.PermissionRequestUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>
+          }
+          deleteMany: {
+            args: Prisma.PermissionRequestDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.PermissionRequestUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.PermissionRequestUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>[]
+          }
+          upsert: {
+            args: Prisma.PermissionRequestUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$PermissionRequestPayload>
+          }
+          aggregate: {
+            args: Prisma.PermissionRequestAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregatePermissionRequest>
+          }
+          groupBy: {
+            args: Prisma.PermissionRequestGroupByArgs<ExtArgs>
+            result: $Utils.Optional<PermissionRequestGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.PermissionRequestCountArgs<ExtArgs>
+            result: $Utils.Optional<PermissionRequestCountAggregateOutputType> | number
+          }
+        }
+      }
     }
   } & {
     other: {
@@ -1332,6 +1441,7 @@ export namespace Prisma {
     userRole?: UserRoleOmit
     rolePermission?: RolePermissionOmit
     userPermission?: UserPermissionOmit
+    permissionRequest?: PermissionRequestOmit
   }
 
   /* Types for Logging */
@@ -1415,12 +1525,16 @@ export namespace Prisma {
     posts: number
     roles: number
     permissions: number
+    requestsMade: number
+    requestsReviewed: number
   }
 
   export type UserCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     posts?: boolean | UserCountOutputTypeCountPostsArgs
     roles?: boolean | UserCountOutputTypeCountRolesArgs
     permissions?: boolean | UserCountOutputTypeCountPermissionsArgs
+    requestsMade?: boolean | UserCountOutputTypeCountRequestsMadeArgs
+    requestsReviewed?: boolean | UserCountOutputTypeCountRequestsReviewedArgs
   }
 
   // Custom InputTypes
@@ -1453,6 +1567,20 @@ export namespace Prisma {
    */
   export type UserCountOutputTypeCountPermissionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: UserPermissionWhereInput
+  }
+
+  /**
+   * UserCountOutputType without action
+   */
+  export type UserCountOutputTypeCountRequestsMadeArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: PermissionRequestWhereInput
+  }
+
+  /**
+   * UserCountOutputType without action
+   */
+  export type UserCountOutputTypeCountRequestsReviewedArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: PermissionRequestWhereInput
   }
 
 
@@ -1716,6 +1844,8 @@ export namespace Prisma {
     posts?: boolean | User$postsArgs<ExtArgs>
     roles?: boolean | User$rolesArgs<ExtArgs>
     permissions?: boolean | User$permissionsArgs<ExtArgs>
+    requestsMade?: boolean | User$requestsMadeArgs<ExtArgs>
+    requestsReviewed?: boolean | User$requestsReviewedArgs<ExtArgs>
     _count?: boolean | UserCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["user"]>
 
@@ -1742,6 +1872,8 @@ export namespace Prisma {
     posts?: boolean | User$postsArgs<ExtArgs>
     roles?: boolean | User$rolesArgs<ExtArgs>
     permissions?: boolean | User$permissionsArgs<ExtArgs>
+    requestsMade?: boolean | User$requestsMadeArgs<ExtArgs>
+    requestsReviewed?: boolean | User$requestsReviewedArgs<ExtArgs>
     _count?: boolean | UserCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type UserIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
@@ -1753,6 +1885,8 @@ export namespace Prisma {
       posts: Prisma.$PostPayload<ExtArgs>[]
       roles: Prisma.$UserRolePayload<ExtArgs>[]
       permissions: Prisma.$UserPermissionPayload<ExtArgs>[]
+      requestsMade: Prisma.$PermissionRequestPayload<ExtArgs>[]
+      requestsReviewed: Prisma.$PermissionRequestPayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: number
@@ -2155,6 +2289,8 @@ export namespace Prisma {
     posts<T extends User$postsArgs<ExtArgs> = {}>(args?: Subset<T, User$postsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$PostPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     roles<T extends User$rolesArgs<ExtArgs> = {}>(args?: Subset<T, User$rolesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserRolePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     permissions<T extends User$permissionsArgs<ExtArgs> = {}>(args?: Subset<T, User$permissionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserPermissionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    requestsMade<T extends User$requestsMadeArgs<ExtArgs> = {}>(args?: Subset<T, User$requestsMadeArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    requestsReviewed<T extends User$requestsReviewedArgs<ExtArgs> = {}>(args?: Subset<T, User$requestsReviewedArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2649,6 +2785,54 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: UserPermissionScalarFieldEnum | UserPermissionScalarFieldEnum[]
+  }
+
+  /**
+   * User.requestsMade
+   */
+  export type User$requestsMadeArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    where?: PermissionRequestWhereInput
+    orderBy?: PermissionRequestOrderByWithRelationInput | PermissionRequestOrderByWithRelationInput[]
+    cursor?: PermissionRequestWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: PermissionRequestScalarFieldEnum | PermissionRequestScalarFieldEnum[]
+  }
+
+  /**
+   * User.requestsReviewed
+   */
+  export type User$requestsReviewedArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    where?: PermissionRequestWhereInput
+    orderBy?: PermissionRequestOrderByWithRelationInput | PermissionRequestOrderByWithRelationInput[]
+    cursor?: PermissionRequestWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: PermissionRequestScalarFieldEnum | PermissionRequestScalarFieldEnum[]
   }
 
   /**
@@ -8140,12 +8324,14 @@ export namespace Prisma {
     id: number | null
     userId: number | null
     effect: number | null
+    sourceRequestId: number | null
   }
 
   export type UserPermissionSumAggregateOutputType = {
     id: number | null
     userId: number | null
     effect: number | null
+    sourceRequestId: number | null
   }
 
   export type UserPermissionMinAggregateOutputType = {
@@ -8153,6 +8339,8 @@ export namespace Prisma {
     userId: number | null
     permCode: string | null
     effect: number | null
+    expiresAt: Date | null
+    sourceRequestId: number | null
   }
 
   export type UserPermissionMaxAggregateOutputType = {
@@ -8160,6 +8348,8 @@ export namespace Prisma {
     userId: number | null
     permCode: string | null
     effect: number | null
+    expiresAt: Date | null
+    sourceRequestId: number | null
   }
 
   export type UserPermissionCountAggregateOutputType = {
@@ -8167,6 +8357,8 @@ export namespace Prisma {
     userId: number
     permCode: number
     effect: number
+    expiresAt: number
+    sourceRequestId: number
     _all: number
   }
 
@@ -8175,12 +8367,14 @@ export namespace Prisma {
     id?: true
     userId?: true
     effect?: true
+    sourceRequestId?: true
   }
 
   export type UserPermissionSumAggregateInputType = {
     id?: true
     userId?: true
     effect?: true
+    sourceRequestId?: true
   }
 
   export type UserPermissionMinAggregateInputType = {
@@ -8188,6 +8382,8 @@ export namespace Prisma {
     userId?: true
     permCode?: true
     effect?: true
+    expiresAt?: true
+    sourceRequestId?: true
   }
 
   export type UserPermissionMaxAggregateInputType = {
@@ -8195,6 +8391,8 @@ export namespace Prisma {
     userId?: true
     permCode?: true
     effect?: true
+    expiresAt?: true
+    sourceRequestId?: true
   }
 
   export type UserPermissionCountAggregateInputType = {
@@ -8202,6 +8400,8 @@ export namespace Prisma {
     userId?: true
     permCode?: true
     effect?: true
+    expiresAt?: true
+    sourceRequestId?: true
     _all?: true
   }
 
@@ -8296,6 +8496,8 @@ export namespace Prisma {
     userId: number
     permCode: string
     effect: number
+    expiresAt: Date | null
+    sourceRequestId: number | null
     _count: UserPermissionCountAggregateOutputType | null
     _avg: UserPermissionAvgAggregateOutputType | null
     _sum: UserPermissionSumAggregateOutputType | null
@@ -8322,7 +8524,10 @@ export namespace Prisma {
     userId?: boolean
     permCode?: boolean
     effect?: boolean
+    expiresAt?: boolean
+    sourceRequestId?: boolean
     user?: boolean | UserDefaultArgs<ExtArgs>
+    sourceRequest?: boolean | UserPermission$sourceRequestArgs<ExtArgs>
   }, ExtArgs["result"]["userPermission"]>
 
   export type UserPermissionSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -8330,7 +8535,10 @@ export namespace Prisma {
     userId?: boolean
     permCode?: boolean
     effect?: boolean
+    expiresAt?: boolean
+    sourceRequestId?: boolean
     user?: boolean | UserDefaultArgs<ExtArgs>
+    sourceRequest?: boolean | UserPermission$sourceRequestArgs<ExtArgs>
   }, ExtArgs["result"]["userPermission"]>
 
   export type UserPermissionSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -8338,7 +8546,10 @@ export namespace Prisma {
     userId?: boolean
     permCode?: boolean
     effect?: boolean
+    expiresAt?: boolean
+    sourceRequestId?: boolean
     user?: boolean | UserDefaultArgs<ExtArgs>
+    sourceRequest?: boolean | UserPermission$sourceRequestArgs<ExtArgs>
   }, ExtArgs["result"]["userPermission"]>
 
   export type UserPermissionSelectScalar = {
@@ -8346,29 +8557,37 @@ export namespace Prisma {
     userId?: boolean
     permCode?: boolean
     effect?: boolean
+    expiresAt?: boolean
+    sourceRequestId?: boolean
   }
 
-  export type UserPermissionOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "permCode" | "effect", ExtArgs["result"]["userPermission"]>
+  export type UserPermissionOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "permCode" | "effect" | "expiresAt" | "sourceRequestId", ExtArgs["result"]["userPermission"]>
   export type UserPermissionInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user?: boolean | UserDefaultArgs<ExtArgs>
+    sourceRequest?: boolean | UserPermission$sourceRequestArgs<ExtArgs>
   }
   export type UserPermissionIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user?: boolean | UserDefaultArgs<ExtArgs>
+    sourceRequest?: boolean | UserPermission$sourceRequestArgs<ExtArgs>
   }
   export type UserPermissionIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     user?: boolean | UserDefaultArgs<ExtArgs>
+    sourceRequest?: boolean | UserPermission$sourceRequestArgs<ExtArgs>
   }
 
   export type $UserPermissionPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "UserPermission"
     objects: {
       user: Prisma.$UserPayload<ExtArgs>
+      sourceRequest: Prisma.$PermissionRequestPayload<ExtArgs> | null
     }
     scalars: $Extensions.GetPayloadResult<{
       id: number
       userId: number
       permCode: string
       effect: number
+      expiresAt: Date | null
+      sourceRequestId: number | null
     }, ExtArgs["result"]["userPermission"]>
     composites: {}
   }
@@ -8764,6 +8983,7 @@ export namespace Prisma {
   export interface Prisma__UserPermissionClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
     user<T extends UserDefaultArgs<ExtArgs> = {}>(args?: Subset<T, UserDefaultArgs<ExtArgs>>): Prisma__UserClient<$Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    sourceRequest<T extends UserPermission$sourceRequestArgs<ExtArgs> = {}>(args?: Subset<T, UserPermission$sourceRequestArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -8797,6 +9017,8 @@ export namespace Prisma {
     readonly userId: FieldRef<"UserPermission", 'Int'>
     readonly permCode: FieldRef<"UserPermission", 'String'>
     readonly effect: FieldRef<"UserPermission", 'Int'>
+    readonly expiresAt: FieldRef<"UserPermission", 'DateTime'>
+    readonly sourceRequestId: FieldRef<"UserPermission", 'Int'>
   }
     
 
@@ -9198,6 +9420,25 @@ export namespace Prisma {
   }
 
   /**
+   * UserPermission.sourceRequest
+   */
+  export type UserPermission$sourceRequestArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    where?: PermissionRequestWhereInput
+  }
+
+  /**
    * UserPermission without action
    */
   export type UserPermissionDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -9213,6 +9454,1226 @@ export namespace Prisma {
      * Choose, which related nodes to fetch as well
      */
     include?: UserPermissionInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model PermissionRequest
+   */
+
+  export type AggregatePermissionRequest = {
+    _count: PermissionRequestCountAggregateOutputType | null
+    _avg: PermissionRequestAvgAggregateOutputType | null
+    _sum: PermissionRequestSumAggregateOutputType | null
+    _min: PermissionRequestMinAggregateOutputType | null
+    _max: PermissionRequestMaxAggregateOutputType | null
+  }
+
+  export type PermissionRequestAvgAggregateOutputType = {
+    id: number | null
+    requesterId: number | null
+    approverId: number | null
+  }
+
+  export type PermissionRequestSumAggregateOutputType = {
+    id: number | null
+    requesterId: number | null
+    approverId: number | null
+  }
+
+  export type PermissionRequestMinAggregateOutputType = {
+    id: number | null
+    requesterId: number | null
+    permCode: string | null
+    reason: string | null
+    status: $Enums.RequestStatus | null
+    approverId: number | null
+    approvalNote: string | null
+    expiresAt: Date | null
+    createdAt: Date | null
+    reviewedAt: Date | null
+  }
+
+  export type PermissionRequestMaxAggregateOutputType = {
+    id: number | null
+    requesterId: number | null
+    permCode: string | null
+    reason: string | null
+    status: $Enums.RequestStatus | null
+    approverId: number | null
+    approvalNote: string | null
+    expiresAt: Date | null
+    createdAt: Date | null
+    reviewedAt: Date | null
+  }
+
+  export type PermissionRequestCountAggregateOutputType = {
+    id: number
+    requesterId: number
+    permCode: number
+    reason: number
+    status: number
+    approverId: number
+    approvalNote: number
+    expiresAt: number
+    createdAt: number
+    reviewedAt: number
+    _all: number
+  }
+
+
+  export type PermissionRequestAvgAggregateInputType = {
+    id?: true
+    requesterId?: true
+    approverId?: true
+  }
+
+  export type PermissionRequestSumAggregateInputType = {
+    id?: true
+    requesterId?: true
+    approverId?: true
+  }
+
+  export type PermissionRequestMinAggregateInputType = {
+    id?: true
+    requesterId?: true
+    permCode?: true
+    reason?: true
+    status?: true
+    approverId?: true
+    approvalNote?: true
+    expiresAt?: true
+    createdAt?: true
+    reviewedAt?: true
+  }
+
+  export type PermissionRequestMaxAggregateInputType = {
+    id?: true
+    requesterId?: true
+    permCode?: true
+    reason?: true
+    status?: true
+    approverId?: true
+    approvalNote?: true
+    expiresAt?: true
+    createdAt?: true
+    reviewedAt?: true
+  }
+
+  export type PermissionRequestCountAggregateInputType = {
+    id?: true
+    requesterId?: true
+    permCode?: true
+    reason?: true
+    status?: true
+    approverId?: true
+    approvalNote?: true
+    expiresAt?: true
+    createdAt?: true
+    reviewedAt?: true
+    _all?: true
+  }
+
+  export type PermissionRequestAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which PermissionRequest to aggregate.
+     */
+    where?: PermissionRequestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of PermissionRequests to fetch.
+     */
+    orderBy?: PermissionRequestOrderByWithRelationInput | PermissionRequestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: PermissionRequestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` PermissionRequests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` PermissionRequests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned PermissionRequests
+    **/
+    _count?: true | PermissionRequestCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: PermissionRequestAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: PermissionRequestSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: PermissionRequestMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: PermissionRequestMaxAggregateInputType
+  }
+
+  export type GetPermissionRequestAggregateType<T extends PermissionRequestAggregateArgs> = {
+        [P in keyof T & keyof AggregatePermissionRequest]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregatePermissionRequest[P]>
+      : GetScalarType<T[P], AggregatePermissionRequest[P]>
+  }
+
+
+
+
+  export type PermissionRequestGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: PermissionRequestWhereInput
+    orderBy?: PermissionRequestOrderByWithAggregationInput | PermissionRequestOrderByWithAggregationInput[]
+    by: PermissionRequestScalarFieldEnum[] | PermissionRequestScalarFieldEnum
+    having?: PermissionRequestScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: PermissionRequestCountAggregateInputType | true
+    _avg?: PermissionRequestAvgAggregateInputType
+    _sum?: PermissionRequestSumAggregateInputType
+    _min?: PermissionRequestMinAggregateInputType
+    _max?: PermissionRequestMaxAggregateInputType
+  }
+
+  export type PermissionRequestGroupByOutputType = {
+    id: number
+    requesterId: number
+    permCode: string
+    reason: string | null
+    status: $Enums.RequestStatus
+    approverId: number | null
+    approvalNote: string | null
+    expiresAt: Date | null
+    createdAt: Date
+    reviewedAt: Date | null
+    _count: PermissionRequestCountAggregateOutputType | null
+    _avg: PermissionRequestAvgAggregateOutputType | null
+    _sum: PermissionRequestSumAggregateOutputType | null
+    _min: PermissionRequestMinAggregateOutputType | null
+    _max: PermissionRequestMaxAggregateOutputType | null
+  }
+
+  type GetPermissionRequestGroupByPayload<T extends PermissionRequestGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<PermissionRequestGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof PermissionRequestGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], PermissionRequestGroupByOutputType[P]>
+            : GetScalarType<T[P], PermissionRequestGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type PermissionRequestSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    requesterId?: boolean
+    permCode?: boolean
+    reason?: boolean
+    status?: boolean
+    approverId?: boolean
+    approvalNote?: boolean
+    expiresAt?: boolean
+    createdAt?: boolean
+    reviewedAt?: boolean
+    requester?: boolean | UserDefaultArgs<ExtArgs>
+    approver?: boolean | PermissionRequest$approverArgs<ExtArgs>
+    grantedPerm?: boolean | PermissionRequest$grantedPermArgs<ExtArgs>
+  }, ExtArgs["result"]["permissionRequest"]>
+
+  export type PermissionRequestSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    requesterId?: boolean
+    permCode?: boolean
+    reason?: boolean
+    status?: boolean
+    approverId?: boolean
+    approvalNote?: boolean
+    expiresAt?: boolean
+    createdAt?: boolean
+    reviewedAt?: boolean
+    requester?: boolean | UserDefaultArgs<ExtArgs>
+    approver?: boolean | PermissionRequest$approverArgs<ExtArgs>
+  }, ExtArgs["result"]["permissionRequest"]>
+
+  export type PermissionRequestSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    requesterId?: boolean
+    permCode?: boolean
+    reason?: boolean
+    status?: boolean
+    approverId?: boolean
+    approvalNote?: boolean
+    expiresAt?: boolean
+    createdAt?: boolean
+    reviewedAt?: boolean
+    requester?: boolean | UserDefaultArgs<ExtArgs>
+    approver?: boolean | PermissionRequest$approverArgs<ExtArgs>
+  }, ExtArgs["result"]["permissionRequest"]>
+
+  export type PermissionRequestSelectScalar = {
+    id?: boolean
+    requesterId?: boolean
+    permCode?: boolean
+    reason?: boolean
+    status?: boolean
+    approverId?: boolean
+    approvalNote?: boolean
+    expiresAt?: boolean
+    createdAt?: boolean
+    reviewedAt?: boolean
+  }
+
+  export type PermissionRequestOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "requesterId" | "permCode" | "reason" | "status" | "approverId" | "approvalNote" | "expiresAt" | "createdAt" | "reviewedAt", ExtArgs["result"]["permissionRequest"]>
+  export type PermissionRequestInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    requester?: boolean | UserDefaultArgs<ExtArgs>
+    approver?: boolean | PermissionRequest$approverArgs<ExtArgs>
+    grantedPerm?: boolean | PermissionRequest$grantedPermArgs<ExtArgs>
+  }
+  export type PermissionRequestIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    requester?: boolean | UserDefaultArgs<ExtArgs>
+    approver?: boolean | PermissionRequest$approverArgs<ExtArgs>
+  }
+  export type PermissionRequestIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    requester?: boolean | UserDefaultArgs<ExtArgs>
+    approver?: boolean | PermissionRequest$approverArgs<ExtArgs>
+  }
+
+  export type $PermissionRequestPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "PermissionRequest"
+    objects: {
+      requester: Prisma.$UserPayload<ExtArgs>
+      approver: Prisma.$UserPayload<ExtArgs> | null
+      grantedPerm: Prisma.$UserPermissionPayload<ExtArgs> | null
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: number
+      requesterId: number
+      permCode: string
+      reason: string | null
+      status: $Enums.RequestStatus
+      approverId: number | null
+      approvalNote: string | null
+      expiresAt: Date | null
+      createdAt: Date
+      reviewedAt: Date | null
+    }, ExtArgs["result"]["permissionRequest"]>
+    composites: {}
+  }
+
+  type PermissionRequestGetPayload<S extends boolean | null | undefined | PermissionRequestDefaultArgs> = $Result.GetResult<Prisma.$PermissionRequestPayload, S>
+
+  type PermissionRequestCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<PermissionRequestFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: PermissionRequestCountAggregateInputType | true
+    }
+
+  export interface PermissionRequestDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['PermissionRequest'], meta: { name: 'PermissionRequest' } }
+    /**
+     * Find zero or one PermissionRequest that matches the filter.
+     * @param {PermissionRequestFindUniqueArgs} args - Arguments to find a PermissionRequest
+     * @example
+     * // Get one PermissionRequest
+     * const permissionRequest = await prisma.permissionRequest.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends PermissionRequestFindUniqueArgs>(args: SelectSubset<T, PermissionRequestFindUniqueArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one PermissionRequest that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {PermissionRequestFindUniqueOrThrowArgs} args - Arguments to find a PermissionRequest
+     * @example
+     * // Get one PermissionRequest
+     * const permissionRequest = await prisma.permissionRequest.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends PermissionRequestFindUniqueOrThrowArgs>(args: SelectSubset<T, PermissionRequestFindUniqueOrThrowArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first PermissionRequest that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {PermissionRequestFindFirstArgs} args - Arguments to find a PermissionRequest
+     * @example
+     * // Get one PermissionRequest
+     * const permissionRequest = await prisma.permissionRequest.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends PermissionRequestFindFirstArgs>(args?: SelectSubset<T, PermissionRequestFindFirstArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first PermissionRequest that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {PermissionRequestFindFirstOrThrowArgs} args - Arguments to find a PermissionRequest
+     * @example
+     * // Get one PermissionRequest
+     * const permissionRequest = await prisma.permissionRequest.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends PermissionRequestFindFirstOrThrowArgs>(args?: SelectSubset<T, PermissionRequestFindFirstOrThrowArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more PermissionRequests that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {PermissionRequestFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all PermissionRequests
+     * const permissionRequests = await prisma.permissionRequest.findMany()
+     * 
+     * // Get first 10 PermissionRequests
+     * const permissionRequests = await prisma.permissionRequest.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const permissionRequestWithIdOnly = await prisma.permissionRequest.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends PermissionRequestFindManyArgs>(args?: SelectSubset<T, PermissionRequestFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a PermissionRequest.
+     * @param {PermissionRequestCreateArgs} args - Arguments to create a PermissionRequest.
+     * @example
+     * // Create one PermissionRequest
+     * const PermissionRequest = await prisma.permissionRequest.create({
+     *   data: {
+     *     // ... data to create a PermissionRequest
+     *   }
+     * })
+     * 
+     */
+    create<T extends PermissionRequestCreateArgs>(args: SelectSubset<T, PermissionRequestCreateArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many PermissionRequests.
+     * @param {PermissionRequestCreateManyArgs} args - Arguments to create many PermissionRequests.
+     * @example
+     * // Create many PermissionRequests
+     * const permissionRequest = await prisma.permissionRequest.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends PermissionRequestCreateManyArgs>(args?: SelectSubset<T, PermissionRequestCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many PermissionRequests and returns the data saved in the database.
+     * @param {PermissionRequestCreateManyAndReturnArgs} args - Arguments to create many PermissionRequests.
+     * @example
+     * // Create many PermissionRequests
+     * const permissionRequest = await prisma.permissionRequest.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many PermissionRequests and only return the `id`
+     * const permissionRequestWithIdOnly = await prisma.permissionRequest.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends PermissionRequestCreateManyAndReturnArgs>(args?: SelectSubset<T, PermissionRequestCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a PermissionRequest.
+     * @param {PermissionRequestDeleteArgs} args - Arguments to delete one PermissionRequest.
+     * @example
+     * // Delete one PermissionRequest
+     * const PermissionRequest = await prisma.permissionRequest.delete({
+     *   where: {
+     *     // ... filter to delete one PermissionRequest
+     *   }
+     * })
+     * 
+     */
+    delete<T extends PermissionRequestDeleteArgs>(args: SelectSubset<T, PermissionRequestDeleteArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one PermissionRequest.
+     * @param {PermissionRequestUpdateArgs} args - Arguments to update one PermissionRequest.
+     * @example
+     * // Update one PermissionRequest
+     * const permissionRequest = await prisma.permissionRequest.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends PermissionRequestUpdateArgs>(args: SelectSubset<T, PermissionRequestUpdateArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more PermissionRequests.
+     * @param {PermissionRequestDeleteManyArgs} args - Arguments to filter PermissionRequests to delete.
+     * @example
+     * // Delete a few PermissionRequests
+     * const { count } = await prisma.permissionRequest.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends PermissionRequestDeleteManyArgs>(args?: SelectSubset<T, PermissionRequestDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more PermissionRequests.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {PermissionRequestUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many PermissionRequests
+     * const permissionRequest = await prisma.permissionRequest.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends PermissionRequestUpdateManyArgs>(args: SelectSubset<T, PermissionRequestUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more PermissionRequests and returns the data updated in the database.
+     * @param {PermissionRequestUpdateManyAndReturnArgs} args - Arguments to update many PermissionRequests.
+     * @example
+     * // Update many PermissionRequests
+     * const permissionRequest = await prisma.permissionRequest.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more PermissionRequests and only return the `id`
+     * const permissionRequestWithIdOnly = await prisma.permissionRequest.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends PermissionRequestUpdateManyAndReturnArgs>(args: SelectSubset<T, PermissionRequestUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one PermissionRequest.
+     * @param {PermissionRequestUpsertArgs} args - Arguments to update or create a PermissionRequest.
+     * @example
+     * // Update or create a PermissionRequest
+     * const permissionRequest = await prisma.permissionRequest.upsert({
+     *   create: {
+     *     // ... data to create a PermissionRequest
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the PermissionRequest we want to update
+     *   }
+     * })
+     */
+    upsert<T extends PermissionRequestUpsertArgs>(args: SelectSubset<T, PermissionRequestUpsertArgs<ExtArgs>>): Prisma__PermissionRequestClient<$Result.GetResult<Prisma.$PermissionRequestPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of PermissionRequests.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {PermissionRequestCountArgs} args - Arguments to filter PermissionRequests to count.
+     * @example
+     * // Count the number of PermissionRequests
+     * const count = await prisma.permissionRequest.count({
+     *   where: {
+     *     // ... the filter for the PermissionRequests we want to count
+     *   }
+     * })
+    **/
+    count<T extends PermissionRequestCountArgs>(
+      args?: Subset<T, PermissionRequestCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], PermissionRequestCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a PermissionRequest.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {PermissionRequestAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends PermissionRequestAggregateArgs>(args: Subset<T, PermissionRequestAggregateArgs>): Prisma.PrismaPromise<GetPermissionRequestAggregateType<T>>
+
+    /**
+     * Group by PermissionRequest.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {PermissionRequestGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends PermissionRequestGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: PermissionRequestGroupByArgs['orderBy'] }
+        : { orderBy?: PermissionRequestGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, PermissionRequestGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetPermissionRequestGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the PermissionRequest model
+   */
+  readonly fields: PermissionRequestFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for PermissionRequest.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__PermissionRequestClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    requester<T extends UserDefaultArgs<ExtArgs> = {}>(args?: Subset<T, UserDefaultArgs<ExtArgs>>): Prisma__UserClient<$Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    approver<T extends PermissionRequest$approverArgs<ExtArgs> = {}>(args?: Subset<T, PermissionRequest$approverArgs<ExtArgs>>): Prisma__UserClient<$Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+    grantedPerm<T extends PermissionRequest$grantedPermArgs<ExtArgs> = {}>(args?: Subset<T, PermissionRequest$grantedPermArgs<ExtArgs>>): Prisma__UserPermissionClient<$Result.GetResult<Prisma.$UserPermissionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the PermissionRequest model
+   */
+  interface PermissionRequestFieldRefs {
+    readonly id: FieldRef<"PermissionRequest", 'Int'>
+    readonly requesterId: FieldRef<"PermissionRequest", 'Int'>
+    readonly permCode: FieldRef<"PermissionRequest", 'String'>
+    readonly reason: FieldRef<"PermissionRequest", 'String'>
+    readonly status: FieldRef<"PermissionRequest", 'RequestStatus'>
+    readonly approverId: FieldRef<"PermissionRequest", 'Int'>
+    readonly approvalNote: FieldRef<"PermissionRequest", 'String'>
+    readonly expiresAt: FieldRef<"PermissionRequest", 'DateTime'>
+    readonly createdAt: FieldRef<"PermissionRequest", 'DateTime'>
+    readonly reviewedAt: FieldRef<"PermissionRequest", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * PermissionRequest findUnique
+   */
+  export type PermissionRequestFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which PermissionRequest to fetch.
+     */
+    where: PermissionRequestWhereUniqueInput
+  }
+
+  /**
+   * PermissionRequest findUniqueOrThrow
+   */
+  export type PermissionRequestFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which PermissionRequest to fetch.
+     */
+    where: PermissionRequestWhereUniqueInput
+  }
+
+  /**
+   * PermissionRequest findFirst
+   */
+  export type PermissionRequestFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which PermissionRequest to fetch.
+     */
+    where?: PermissionRequestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of PermissionRequests to fetch.
+     */
+    orderBy?: PermissionRequestOrderByWithRelationInput | PermissionRequestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for PermissionRequests.
+     */
+    cursor?: PermissionRequestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` PermissionRequests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` PermissionRequests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of PermissionRequests.
+     */
+    distinct?: PermissionRequestScalarFieldEnum | PermissionRequestScalarFieldEnum[]
+  }
+
+  /**
+   * PermissionRequest findFirstOrThrow
+   */
+  export type PermissionRequestFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which PermissionRequest to fetch.
+     */
+    where?: PermissionRequestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of PermissionRequests to fetch.
+     */
+    orderBy?: PermissionRequestOrderByWithRelationInput | PermissionRequestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for PermissionRequests.
+     */
+    cursor?: PermissionRequestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` PermissionRequests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` PermissionRequests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of PermissionRequests.
+     */
+    distinct?: PermissionRequestScalarFieldEnum | PermissionRequestScalarFieldEnum[]
+  }
+
+  /**
+   * PermissionRequest findMany
+   */
+  export type PermissionRequestFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * Filter, which PermissionRequests to fetch.
+     */
+    where?: PermissionRequestWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of PermissionRequests to fetch.
+     */
+    orderBy?: PermissionRequestOrderByWithRelationInput | PermissionRequestOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing PermissionRequests.
+     */
+    cursor?: PermissionRequestWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` PermissionRequests from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` PermissionRequests.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of PermissionRequests.
+     */
+    distinct?: PermissionRequestScalarFieldEnum | PermissionRequestScalarFieldEnum[]
+  }
+
+  /**
+   * PermissionRequest create
+   */
+  export type PermissionRequestCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * The data needed to create a PermissionRequest.
+     */
+    data: XOR<PermissionRequestCreateInput, PermissionRequestUncheckedCreateInput>
+  }
+
+  /**
+   * PermissionRequest createMany
+   */
+  export type PermissionRequestCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many PermissionRequests.
+     */
+    data: PermissionRequestCreateManyInput | PermissionRequestCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * PermissionRequest createManyAndReturn
+   */
+  export type PermissionRequestCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * The data used to create many PermissionRequests.
+     */
+    data: PermissionRequestCreateManyInput | PermissionRequestCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * PermissionRequest update
+   */
+  export type PermissionRequestUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * The data needed to update a PermissionRequest.
+     */
+    data: XOR<PermissionRequestUpdateInput, PermissionRequestUncheckedUpdateInput>
+    /**
+     * Choose, which PermissionRequest to update.
+     */
+    where: PermissionRequestWhereUniqueInput
+  }
+
+  /**
+   * PermissionRequest updateMany
+   */
+  export type PermissionRequestUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update PermissionRequests.
+     */
+    data: XOR<PermissionRequestUpdateManyMutationInput, PermissionRequestUncheckedUpdateManyInput>
+    /**
+     * Filter which PermissionRequests to update
+     */
+    where?: PermissionRequestWhereInput
+    /**
+     * Limit how many PermissionRequests to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * PermissionRequest updateManyAndReturn
+   */
+  export type PermissionRequestUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * The data used to update PermissionRequests.
+     */
+    data: XOR<PermissionRequestUpdateManyMutationInput, PermissionRequestUncheckedUpdateManyInput>
+    /**
+     * Filter which PermissionRequests to update
+     */
+    where?: PermissionRequestWhereInput
+    /**
+     * Limit how many PermissionRequests to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * PermissionRequest upsert
+   */
+  export type PermissionRequestUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * The filter to search for the PermissionRequest to update in case it exists.
+     */
+    where: PermissionRequestWhereUniqueInput
+    /**
+     * In case the PermissionRequest found by the `where` argument doesn't exist, create a new PermissionRequest with this data.
+     */
+    create: XOR<PermissionRequestCreateInput, PermissionRequestUncheckedCreateInput>
+    /**
+     * In case the PermissionRequest was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<PermissionRequestUpdateInput, PermissionRequestUncheckedUpdateInput>
+  }
+
+  /**
+   * PermissionRequest delete
+   */
+  export type PermissionRequestDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
+    /**
+     * Filter which PermissionRequest to delete.
+     */
+    where: PermissionRequestWhereUniqueInput
+  }
+
+  /**
+   * PermissionRequest deleteMany
+   */
+  export type PermissionRequestDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which PermissionRequests to delete
+     */
+    where?: PermissionRequestWhereInput
+    /**
+     * Limit how many PermissionRequests to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * PermissionRequest.approver
+   */
+  export type PermissionRequest$approverArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the User
+     */
+    select?: UserSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the User
+     */
+    omit?: UserOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserInclude<ExtArgs> | null
+    where?: UserWhereInput
+  }
+
+  /**
+   * PermissionRequest.grantedPerm
+   */
+  export type PermissionRequest$grantedPermArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the UserPermission
+     */
+    select?: UserPermissionSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the UserPermission
+     */
+    omit?: UserPermissionOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: UserPermissionInclude<ExtArgs> | null
+    where?: UserPermissionWhereInput
+  }
+
+  /**
+   * PermissionRequest without action
+   */
+  export type PermissionRequestDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the PermissionRequest
+     */
+    select?: PermissionRequestSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the PermissionRequest
+     */
+    omit?: PermissionRequestOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: PermissionRequestInclude<ExtArgs> | null
   }
 
 
@@ -9288,10 +10749,28 @@ export namespace Prisma {
     id: 'id',
     userId: 'userId',
     permCode: 'permCode',
-    effect: 'effect'
+    effect: 'effect',
+    expiresAt: 'expiresAt',
+    sourceRequestId: 'sourceRequestId'
   };
 
   export type UserPermissionScalarFieldEnum = (typeof UserPermissionScalarFieldEnum)[keyof typeof UserPermissionScalarFieldEnum]
+
+
+  export const PermissionRequestScalarFieldEnum: {
+    id: 'id',
+    requesterId: 'requesterId',
+    permCode: 'permCode',
+    reason: 'reason',
+    status: 'status',
+    approverId: 'approverId',
+    approvalNote: 'approvalNote',
+    expiresAt: 'expiresAt',
+    createdAt: 'createdAt',
+    reviewedAt: 'reviewedAt'
+  };
+
+  export type PermissionRequestScalarFieldEnum = (typeof PermissionRequestScalarFieldEnum)[keyof typeof PermissionRequestScalarFieldEnum]
 
 
   export const SortOrder: {
@@ -9359,6 +10838,34 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'DateTime'
+   */
+  export type DateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime'>
+    
+
+
+  /**
+   * Reference to a field of type 'DateTime[]'
+   */
+  export type ListDateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'RequestStatus'
+   */
+  export type EnumRequestStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RequestStatus'>
+    
+
+
+  /**
+   * Reference to a field of type 'RequestStatus[]'
+   */
+  export type ListEnumRequestStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'RequestStatus[]'>
+    
+
+
+  /**
    * Reference to a field of type 'Float'
    */
   export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
@@ -9385,6 +10892,8 @@ export namespace Prisma {
     posts?: PostListRelationFilter
     roles?: UserRoleListRelationFilter
     permissions?: UserPermissionListRelationFilter
+    requestsMade?: PermissionRequestListRelationFilter
+    requestsReviewed?: PermissionRequestListRelationFilter
   }
 
   export type UserOrderByWithRelationInput = {
@@ -9394,6 +10903,8 @@ export namespace Prisma {
     posts?: PostOrderByRelationAggregateInput
     roles?: UserRoleOrderByRelationAggregateInput
     permissions?: UserPermissionOrderByRelationAggregateInput
+    requestsMade?: PermissionRequestOrderByRelationAggregateInput
+    requestsReviewed?: PermissionRequestOrderByRelationAggregateInput
   }
 
   export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -9406,6 +10917,8 @@ export namespace Prisma {
     posts?: PostListRelationFilter
     roles?: UserRoleListRelationFilter
     permissions?: UserPermissionListRelationFilter
+    requestsMade?: PermissionRequestListRelationFilter
+    requestsReviewed?: PermissionRequestListRelationFilter
   }, "id" | "email">
 
   export type UserOrderByWithAggregationInput = {
@@ -9682,7 +11195,10 @@ export namespace Prisma {
     userId?: IntFilter<"UserPermission"> | number
     permCode?: StringFilter<"UserPermission"> | string
     effect?: IntFilter<"UserPermission"> | number
+    expiresAt?: DateTimeNullableFilter<"UserPermission"> | Date | string | null
+    sourceRequestId?: IntNullableFilter<"UserPermission"> | number | null
     user?: XOR<UserScalarRelationFilter, UserWhereInput>
+    sourceRequest?: XOR<PermissionRequestNullableScalarRelationFilter, PermissionRequestWhereInput> | null
   }
 
   export type UserPermissionOrderByWithRelationInput = {
@@ -9690,25 +11206,33 @@ export namespace Prisma {
     userId?: SortOrder
     permCode?: SortOrder
     effect?: SortOrder
+    expiresAt?: SortOrderInput | SortOrder
+    sourceRequestId?: SortOrderInput | SortOrder
     user?: UserOrderByWithRelationInput
+    sourceRequest?: PermissionRequestOrderByWithRelationInput
   }
 
   export type UserPermissionWhereUniqueInput = Prisma.AtLeast<{
     id?: number
+    sourceRequestId?: number
     AND?: UserPermissionWhereInput | UserPermissionWhereInput[]
     OR?: UserPermissionWhereInput[]
     NOT?: UserPermissionWhereInput | UserPermissionWhereInput[]
     userId?: IntFilter<"UserPermission"> | number
     permCode?: StringFilter<"UserPermission"> | string
     effect?: IntFilter<"UserPermission"> | number
+    expiresAt?: DateTimeNullableFilter<"UserPermission"> | Date | string | null
     user?: XOR<UserScalarRelationFilter, UserWhereInput>
-  }, "id">
+    sourceRequest?: XOR<PermissionRequestNullableScalarRelationFilter, PermissionRequestWhereInput> | null
+  }, "id" | "sourceRequestId">
 
   export type UserPermissionOrderByWithAggregationInput = {
     id?: SortOrder
     userId?: SortOrder
     permCode?: SortOrder
     effect?: SortOrder
+    expiresAt?: SortOrderInput | SortOrder
+    sourceRequestId?: SortOrderInput | SortOrder
     _count?: UserPermissionCountOrderByAggregateInput
     _avg?: UserPermissionAvgOrderByAggregateInput
     _max?: UserPermissionMaxOrderByAggregateInput
@@ -9724,6 +11248,96 @@ export namespace Prisma {
     userId?: IntWithAggregatesFilter<"UserPermission"> | number
     permCode?: StringWithAggregatesFilter<"UserPermission"> | string
     effect?: IntWithAggregatesFilter<"UserPermission"> | number
+    expiresAt?: DateTimeNullableWithAggregatesFilter<"UserPermission"> | Date | string | null
+    sourceRequestId?: IntNullableWithAggregatesFilter<"UserPermission"> | number | null
+  }
+
+  export type PermissionRequestWhereInput = {
+    AND?: PermissionRequestWhereInput | PermissionRequestWhereInput[]
+    OR?: PermissionRequestWhereInput[]
+    NOT?: PermissionRequestWhereInput | PermissionRequestWhereInput[]
+    id?: IntFilter<"PermissionRequest"> | number
+    requesterId?: IntFilter<"PermissionRequest"> | number
+    permCode?: StringFilter<"PermissionRequest"> | string
+    reason?: StringNullableFilter<"PermissionRequest"> | string | null
+    status?: EnumRequestStatusFilter<"PermissionRequest"> | $Enums.RequestStatus
+    approverId?: IntNullableFilter<"PermissionRequest"> | number | null
+    approvalNote?: StringNullableFilter<"PermissionRequest"> | string | null
+    expiresAt?: DateTimeNullableFilter<"PermissionRequest"> | Date | string | null
+    createdAt?: DateTimeFilter<"PermissionRequest"> | Date | string
+    reviewedAt?: DateTimeNullableFilter<"PermissionRequest"> | Date | string | null
+    requester?: XOR<UserScalarRelationFilter, UserWhereInput>
+    approver?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
+    grantedPerm?: XOR<UserPermissionNullableScalarRelationFilter, UserPermissionWhereInput> | null
+  }
+
+  export type PermissionRequestOrderByWithRelationInput = {
+    id?: SortOrder
+    requesterId?: SortOrder
+    permCode?: SortOrder
+    reason?: SortOrderInput | SortOrder
+    status?: SortOrder
+    approverId?: SortOrderInput | SortOrder
+    approvalNote?: SortOrderInput | SortOrder
+    expiresAt?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    reviewedAt?: SortOrderInput | SortOrder
+    requester?: UserOrderByWithRelationInput
+    approver?: UserOrderByWithRelationInput
+    grantedPerm?: UserPermissionOrderByWithRelationInput
+  }
+
+  export type PermissionRequestWhereUniqueInput = Prisma.AtLeast<{
+    id?: number
+    AND?: PermissionRequestWhereInput | PermissionRequestWhereInput[]
+    OR?: PermissionRequestWhereInput[]
+    NOT?: PermissionRequestWhereInput | PermissionRequestWhereInput[]
+    requesterId?: IntFilter<"PermissionRequest"> | number
+    permCode?: StringFilter<"PermissionRequest"> | string
+    reason?: StringNullableFilter<"PermissionRequest"> | string | null
+    status?: EnumRequestStatusFilter<"PermissionRequest"> | $Enums.RequestStatus
+    approverId?: IntNullableFilter<"PermissionRequest"> | number | null
+    approvalNote?: StringNullableFilter<"PermissionRequest"> | string | null
+    expiresAt?: DateTimeNullableFilter<"PermissionRequest"> | Date | string | null
+    createdAt?: DateTimeFilter<"PermissionRequest"> | Date | string
+    reviewedAt?: DateTimeNullableFilter<"PermissionRequest"> | Date | string | null
+    requester?: XOR<UserScalarRelationFilter, UserWhereInput>
+    approver?: XOR<UserNullableScalarRelationFilter, UserWhereInput> | null
+    grantedPerm?: XOR<UserPermissionNullableScalarRelationFilter, UserPermissionWhereInput> | null
+  }, "id">
+
+  export type PermissionRequestOrderByWithAggregationInput = {
+    id?: SortOrder
+    requesterId?: SortOrder
+    permCode?: SortOrder
+    reason?: SortOrderInput | SortOrder
+    status?: SortOrder
+    approverId?: SortOrderInput | SortOrder
+    approvalNote?: SortOrderInput | SortOrder
+    expiresAt?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    reviewedAt?: SortOrderInput | SortOrder
+    _count?: PermissionRequestCountOrderByAggregateInput
+    _avg?: PermissionRequestAvgOrderByAggregateInput
+    _max?: PermissionRequestMaxOrderByAggregateInput
+    _min?: PermissionRequestMinOrderByAggregateInput
+    _sum?: PermissionRequestSumOrderByAggregateInput
+  }
+
+  export type PermissionRequestScalarWhereWithAggregatesInput = {
+    AND?: PermissionRequestScalarWhereWithAggregatesInput | PermissionRequestScalarWhereWithAggregatesInput[]
+    OR?: PermissionRequestScalarWhereWithAggregatesInput[]
+    NOT?: PermissionRequestScalarWhereWithAggregatesInput | PermissionRequestScalarWhereWithAggregatesInput[]
+    id?: IntWithAggregatesFilter<"PermissionRequest"> | number
+    requesterId?: IntWithAggregatesFilter<"PermissionRequest"> | number
+    permCode?: StringWithAggregatesFilter<"PermissionRequest"> | string
+    reason?: StringNullableWithAggregatesFilter<"PermissionRequest"> | string | null
+    status?: EnumRequestStatusWithAggregatesFilter<"PermissionRequest"> | $Enums.RequestStatus
+    approverId?: IntNullableWithAggregatesFilter<"PermissionRequest"> | number | null
+    approvalNote?: StringNullableWithAggregatesFilter<"PermissionRequest"> | string | null
+    expiresAt?: DateTimeNullableWithAggregatesFilter<"PermissionRequest"> | Date | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"PermissionRequest"> | Date | string
+    reviewedAt?: DateTimeNullableWithAggregatesFilter<"PermissionRequest"> | Date | string | null
   }
 
   export type UserCreateInput = {
@@ -9732,6 +11346,8 @@ export namespace Prisma {
     posts?: PostCreateNestedManyWithoutAuthorInput
     roles?: UserRoleCreateNestedManyWithoutUserInput
     permissions?: UserPermissionCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestCreateNestedManyWithoutRequesterInput
+    requestsReviewed?: PermissionRequestCreateNestedManyWithoutApproverInput
   }
 
   export type UserUncheckedCreateInput = {
@@ -9741,6 +11357,8 @@ export namespace Prisma {
     posts?: PostUncheckedCreateNestedManyWithoutAuthorInput
     roles?: UserRoleUncheckedCreateNestedManyWithoutUserInput
     permissions?: UserPermissionUncheckedCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestUncheckedCreateNestedManyWithoutRequesterInput
+    requestsReviewed?: PermissionRequestUncheckedCreateNestedManyWithoutApproverInput
   }
 
   export type UserUpdateInput = {
@@ -9749,6 +11367,8 @@ export namespace Prisma {
     posts?: PostUpdateManyWithoutAuthorNestedInput
     roles?: UserRoleUpdateManyWithoutUserNestedInput
     permissions?: UserPermissionUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUpdateManyWithoutRequesterNestedInput
+    requestsReviewed?: PermissionRequestUpdateManyWithoutApproverNestedInput
   }
 
   export type UserUncheckedUpdateInput = {
@@ -9758,6 +11378,8 @@ export namespace Prisma {
     posts?: PostUncheckedUpdateManyWithoutAuthorNestedInput
     roles?: UserRoleUncheckedUpdateManyWithoutUserNestedInput
     permissions?: UserPermissionUncheckedUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUncheckedUpdateManyWithoutRequesterNestedInput
+    requestsReviewed?: PermissionRequestUncheckedUpdateManyWithoutApproverNestedInput
   }
 
   export type UserCreateManyInput = {
@@ -9990,7 +11612,9 @@ export namespace Prisma {
   export type UserPermissionCreateInput = {
     permCode: string
     effect: number
+    expiresAt?: Date | string | null
     user: UserCreateNestedOneWithoutPermissionsInput
+    sourceRequest?: PermissionRequestCreateNestedOneWithoutGrantedPermInput
   }
 
   export type UserPermissionUncheckedCreateInput = {
@@ -9998,12 +11622,16 @@ export namespace Prisma {
     userId: number
     permCode: string
     effect: number
+    expiresAt?: Date | string | null
+    sourceRequestId?: number | null
   }
 
   export type UserPermissionUpdateInput = {
     permCode?: StringFieldUpdateOperationsInput | string
     effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     user?: UserUpdateOneRequiredWithoutPermissionsNestedInput
+    sourceRequest?: PermissionRequestUpdateOneWithoutGrantedPermNestedInput
   }
 
   export type UserPermissionUncheckedUpdateInput = {
@@ -10011,6 +11639,8 @@ export namespace Prisma {
     userId?: IntFieldUpdateOperationsInput | number
     permCode?: StringFieldUpdateOperationsInput | string
     effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    sourceRequestId?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
   export type UserPermissionCreateManyInput = {
@@ -10018,11 +11648,14 @@ export namespace Prisma {
     userId: number
     permCode: string
     effect: number
+    expiresAt?: Date | string | null
+    sourceRequestId?: number | null
   }
 
   export type UserPermissionUpdateManyMutationInput = {
     permCode?: StringFieldUpdateOperationsInput | string
     effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type UserPermissionUncheckedUpdateManyInput = {
@@ -10030,6 +11663,98 @@ export namespace Prisma {
     userId?: IntFieldUpdateOperationsInput | number
     permCode?: StringFieldUpdateOperationsInput | string
     effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    sourceRequestId?: NullableIntFieldUpdateOperationsInput | number | null
+  }
+
+  export type PermissionRequestCreateInput = {
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+    requester: UserCreateNestedOneWithoutRequestsMadeInput
+    approver?: UserCreateNestedOneWithoutRequestsReviewedInput
+    grantedPerm?: UserPermissionCreateNestedOneWithoutSourceRequestInput
+  }
+
+  export type PermissionRequestUncheckedCreateInput = {
+    id?: number
+    requesterId: number
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approverId?: number | null
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+    grantedPerm?: UserPermissionUncheckedCreateNestedOneWithoutSourceRequestInput
+  }
+
+  export type PermissionRequestUpdateInput = {
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    requester?: UserUpdateOneRequiredWithoutRequestsMadeNestedInput
+    approver?: UserUpdateOneWithoutRequestsReviewedNestedInput
+    grantedPerm?: UserPermissionUpdateOneWithoutSourceRequestNestedInput
+  }
+
+  export type PermissionRequestUncheckedUpdateInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    requesterId?: IntFieldUpdateOperationsInput | number
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approverId?: NullableIntFieldUpdateOperationsInput | number | null
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    grantedPerm?: UserPermissionUncheckedUpdateOneWithoutSourceRequestNestedInput
+  }
+
+  export type PermissionRequestCreateManyInput = {
+    id?: number
+    requesterId: number
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approverId?: number | null
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+  }
+
+  export type PermissionRequestUpdateManyMutationInput = {
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type PermissionRequestUncheckedUpdateManyInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    requesterId?: IntFieldUpdateOperationsInput | number
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approverId?: NullableIntFieldUpdateOperationsInput | number | null
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type IntFilter<$PrismaModel = never> = {
@@ -10091,6 +11816,12 @@ export namespace Prisma {
     none?: UserPermissionWhereInput
   }
 
+  export type PermissionRequestListRelationFilter = {
+    every?: PermissionRequestWhereInput
+    some?: PermissionRequestWhereInput
+    none?: PermissionRequestWhereInput
+  }
+
   export type SortOrderInput = {
     sort: SortOrder
     nulls?: NullsOrder
@@ -10105,6 +11836,10 @@ export namespace Prisma {
   }
 
   export type UserPermissionOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type PermissionRequestOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -10402,17 +12137,36 @@ export namespace Prisma {
     permId?: SortOrder
   }
 
+  export type DateTimeNullableFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null
+  }
+
+  export type PermissionRequestNullableScalarRelationFilter = {
+    is?: PermissionRequestWhereInput | null
+    isNot?: PermissionRequestWhereInput | null
+  }
+
   export type UserPermissionCountOrderByAggregateInput = {
     id?: SortOrder
     userId?: SortOrder
     permCode?: SortOrder
     effect?: SortOrder
+    expiresAt?: SortOrder
+    sourceRequestId?: SortOrder
   }
 
   export type UserPermissionAvgOrderByAggregateInput = {
     id?: SortOrder
     userId?: SortOrder
     effect?: SortOrder
+    sourceRequestId?: SortOrder
   }
 
   export type UserPermissionMaxOrderByAggregateInput = {
@@ -10420,6 +12174,8 @@ export namespace Prisma {
     userId?: SortOrder
     permCode?: SortOrder
     effect?: SortOrder
+    expiresAt?: SortOrder
+    sourceRequestId?: SortOrder
   }
 
   export type UserPermissionMinOrderByAggregateInput = {
@@ -10427,12 +12183,127 @@ export namespace Prisma {
     userId?: SortOrder
     permCode?: SortOrder
     effect?: SortOrder
+    expiresAt?: SortOrder
+    sourceRequestId?: SortOrder
   }
 
   export type UserPermissionSumOrderByAggregateInput = {
     id?: SortOrder
     userId?: SortOrder
     effect?: SortOrder
+    sourceRequestId?: SortOrder
+  }
+
+  export type DateTimeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeNullableWithAggregatesFilter<$PrismaModel> | Date | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedDateTimeNullableFilter<$PrismaModel>
+    _max?: NestedDateTimeNullableFilter<$PrismaModel>
+  }
+
+  export type EnumRequestStatusFilter<$PrismaModel = never> = {
+    equals?: $Enums.RequestStatus | EnumRequestStatusFieldRefInput<$PrismaModel>
+    in?: $Enums.RequestStatus[] | ListEnumRequestStatusFieldRefInput<$PrismaModel>
+    notIn?: $Enums.RequestStatus[] | ListEnumRequestStatusFieldRefInput<$PrismaModel>
+    not?: NestedEnumRequestStatusFilter<$PrismaModel> | $Enums.RequestStatus
+  }
+
+  export type DateTimeFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeFilter<$PrismaModel> | Date | string
+  }
+
+  export type UserPermissionNullableScalarRelationFilter = {
+    is?: UserPermissionWhereInput | null
+    isNot?: UserPermissionWhereInput | null
+  }
+
+  export type PermissionRequestCountOrderByAggregateInput = {
+    id?: SortOrder
+    requesterId?: SortOrder
+    permCode?: SortOrder
+    reason?: SortOrder
+    status?: SortOrder
+    approverId?: SortOrder
+    approvalNote?: SortOrder
+    expiresAt?: SortOrder
+    createdAt?: SortOrder
+    reviewedAt?: SortOrder
+  }
+
+  export type PermissionRequestAvgOrderByAggregateInput = {
+    id?: SortOrder
+    requesterId?: SortOrder
+    approverId?: SortOrder
+  }
+
+  export type PermissionRequestMaxOrderByAggregateInput = {
+    id?: SortOrder
+    requesterId?: SortOrder
+    permCode?: SortOrder
+    reason?: SortOrder
+    status?: SortOrder
+    approverId?: SortOrder
+    approvalNote?: SortOrder
+    expiresAt?: SortOrder
+    createdAt?: SortOrder
+    reviewedAt?: SortOrder
+  }
+
+  export type PermissionRequestMinOrderByAggregateInput = {
+    id?: SortOrder
+    requesterId?: SortOrder
+    permCode?: SortOrder
+    reason?: SortOrder
+    status?: SortOrder
+    approverId?: SortOrder
+    approvalNote?: SortOrder
+    expiresAt?: SortOrder
+    createdAt?: SortOrder
+    reviewedAt?: SortOrder
+  }
+
+  export type PermissionRequestSumOrderByAggregateInput = {
+    id?: SortOrder
+    requesterId?: SortOrder
+    approverId?: SortOrder
+  }
+
+  export type EnumRequestStatusWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.RequestStatus | EnumRequestStatusFieldRefInput<$PrismaModel>
+    in?: $Enums.RequestStatus[] | ListEnumRequestStatusFieldRefInput<$PrismaModel>
+    notIn?: $Enums.RequestStatus[] | ListEnumRequestStatusFieldRefInput<$PrismaModel>
+    not?: NestedEnumRequestStatusWithAggregatesFilter<$PrismaModel> | $Enums.RequestStatus
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumRequestStatusFilter<$PrismaModel>
+    _max?: NestedEnumRequestStatusFilter<$PrismaModel>
+  }
+
+  export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeWithAggregatesFilter<$PrismaModel> | Date | string
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedDateTimeFilter<$PrismaModel>
+    _max?: NestedDateTimeFilter<$PrismaModel>
   }
 
   export type PostCreateNestedManyWithoutAuthorInput = {
@@ -10456,6 +12327,20 @@ export namespace Prisma {
     connect?: UserPermissionWhereUniqueInput | UserPermissionWhereUniqueInput[]
   }
 
+  export type PermissionRequestCreateNestedManyWithoutRequesterInput = {
+    create?: XOR<PermissionRequestCreateWithoutRequesterInput, PermissionRequestUncheckedCreateWithoutRequesterInput> | PermissionRequestCreateWithoutRequesterInput[] | PermissionRequestUncheckedCreateWithoutRequesterInput[]
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutRequesterInput | PermissionRequestCreateOrConnectWithoutRequesterInput[]
+    createMany?: PermissionRequestCreateManyRequesterInputEnvelope
+    connect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+  }
+
+  export type PermissionRequestCreateNestedManyWithoutApproverInput = {
+    create?: XOR<PermissionRequestCreateWithoutApproverInput, PermissionRequestUncheckedCreateWithoutApproverInput> | PermissionRequestCreateWithoutApproverInput[] | PermissionRequestUncheckedCreateWithoutApproverInput[]
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutApproverInput | PermissionRequestCreateOrConnectWithoutApproverInput[]
+    createMany?: PermissionRequestCreateManyApproverInputEnvelope
+    connect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+  }
+
   export type PostUncheckedCreateNestedManyWithoutAuthorInput = {
     create?: XOR<PostCreateWithoutAuthorInput, PostUncheckedCreateWithoutAuthorInput> | PostCreateWithoutAuthorInput[] | PostUncheckedCreateWithoutAuthorInput[]
     connectOrCreate?: PostCreateOrConnectWithoutAuthorInput | PostCreateOrConnectWithoutAuthorInput[]
@@ -10475,6 +12360,20 @@ export namespace Prisma {
     connectOrCreate?: UserPermissionCreateOrConnectWithoutUserInput | UserPermissionCreateOrConnectWithoutUserInput[]
     createMany?: UserPermissionCreateManyUserInputEnvelope
     connect?: UserPermissionWhereUniqueInput | UserPermissionWhereUniqueInput[]
+  }
+
+  export type PermissionRequestUncheckedCreateNestedManyWithoutRequesterInput = {
+    create?: XOR<PermissionRequestCreateWithoutRequesterInput, PermissionRequestUncheckedCreateWithoutRequesterInput> | PermissionRequestCreateWithoutRequesterInput[] | PermissionRequestUncheckedCreateWithoutRequesterInput[]
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutRequesterInput | PermissionRequestCreateOrConnectWithoutRequesterInput[]
+    createMany?: PermissionRequestCreateManyRequesterInputEnvelope
+    connect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+  }
+
+  export type PermissionRequestUncheckedCreateNestedManyWithoutApproverInput = {
+    create?: XOR<PermissionRequestCreateWithoutApproverInput, PermissionRequestUncheckedCreateWithoutApproverInput> | PermissionRequestCreateWithoutApproverInput[] | PermissionRequestUncheckedCreateWithoutApproverInput[]
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutApproverInput | PermissionRequestCreateOrConnectWithoutApproverInput[]
+    createMany?: PermissionRequestCreateManyApproverInputEnvelope
+    connect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
   }
 
   export type StringFieldUpdateOperationsInput = {
@@ -10527,6 +12426,34 @@ export namespace Prisma {
     deleteMany?: UserPermissionScalarWhereInput | UserPermissionScalarWhereInput[]
   }
 
+  export type PermissionRequestUpdateManyWithoutRequesterNestedInput = {
+    create?: XOR<PermissionRequestCreateWithoutRequesterInput, PermissionRequestUncheckedCreateWithoutRequesterInput> | PermissionRequestCreateWithoutRequesterInput[] | PermissionRequestUncheckedCreateWithoutRequesterInput[]
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutRequesterInput | PermissionRequestCreateOrConnectWithoutRequesterInput[]
+    upsert?: PermissionRequestUpsertWithWhereUniqueWithoutRequesterInput | PermissionRequestUpsertWithWhereUniqueWithoutRequesterInput[]
+    createMany?: PermissionRequestCreateManyRequesterInputEnvelope
+    set?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    disconnect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    delete?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    connect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    update?: PermissionRequestUpdateWithWhereUniqueWithoutRequesterInput | PermissionRequestUpdateWithWhereUniqueWithoutRequesterInput[]
+    updateMany?: PermissionRequestUpdateManyWithWhereWithoutRequesterInput | PermissionRequestUpdateManyWithWhereWithoutRequesterInput[]
+    deleteMany?: PermissionRequestScalarWhereInput | PermissionRequestScalarWhereInput[]
+  }
+
+  export type PermissionRequestUpdateManyWithoutApproverNestedInput = {
+    create?: XOR<PermissionRequestCreateWithoutApproverInput, PermissionRequestUncheckedCreateWithoutApproverInput> | PermissionRequestCreateWithoutApproverInput[] | PermissionRequestUncheckedCreateWithoutApproverInput[]
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutApproverInput | PermissionRequestCreateOrConnectWithoutApproverInput[]
+    upsert?: PermissionRequestUpsertWithWhereUniqueWithoutApproverInput | PermissionRequestUpsertWithWhereUniqueWithoutApproverInput[]
+    createMany?: PermissionRequestCreateManyApproverInputEnvelope
+    set?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    disconnect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    delete?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    connect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    update?: PermissionRequestUpdateWithWhereUniqueWithoutApproverInput | PermissionRequestUpdateWithWhereUniqueWithoutApproverInput[]
+    updateMany?: PermissionRequestUpdateManyWithWhereWithoutApproverInput | PermissionRequestUpdateManyWithWhereWithoutApproverInput[]
+    deleteMany?: PermissionRequestScalarWhereInput | PermissionRequestScalarWhereInput[]
+  }
+
   export type IntFieldUpdateOperationsInput = {
     set?: number
     increment?: number
@@ -10575,6 +12502,34 @@ export namespace Prisma {
     update?: UserPermissionUpdateWithWhereUniqueWithoutUserInput | UserPermissionUpdateWithWhereUniqueWithoutUserInput[]
     updateMany?: UserPermissionUpdateManyWithWhereWithoutUserInput | UserPermissionUpdateManyWithWhereWithoutUserInput[]
     deleteMany?: UserPermissionScalarWhereInput | UserPermissionScalarWhereInput[]
+  }
+
+  export type PermissionRequestUncheckedUpdateManyWithoutRequesterNestedInput = {
+    create?: XOR<PermissionRequestCreateWithoutRequesterInput, PermissionRequestUncheckedCreateWithoutRequesterInput> | PermissionRequestCreateWithoutRequesterInput[] | PermissionRequestUncheckedCreateWithoutRequesterInput[]
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutRequesterInput | PermissionRequestCreateOrConnectWithoutRequesterInput[]
+    upsert?: PermissionRequestUpsertWithWhereUniqueWithoutRequesterInput | PermissionRequestUpsertWithWhereUniqueWithoutRequesterInput[]
+    createMany?: PermissionRequestCreateManyRequesterInputEnvelope
+    set?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    disconnect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    delete?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    connect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    update?: PermissionRequestUpdateWithWhereUniqueWithoutRequesterInput | PermissionRequestUpdateWithWhereUniqueWithoutRequesterInput[]
+    updateMany?: PermissionRequestUpdateManyWithWhereWithoutRequesterInput | PermissionRequestUpdateManyWithWhereWithoutRequesterInput[]
+    deleteMany?: PermissionRequestScalarWhereInput | PermissionRequestScalarWhereInput[]
+  }
+
+  export type PermissionRequestUncheckedUpdateManyWithoutApproverNestedInput = {
+    create?: XOR<PermissionRequestCreateWithoutApproverInput, PermissionRequestUncheckedCreateWithoutApproverInput> | PermissionRequestCreateWithoutApproverInput[] | PermissionRequestUncheckedCreateWithoutApproverInput[]
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutApproverInput | PermissionRequestCreateOrConnectWithoutApproverInput[]
+    upsert?: PermissionRequestUpsertWithWhereUniqueWithoutApproverInput | PermissionRequestUpsertWithWhereUniqueWithoutApproverInput[]
+    createMany?: PermissionRequestCreateManyApproverInputEnvelope
+    set?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    disconnect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    delete?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    connect?: PermissionRequestWhereUniqueInput | PermissionRequestWhereUniqueInput[]
+    update?: PermissionRequestUpdateWithWhereUniqueWithoutApproverInput | PermissionRequestUpdateWithWhereUniqueWithoutApproverInput[]
+    updateMany?: PermissionRequestUpdateManyWithWhereWithoutApproverInput | PermissionRequestUpdateManyWithWhereWithoutApproverInput[]
+    deleteMany?: PermissionRequestScalarWhereInput | PermissionRequestScalarWhereInput[]
   }
 
   export type UserCreateNestedOneWithoutPostsInput = {
@@ -10793,12 +12748,102 @@ export namespace Prisma {
     connect?: UserWhereUniqueInput
   }
 
+  export type PermissionRequestCreateNestedOneWithoutGrantedPermInput = {
+    create?: XOR<PermissionRequestCreateWithoutGrantedPermInput, PermissionRequestUncheckedCreateWithoutGrantedPermInput>
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutGrantedPermInput
+    connect?: PermissionRequestWhereUniqueInput
+  }
+
+  export type NullableDateTimeFieldUpdateOperationsInput = {
+    set?: Date | string | null
+  }
+
   export type UserUpdateOneRequiredWithoutPermissionsNestedInput = {
     create?: XOR<UserCreateWithoutPermissionsInput, UserUncheckedCreateWithoutPermissionsInput>
     connectOrCreate?: UserCreateOrConnectWithoutPermissionsInput
     upsert?: UserUpsertWithoutPermissionsInput
     connect?: UserWhereUniqueInput
     update?: XOR<XOR<UserUpdateToOneWithWhereWithoutPermissionsInput, UserUpdateWithoutPermissionsInput>, UserUncheckedUpdateWithoutPermissionsInput>
+  }
+
+  export type PermissionRequestUpdateOneWithoutGrantedPermNestedInput = {
+    create?: XOR<PermissionRequestCreateWithoutGrantedPermInput, PermissionRequestUncheckedCreateWithoutGrantedPermInput>
+    connectOrCreate?: PermissionRequestCreateOrConnectWithoutGrantedPermInput
+    upsert?: PermissionRequestUpsertWithoutGrantedPermInput
+    disconnect?: PermissionRequestWhereInput | boolean
+    delete?: PermissionRequestWhereInput | boolean
+    connect?: PermissionRequestWhereUniqueInput
+    update?: XOR<XOR<PermissionRequestUpdateToOneWithWhereWithoutGrantedPermInput, PermissionRequestUpdateWithoutGrantedPermInput>, PermissionRequestUncheckedUpdateWithoutGrantedPermInput>
+  }
+
+  export type UserCreateNestedOneWithoutRequestsMadeInput = {
+    create?: XOR<UserCreateWithoutRequestsMadeInput, UserUncheckedCreateWithoutRequestsMadeInput>
+    connectOrCreate?: UserCreateOrConnectWithoutRequestsMadeInput
+    connect?: UserWhereUniqueInput
+  }
+
+  export type UserCreateNestedOneWithoutRequestsReviewedInput = {
+    create?: XOR<UserCreateWithoutRequestsReviewedInput, UserUncheckedCreateWithoutRequestsReviewedInput>
+    connectOrCreate?: UserCreateOrConnectWithoutRequestsReviewedInput
+    connect?: UserWhereUniqueInput
+  }
+
+  export type UserPermissionCreateNestedOneWithoutSourceRequestInput = {
+    create?: XOR<UserPermissionCreateWithoutSourceRequestInput, UserPermissionUncheckedCreateWithoutSourceRequestInput>
+    connectOrCreate?: UserPermissionCreateOrConnectWithoutSourceRequestInput
+    connect?: UserPermissionWhereUniqueInput
+  }
+
+  export type UserPermissionUncheckedCreateNestedOneWithoutSourceRequestInput = {
+    create?: XOR<UserPermissionCreateWithoutSourceRequestInput, UserPermissionUncheckedCreateWithoutSourceRequestInput>
+    connectOrCreate?: UserPermissionCreateOrConnectWithoutSourceRequestInput
+    connect?: UserPermissionWhereUniqueInput
+  }
+
+  export type EnumRequestStatusFieldUpdateOperationsInput = {
+    set?: $Enums.RequestStatus
+  }
+
+  export type DateTimeFieldUpdateOperationsInput = {
+    set?: Date | string
+  }
+
+  export type UserUpdateOneRequiredWithoutRequestsMadeNestedInput = {
+    create?: XOR<UserCreateWithoutRequestsMadeInput, UserUncheckedCreateWithoutRequestsMadeInput>
+    connectOrCreate?: UserCreateOrConnectWithoutRequestsMadeInput
+    upsert?: UserUpsertWithoutRequestsMadeInput
+    connect?: UserWhereUniqueInput
+    update?: XOR<XOR<UserUpdateToOneWithWhereWithoutRequestsMadeInput, UserUpdateWithoutRequestsMadeInput>, UserUncheckedUpdateWithoutRequestsMadeInput>
+  }
+
+  export type UserUpdateOneWithoutRequestsReviewedNestedInput = {
+    create?: XOR<UserCreateWithoutRequestsReviewedInput, UserUncheckedCreateWithoutRequestsReviewedInput>
+    connectOrCreate?: UserCreateOrConnectWithoutRequestsReviewedInput
+    upsert?: UserUpsertWithoutRequestsReviewedInput
+    disconnect?: UserWhereInput | boolean
+    delete?: UserWhereInput | boolean
+    connect?: UserWhereUniqueInput
+    update?: XOR<XOR<UserUpdateToOneWithWhereWithoutRequestsReviewedInput, UserUpdateWithoutRequestsReviewedInput>, UserUncheckedUpdateWithoutRequestsReviewedInput>
+  }
+
+  export type UserPermissionUpdateOneWithoutSourceRequestNestedInput = {
+    create?: XOR<UserPermissionCreateWithoutSourceRequestInput, UserPermissionUncheckedCreateWithoutSourceRequestInput>
+    connectOrCreate?: UserPermissionCreateOrConnectWithoutSourceRequestInput
+    upsert?: UserPermissionUpsertWithoutSourceRequestInput
+    disconnect?: UserPermissionWhereInput | boolean
+    delete?: UserPermissionWhereInput | boolean
+    connect?: UserPermissionWhereUniqueInput
+    update?: XOR<XOR<UserPermissionUpdateToOneWithWhereWithoutSourceRequestInput, UserPermissionUpdateWithoutSourceRequestInput>, UserPermissionUncheckedUpdateWithoutSourceRequestInput>
+  }
+
+  export type UserPermissionUncheckedUpdateOneWithoutSourceRequestNestedInput = {
+    create?: XOR<UserPermissionCreateWithoutSourceRequestInput, UserPermissionUncheckedCreateWithoutSourceRequestInput>
+    connectOrCreate?: UserPermissionCreateOrConnectWithoutSourceRequestInput
+    upsert?: UserPermissionUpsertWithoutSourceRequestInput
+    disconnect?: UserPermissionWhereInput | boolean
+    delete?: UserPermissionWhereInput | boolean
+    connect?: UserPermissionWhereUniqueInput
+    update?: XOR<XOR<UserPermissionUpdateToOneWithWhereWithoutSourceRequestInput, UserPermissionUpdateWithoutSourceRequestInput>, UserPermissionUncheckedUpdateWithoutSourceRequestInput>
   }
 
   export type NestedIntFilter<$PrismaModel = never> = {
@@ -10952,6 +12997,73 @@ export namespace Prisma {
     not?: NestedFloatNullableFilter<$PrismaModel> | number | null
   }
 
+  export type NestedDateTimeNullableFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null
+  }
+
+  export type NestedDateTimeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeNullableWithAggregatesFilter<$PrismaModel> | Date | string | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedDateTimeNullableFilter<$PrismaModel>
+    _max?: NestedDateTimeNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumRequestStatusFilter<$PrismaModel = never> = {
+    equals?: $Enums.RequestStatus | EnumRequestStatusFieldRefInput<$PrismaModel>
+    in?: $Enums.RequestStatus[] | ListEnumRequestStatusFieldRefInput<$PrismaModel>
+    notIn?: $Enums.RequestStatus[] | ListEnumRequestStatusFieldRefInput<$PrismaModel>
+    not?: NestedEnumRequestStatusFilter<$PrismaModel> | $Enums.RequestStatus
+  }
+
+  export type NestedDateTimeFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeFilter<$PrismaModel> | Date | string
+  }
+
+  export type NestedEnumRequestStatusWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.RequestStatus | EnumRequestStatusFieldRefInput<$PrismaModel>
+    in?: $Enums.RequestStatus[] | ListEnumRequestStatusFieldRefInput<$PrismaModel>
+    notIn?: $Enums.RequestStatus[] | ListEnumRequestStatusFieldRefInput<$PrismaModel>
+    not?: NestedEnumRequestStatusWithAggregatesFilter<$PrismaModel> | $Enums.RequestStatus
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumRequestStatusFilter<$PrismaModel>
+    _max?: NestedEnumRequestStatusFilter<$PrismaModel>
+  }
+
+  export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
+    not?: NestedDateTimeWithAggregatesFilter<$PrismaModel> | Date | string
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedDateTimeFilter<$PrismaModel>
+    _max?: NestedDateTimeFilter<$PrismaModel>
+  }
+
   export type PostCreateWithoutAuthorInput = {
     title: string
     content?: string | null
@@ -10996,12 +13108,16 @@ export namespace Prisma {
   export type UserPermissionCreateWithoutUserInput = {
     permCode: string
     effect: number
+    expiresAt?: Date | string | null
+    sourceRequest?: PermissionRequestCreateNestedOneWithoutGrantedPermInput
   }
 
   export type UserPermissionUncheckedCreateWithoutUserInput = {
     id?: number
     permCode: string
     effect: number
+    expiresAt?: Date | string | null
+    sourceRequestId?: number | null
   }
 
   export type UserPermissionCreateOrConnectWithoutUserInput = {
@@ -11011,6 +13127,76 @@ export namespace Prisma {
 
   export type UserPermissionCreateManyUserInputEnvelope = {
     data: UserPermissionCreateManyUserInput | UserPermissionCreateManyUserInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type PermissionRequestCreateWithoutRequesterInput = {
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+    approver?: UserCreateNestedOneWithoutRequestsReviewedInput
+    grantedPerm?: UserPermissionCreateNestedOneWithoutSourceRequestInput
+  }
+
+  export type PermissionRequestUncheckedCreateWithoutRequesterInput = {
+    id?: number
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approverId?: number | null
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+    grantedPerm?: UserPermissionUncheckedCreateNestedOneWithoutSourceRequestInput
+  }
+
+  export type PermissionRequestCreateOrConnectWithoutRequesterInput = {
+    where: PermissionRequestWhereUniqueInput
+    create: XOR<PermissionRequestCreateWithoutRequesterInput, PermissionRequestUncheckedCreateWithoutRequesterInput>
+  }
+
+  export type PermissionRequestCreateManyRequesterInputEnvelope = {
+    data: PermissionRequestCreateManyRequesterInput | PermissionRequestCreateManyRequesterInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type PermissionRequestCreateWithoutApproverInput = {
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+    requester: UserCreateNestedOneWithoutRequestsMadeInput
+    grantedPerm?: UserPermissionCreateNestedOneWithoutSourceRequestInput
+  }
+
+  export type PermissionRequestUncheckedCreateWithoutApproverInput = {
+    id?: number
+    requesterId: number
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+    grantedPerm?: UserPermissionUncheckedCreateNestedOneWithoutSourceRequestInput
+  }
+
+  export type PermissionRequestCreateOrConnectWithoutApproverInput = {
+    where: PermissionRequestWhereUniqueInput
+    create: XOR<PermissionRequestCreateWithoutApproverInput, PermissionRequestUncheckedCreateWithoutApproverInput>
+  }
+
+  export type PermissionRequestCreateManyApproverInputEnvelope = {
+    data: PermissionRequestCreateManyApproverInput | PermissionRequestCreateManyApproverInput[]
     skipDuplicates?: boolean
   }
 
@@ -11089,6 +13275,56 @@ export namespace Prisma {
     userId?: IntFilter<"UserPermission"> | number
     permCode?: StringFilter<"UserPermission"> | string
     effect?: IntFilter<"UserPermission"> | number
+    expiresAt?: DateTimeNullableFilter<"UserPermission"> | Date | string | null
+    sourceRequestId?: IntNullableFilter<"UserPermission"> | number | null
+  }
+
+  export type PermissionRequestUpsertWithWhereUniqueWithoutRequesterInput = {
+    where: PermissionRequestWhereUniqueInput
+    update: XOR<PermissionRequestUpdateWithoutRequesterInput, PermissionRequestUncheckedUpdateWithoutRequesterInput>
+    create: XOR<PermissionRequestCreateWithoutRequesterInput, PermissionRequestUncheckedCreateWithoutRequesterInput>
+  }
+
+  export type PermissionRequestUpdateWithWhereUniqueWithoutRequesterInput = {
+    where: PermissionRequestWhereUniqueInput
+    data: XOR<PermissionRequestUpdateWithoutRequesterInput, PermissionRequestUncheckedUpdateWithoutRequesterInput>
+  }
+
+  export type PermissionRequestUpdateManyWithWhereWithoutRequesterInput = {
+    where: PermissionRequestScalarWhereInput
+    data: XOR<PermissionRequestUpdateManyMutationInput, PermissionRequestUncheckedUpdateManyWithoutRequesterInput>
+  }
+
+  export type PermissionRequestScalarWhereInput = {
+    AND?: PermissionRequestScalarWhereInput | PermissionRequestScalarWhereInput[]
+    OR?: PermissionRequestScalarWhereInput[]
+    NOT?: PermissionRequestScalarWhereInput | PermissionRequestScalarWhereInput[]
+    id?: IntFilter<"PermissionRequest"> | number
+    requesterId?: IntFilter<"PermissionRequest"> | number
+    permCode?: StringFilter<"PermissionRequest"> | string
+    reason?: StringNullableFilter<"PermissionRequest"> | string | null
+    status?: EnumRequestStatusFilter<"PermissionRequest"> | $Enums.RequestStatus
+    approverId?: IntNullableFilter<"PermissionRequest"> | number | null
+    approvalNote?: StringNullableFilter<"PermissionRequest"> | string | null
+    expiresAt?: DateTimeNullableFilter<"PermissionRequest"> | Date | string | null
+    createdAt?: DateTimeFilter<"PermissionRequest"> | Date | string
+    reviewedAt?: DateTimeNullableFilter<"PermissionRequest"> | Date | string | null
+  }
+
+  export type PermissionRequestUpsertWithWhereUniqueWithoutApproverInput = {
+    where: PermissionRequestWhereUniqueInput
+    update: XOR<PermissionRequestUpdateWithoutApproverInput, PermissionRequestUncheckedUpdateWithoutApproverInput>
+    create: XOR<PermissionRequestCreateWithoutApproverInput, PermissionRequestUncheckedCreateWithoutApproverInput>
+  }
+
+  export type PermissionRequestUpdateWithWhereUniqueWithoutApproverInput = {
+    where: PermissionRequestWhereUniqueInput
+    data: XOR<PermissionRequestUpdateWithoutApproverInput, PermissionRequestUncheckedUpdateWithoutApproverInput>
+  }
+
+  export type PermissionRequestUpdateManyWithWhereWithoutApproverInput = {
+    where: PermissionRequestScalarWhereInput
+    data: XOR<PermissionRequestUpdateManyMutationInput, PermissionRequestUncheckedUpdateManyWithoutApproverInput>
   }
 
   export type UserCreateWithoutPostsInput = {
@@ -11096,6 +13332,8 @@ export namespace Prisma {
     name?: string | null
     roles?: UserRoleCreateNestedManyWithoutUserInput
     permissions?: UserPermissionCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestCreateNestedManyWithoutRequesterInput
+    requestsReviewed?: PermissionRequestCreateNestedManyWithoutApproverInput
   }
 
   export type UserUncheckedCreateWithoutPostsInput = {
@@ -11104,6 +13342,8 @@ export namespace Prisma {
     name?: string | null
     roles?: UserRoleUncheckedCreateNestedManyWithoutUserInput
     permissions?: UserPermissionUncheckedCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestUncheckedCreateNestedManyWithoutRequesterInput
+    requestsReviewed?: PermissionRequestUncheckedCreateNestedManyWithoutApproverInput
   }
 
   export type UserCreateOrConnectWithoutPostsInput = {
@@ -11127,6 +13367,8 @@ export namespace Prisma {
     name?: NullableStringFieldUpdateOperationsInput | string | null
     roles?: UserRoleUpdateManyWithoutUserNestedInput
     permissions?: UserPermissionUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUpdateManyWithoutRequesterNestedInput
+    requestsReviewed?: PermissionRequestUpdateManyWithoutApproverNestedInput
   }
 
   export type UserUncheckedUpdateWithoutPostsInput = {
@@ -11135,6 +13377,8 @@ export namespace Prisma {
     name?: NullableStringFieldUpdateOperationsInput | string | null
     roles?: UserRoleUncheckedUpdateManyWithoutUserNestedInput
     permissions?: UserPermissionUncheckedUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUncheckedUpdateManyWithoutRequesterNestedInput
+    requestsReviewed?: PermissionRequestUncheckedUpdateManyWithoutApproverNestedInput
   }
 
   export type UserRoleCreateWithoutRoleInput = {
@@ -11252,6 +13496,8 @@ export namespace Prisma {
     name?: string | null
     posts?: PostCreateNestedManyWithoutAuthorInput
     permissions?: UserPermissionCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestCreateNestedManyWithoutRequesterInput
+    requestsReviewed?: PermissionRequestCreateNestedManyWithoutApproverInput
   }
 
   export type UserUncheckedCreateWithoutRolesInput = {
@@ -11260,6 +13506,8 @@ export namespace Prisma {
     name?: string | null
     posts?: PostUncheckedCreateNestedManyWithoutAuthorInput
     permissions?: UserPermissionUncheckedCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestUncheckedCreateNestedManyWithoutRequesterInput
+    requestsReviewed?: PermissionRequestUncheckedCreateNestedManyWithoutApproverInput
   }
 
   export type UserCreateOrConnectWithoutRolesInput = {
@@ -11301,6 +13549,8 @@ export namespace Prisma {
     name?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUpdateManyWithoutAuthorNestedInput
     permissions?: UserPermissionUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUpdateManyWithoutRequesterNestedInput
+    requestsReviewed?: PermissionRequestUpdateManyWithoutApproverNestedInput
   }
 
   export type UserUncheckedUpdateWithoutRolesInput = {
@@ -11309,6 +13559,8 @@ export namespace Prisma {
     name?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUncheckedUpdateManyWithoutAuthorNestedInput
     permissions?: UserPermissionUncheckedUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUncheckedUpdateManyWithoutRequesterNestedInput
+    requestsReviewed?: PermissionRequestUncheckedUpdateManyWithoutApproverNestedInput
   }
 
   export type RoleUpsertWithoutUsersInput = {
@@ -11420,6 +13672,8 @@ export namespace Prisma {
     name?: string | null
     posts?: PostCreateNestedManyWithoutAuthorInput
     roles?: UserRoleCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestCreateNestedManyWithoutRequesterInput
+    requestsReviewed?: PermissionRequestCreateNestedManyWithoutApproverInput
   }
 
   export type UserUncheckedCreateWithoutPermissionsInput = {
@@ -11428,11 +13682,43 @@ export namespace Prisma {
     name?: string | null
     posts?: PostUncheckedCreateNestedManyWithoutAuthorInput
     roles?: UserRoleUncheckedCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestUncheckedCreateNestedManyWithoutRequesterInput
+    requestsReviewed?: PermissionRequestUncheckedCreateNestedManyWithoutApproverInput
   }
 
   export type UserCreateOrConnectWithoutPermissionsInput = {
     where: UserWhereUniqueInput
     create: XOR<UserCreateWithoutPermissionsInput, UserUncheckedCreateWithoutPermissionsInput>
+  }
+
+  export type PermissionRequestCreateWithoutGrantedPermInput = {
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+    requester: UserCreateNestedOneWithoutRequestsMadeInput
+    approver?: UserCreateNestedOneWithoutRequestsReviewedInput
+  }
+
+  export type PermissionRequestUncheckedCreateWithoutGrantedPermInput = {
+    id?: number
+    requesterId: number
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approverId?: number | null
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+  }
+
+  export type PermissionRequestCreateOrConnectWithoutGrantedPermInput = {
+    where: PermissionRequestWhereUniqueInput
+    create: XOR<PermissionRequestCreateWithoutGrantedPermInput, PermissionRequestUncheckedCreateWithoutGrantedPermInput>
   }
 
   export type UserUpsertWithoutPermissionsInput = {
@@ -11451,6 +13737,8 @@ export namespace Prisma {
     name?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUpdateManyWithoutAuthorNestedInput
     roles?: UserRoleUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUpdateManyWithoutRequesterNestedInput
+    requestsReviewed?: PermissionRequestUpdateManyWithoutApproverNestedInput
   }
 
   export type UserUncheckedUpdateWithoutPermissionsInput = {
@@ -11459,6 +13747,198 @@ export namespace Prisma {
     name?: NullableStringFieldUpdateOperationsInput | string | null
     posts?: PostUncheckedUpdateManyWithoutAuthorNestedInput
     roles?: UserRoleUncheckedUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUncheckedUpdateManyWithoutRequesterNestedInput
+    requestsReviewed?: PermissionRequestUncheckedUpdateManyWithoutApproverNestedInput
+  }
+
+  export type PermissionRequestUpsertWithoutGrantedPermInput = {
+    update: XOR<PermissionRequestUpdateWithoutGrantedPermInput, PermissionRequestUncheckedUpdateWithoutGrantedPermInput>
+    create: XOR<PermissionRequestCreateWithoutGrantedPermInput, PermissionRequestUncheckedCreateWithoutGrantedPermInput>
+    where?: PermissionRequestWhereInput
+  }
+
+  export type PermissionRequestUpdateToOneWithWhereWithoutGrantedPermInput = {
+    where?: PermissionRequestWhereInput
+    data: XOR<PermissionRequestUpdateWithoutGrantedPermInput, PermissionRequestUncheckedUpdateWithoutGrantedPermInput>
+  }
+
+  export type PermissionRequestUpdateWithoutGrantedPermInput = {
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    requester?: UserUpdateOneRequiredWithoutRequestsMadeNestedInput
+    approver?: UserUpdateOneWithoutRequestsReviewedNestedInput
+  }
+
+  export type PermissionRequestUncheckedUpdateWithoutGrantedPermInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    requesterId?: IntFieldUpdateOperationsInput | number
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approverId?: NullableIntFieldUpdateOperationsInput | number | null
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type UserCreateWithoutRequestsMadeInput = {
+    email: string
+    name?: string | null
+    posts?: PostCreateNestedManyWithoutAuthorInput
+    roles?: UserRoleCreateNestedManyWithoutUserInput
+    permissions?: UserPermissionCreateNestedManyWithoutUserInput
+    requestsReviewed?: PermissionRequestCreateNestedManyWithoutApproverInput
+  }
+
+  export type UserUncheckedCreateWithoutRequestsMadeInput = {
+    id?: number
+    email: string
+    name?: string | null
+    posts?: PostUncheckedCreateNestedManyWithoutAuthorInput
+    roles?: UserRoleUncheckedCreateNestedManyWithoutUserInput
+    permissions?: UserPermissionUncheckedCreateNestedManyWithoutUserInput
+    requestsReviewed?: PermissionRequestUncheckedCreateNestedManyWithoutApproverInput
+  }
+
+  export type UserCreateOrConnectWithoutRequestsMadeInput = {
+    where: UserWhereUniqueInput
+    create: XOR<UserCreateWithoutRequestsMadeInput, UserUncheckedCreateWithoutRequestsMadeInput>
+  }
+
+  export type UserCreateWithoutRequestsReviewedInput = {
+    email: string
+    name?: string | null
+    posts?: PostCreateNestedManyWithoutAuthorInput
+    roles?: UserRoleCreateNestedManyWithoutUserInput
+    permissions?: UserPermissionCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestCreateNestedManyWithoutRequesterInput
+  }
+
+  export type UserUncheckedCreateWithoutRequestsReviewedInput = {
+    id?: number
+    email: string
+    name?: string | null
+    posts?: PostUncheckedCreateNestedManyWithoutAuthorInput
+    roles?: UserRoleUncheckedCreateNestedManyWithoutUserInput
+    permissions?: UserPermissionUncheckedCreateNestedManyWithoutUserInput
+    requestsMade?: PermissionRequestUncheckedCreateNestedManyWithoutRequesterInput
+  }
+
+  export type UserCreateOrConnectWithoutRequestsReviewedInput = {
+    where: UserWhereUniqueInput
+    create: XOR<UserCreateWithoutRequestsReviewedInput, UserUncheckedCreateWithoutRequestsReviewedInput>
+  }
+
+  export type UserPermissionCreateWithoutSourceRequestInput = {
+    permCode: string
+    effect: number
+    expiresAt?: Date | string | null
+    user: UserCreateNestedOneWithoutPermissionsInput
+  }
+
+  export type UserPermissionUncheckedCreateWithoutSourceRequestInput = {
+    id?: number
+    userId: number
+    permCode: string
+    effect: number
+    expiresAt?: Date | string | null
+  }
+
+  export type UserPermissionCreateOrConnectWithoutSourceRequestInput = {
+    where: UserPermissionWhereUniqueInput
+    create: XOR<UserPermissionCreateWithoutSourceRequestInput, UserPermissionUncheckedCreateWithoutSourceRequestInput>
+  }
+
+  export type UserUpsertWithoutRequestsMadeInput = {
+    update: XOR<UserUpdateWithoutRequestsMadeInput, UserUncheckedUpdateWithoutRequestsMadeInput>
+    create: XOR<UserCreateWithoutRequestsMadeInput, UserUncheckedCreateWithoutRequestsMadeInput>
+    where?: UserWhereInput
+  }
+
+  export type UserUpdateToOneWithWhereWithoutRequestsMadeInput = {
+    where?: UserWhereInput
+    data: XOR<UserUpdateWithoutRequestsMadeInput, UserUncheckedUpdateWithoutRequestsMadeInput>
+  }
+
+  export type UserUpdateWithoutRequestsMadeInput = {
+    email?: StringFieldUpdateOperationsInput | string
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    posts?: PostUpdateManyWithoutAuthorNestedInput
+    roles?: UserRoleUpdateManyWithoutUserNestedInput
+    permissions?: UserPermissionUpdateManyWithoutUserNestedInput
+    requestsReviewed?: PermissionRequestUpdateManyWithoutApproverNestedInput
+  }
+
+  export type UserUncheckedUpdateWithoutRequestsMadeInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    email?: StringFieldUpdateOperationsInput | string
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    posts?: PostUncheckedUpdateManyWithoutAuthorNestedInput
+    roles?: UserRoleUncheckedUpdateManyWithoutUserNestedInput
+    permissions?: UserPermissionUncheckedUpdateManyWithoutUserNestedInput
+    requestsReviewed?: PermissionRequestUncheckedUpdateManyWithoutApproverNestedInput
+  }
+
+  export type UserUpsertWithoutRequestsReviewedInput = {
+    update: XOR<UserUpdateWithoutRequestsReviewedInput, UserUncheckedUpdateWithoutRequestsReviewedInput>
+    create: XOR<UserCreateWithoutRequestsReviewedInput, UserUncheckedCreateWithoutRequestsReviewedInput>
+    where?: UserWhereInput
+  }
+
+  export type UserUpdateToOneWithWhereWithoutRequestsReviewedInput = {
+    where?: UserWhereInput
+    data: XOR<UserUpdateWithoutRequestsReviewedInput, UserUncheckedUpdateWithoutRequestsReviewedInput>
+  }
+
+  export type UserUpdateWithoutRequestsReviewedInput = {
+    email?: StringFieldUpdateOperationsInput | string
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    posts?: PostUpdateManyWithoutAuthorNestedInput
+    roles?: UserRoleUpdateManyWithoutUserNestedInput
+    permissions?: UserPermissionUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUpdateManyWithoutRequesterNestedInput
+  }
+
+  export type UserUncheckedUpdateWithoutRequestsReviewedInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    email?: StringFieldUpdateOperationsInput | string
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    posts?: PostUncheckedUpdateManyWithoutAuthorNestedInput
+    roles?: UserRoleUncheckedUpdateManyWithoutUserNestedInput
+    permissions?: UserPermissionUncheckedUpdateManyWithoutUserNestedInput
+    requestsMade?: PermissionRequestUncheckedUpdateManyWithoutRequesterNestedInput
+  }
+
+  export type UserPermissionUpsertWithoutSourceRequestInput = {
+    update: XOR<UserPermissionUpdateWithoutSourceRequestInput, UserPermissionUncheckedUpdateWithoutSourceRequestInput>
+    create: XOR<UserPermissionCreateWithoutSourceRequestInput, UserPermissionUncheckedCreateWithoutSourceRequestInput>
+    where?: UserPermissionWhereInput
+  }
+
+  export type UserPermissionUpdateToOneWithWhereWithoutSourceRequestInput = {
+    where?: UserPermissionWhereInput
+    data: XOR<UserPermissionUpdateWithoutSourceRequestInput, UserPermissionUncheckedUpdateWithoutSourceRequestInput>
+  }
+
+  export type UserPermissionUpdateWithoutSourceRequestInput = {
+    permCode?: StringFieldUpdateOperationsInput | string
+    effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    user?: UserUpdateOneRequiredWithoutPermissionsNestedInput
+  }
+
+  export type UserPermissionUncheckedUpdateWithoutSourceRequestInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    userId?: IntFieldUpdateOperationsInput | number
+    permCode?: StringFieldUpdateOperationsInput | string
+    effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type PostCreateManyAuthorInput = {
@@ -11476,6 +13956,32 @@ export namespace Prisma {
     id?: number
     permCode: string
     effect: number
+    expiresAt?: Date | string | null
+    sourceRequestId?: number | null
+  }
+
+  export type PermissionRequestCreateManyRequesterInput = {
+    id?: number
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approverId?: number | null
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
+  }
+
+  export type PermissionRequestCreateManyApproverInput = {
+    id?: number
+    requesterId: number
+    permCode: string
+    reason?: string | null
+    status?: $Enums.RequestStatus
+    approvalNote?: string | null
+    expiresAt?: Date | string | null
+    createdAt?: Date | string
+    reviewedAt?: Date | string | null
   }
 
   export type PostUpdateWithoutAuthorInput = {
@@ -11513,18 +14019,98 @@ export namespace Prisma {
   export type UserPermissionUpdateWithoutUserInput = {
     permCode?: StringFieldUpdateOperationsInput | string
     effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    sourceRequest?: PermissionRequestUpdateOneWithoutGrantedPermNestedInput
   }
 
   export type UserPermissionUncheckedUpdateWithoutUserInput = {
     id?: IntFieldUpdateOperationsInput | number
     permCode?: StringFieldUpdateOperationsInput | string
     effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    sourceRequestId?: NullableIntFieldUpdateOperationsInput | number | null
   }
 
   export type UserPermissionUncheckedUpdateManyWithoutUserInput = {
     id?: IntFieldUpdateOperationsInput | number
     permCode?: StringFieldUpdateOperationsInput | string
     effect?: IntFieldUpdateOperationsInput | number
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    sourceRequestId?: NullableIntFieldUpdateOperationsInput | number | null
+  }
+
+  export type PermissionRequestUpdateWithoutRequesterInput = {
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approver?: UserUpdateOneWithoutRequestsReviewedNestedInput
+    grantedPerm?: UserPermissionUpdateOneWithoutSourceRequestNestedInput
+  }
+
+  export type PermissionRequestUncheckedUpdateWithoutRequesterInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approverId?: NullableIntFieldUpdateOperationsInput | number | null
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    grantedPerm?: UserPermissionUncheckedUpdateOneWithoutSourceRequestNestedInput
+  }
+
+  export type PermissionRequestUncheckedUpdateManyWithoutRequesterInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approverId?: NullableIntFieldUpdateOperationsInput | number | null
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type PermissionRequestUpdateWithoutApproverInput = {
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    requester?: UserUpdateOneRequiredWithoutRequestsMadeNestedInput
+    grantedPerm?: UserPermissionUpdateOneWithoutSourceRequestNestedInput
+  }
+
+  export type PermissionRequestUncheckedUpdateWithoutApproverInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    requesterId?: IntFieldUpdateOperationsInput | number
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    grantedPerm?: UserPermissionUncheckedUpdateOneWithoutSourceRequestNestedInput
+  }
+
+  export type PermissionRequestUncheckedUpdateManyWithoutApproverInput = {
+    id?: IntFieldUpdateOperationsInput | number
+    requesterId?: IntFieldUpdateOperationsInput | number
+    permCode?: StringFieldUpdateOperationsInput | string
+    reason?: NullableStringFieldUpdateOperationsInput | string | null
+    status?: EnumRequestStatusFieldUpdateOperationsInput | $Enums.RequestStatus
+    approvalNote?: NullableStringFieldUpdateOperationsInput | string | null
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    reviewedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   }
 
   export type UserRoleCreateManyRoleInput = {
