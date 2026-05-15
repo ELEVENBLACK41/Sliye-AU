@@ -1,8 +1,16 @@
 {
+  "name": "nextnest",
+  "private": true,
   "scripts": {
-    "dev": "pnpm -r dev",
-
-    "dev:web": "pnpm --filter web dev",
-    "dev:server": "pnpm --filter server dev"
+    "dev": "pnpm -r --parallel dev",
+    "dev:web": "pnpm --filter @nextnest/web dev",
+    "dev:admin": "pnpm --filter @nextnest/admin dev",
+    "dev:server": "pnpm --filter @nextnest/server dev",
+    "build": "pnpm -r build",
+    "build:web": "pnpm --filter @nextnest/web build",
+    "build:admin": "pnpm --filter @nextnest/admin build",
+    "build:server": "pnpm --filter @nextnest/server build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
   }
 }
