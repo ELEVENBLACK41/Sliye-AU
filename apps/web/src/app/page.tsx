@@ -2,7 +2,7 @@
  * @Author: shaoliye
  * @Date: 2026-04-24 13:43:49
  * @Email: shaoliye@fengmap.com
- * @LastEditTime: 2026-04-29 11:15:23
+ * @LastEditTime: 2026-05-15 16:32:42
  * @LastEditors: shaoliye
  * @LastEditorsEmail: shaoliye@fengmap.com
  * @Description: 
@@ -11,6 +11,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getTest } from '@/features/test'
+import { Button } from "@workspace/ui/components/ui/button"
+
 export default async function Home() {
   const data = await getTest()
   return (
@@ -48,6 +50,10 @@ export default async function Home() {
           </p>
         </div>
         <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
+          {/* 使用共享 UI 库的 Button 组件 */}
+          <Button size="lg">默认按钮</Button>
+          <Button variant="outline" size="sm">轮廓按钮</Button>
+          <Button variant="destructive" size="lg">危险按钮</Button>
           <Link
             href="/dashboard"
             className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-5 text-white transition-colors hover:bg-blue-700 md:w-[158px]"
