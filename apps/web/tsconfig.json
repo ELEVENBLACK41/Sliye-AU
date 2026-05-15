@@ -19,9 +19,7 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "@nextnest/ui": ["../../packages/ui/src/index.ts"],
-      "@nextnest/ui/*": ["../../packages/ui/src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": [
@@ -32,8 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"],
-  "references": [
-    { "path": "../../packages/ui" }
-  ]
+  "exclude": ["node_modules"]
 }
