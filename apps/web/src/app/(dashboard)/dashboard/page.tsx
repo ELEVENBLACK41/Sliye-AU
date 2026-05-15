@@ -1,6 +1,17 @@
+/*
+ * @Author: shaoliye
+ * @Date: 2026-05-06 16:52:37
+ * @Email: elevenblack41@gmail.com
+ * @LastEditTime: 2026-05-15 15:00:39
+ * @LastEditors: shaoliye
+ * @LastEditorsEmail: elevenblack41@gmail.com
+ * @Description: 
+ * @Copyright: Copyright 1990 - 2026
+ */
 import React from 'react'
 import { getUsers } from '@/features/test'
 import type { User } from '@/features/test'
+import { Button } from '@nextnest/ui/components/ui/button'
 
 export default async function Dashboard() {
   const res = await getUsers()
@@ -8,7 +19,12 @@ export default async function Dashboard() {
 
   return (
     <div className="p-8 font-sans">
-      <h1 className="text-2xl font-bold mb-6">用户列表（数据库 seed 测试）</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">用户列表（数据库 seed 测试）</h1>
+        <Button variant="default" size="sm">
+          新增用户
+        </Button>
+      </div>
 
       <div className="grid gap-4">
         {users.map((user) => (
@@ -27,7 +43,11 @@ export default async function Dashboard() {
                 </p>
                 <p className="text-xs text-zinc-500">{user.email}</p>
               </div>
-              <span className="ml-auto text-xs text-zinc-400">ID: {user.id}</span>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-zinc-400">ID: {user.id}</span>
+                <Button variant="outline" size="sm">编辑</Button>
+                <Button variant="destructive" size="sm">删除</Button>
+              </div>
             </div>
 
             {/* 关联文章 */}
