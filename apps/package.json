@@ -1,9 +1,0 @@
-{
-  "scripts": {
-    "dev": "pnpm -r dev",
-
-    "dev:web": "pnpm --filter @nextnest/web dev",
-    "dev:admin": "pnpm --filter @nextnest/admin dev",
-    "dev:server": "pnpm --filter @nextnest/server dev"
-  }
-}
