@@ -44,11 +44,19 @@ model Role {
 }
 
 model Permission {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique   // user:create / user:delete
+  id        Int    @id @default(autoincrement())
+
+  code      String @unique   // decision:create
+  name      String?
+
+  module    String           // decision / meeting / audit
+  action    String           // create / delete / view
+
   desc      String?
 
   roles     RolePermission[]
+
+  createdAt DateTime @default(now())
 }
 
 model UserRole {
@@ -71,23 +79,6 @@ model RolePermission {
   @@id([roleId, permId])
 }
 
-model UserPermission {
-  id        Int    @id @default(autoincrement())
-  userId    Int
-  permCode  String
-
-  effect    Int    // 1=允许 0=禁止（核心）
-
-  expiresAt       DateTime? // null=永久，有值=临时权限
-  sourceRequestId Int?      @unique
-
-  user          User               @relation(fields: [userId], references: [id])
-  sourceRequest PermissionRequest? @relation("GrantedPerm", fields: [sourceRequestId], references: [id])
-
-  @@index([userId])
-  @@index([permCode])
-  @@index([expiresAt])
-}
 
 enum RequestStatus {
   PENDING   // 待审批
@@ -97,24 +88,86 @@ enum RequestStatus {
 }
 
 model PermissionRequest {
-  id           Int           @id @default(autoincrement())
-  requesterId  Int
-  permCode     String
-  reason       String?       // 申请理由
+  id Int @id @default(autoincrement())
 
-  status       RequestStatus @default(PENDING)
-  approverId   Int?
-  approvalNote String?       // 审批意见
+  requesterId Int
+  reason String?
 
-  expiresAt    DateTime?     // 申请的到期时间，null=申请永久权限
+  status RequestStatus @default(PENDING)
 
-  createdAt    DateTime      @default(now())
-  reviewedAt   DateTime?
+  approverId Int?
+  approvalNote String?
 
-  requester   User            @relation("RequestsMade",     fields: [requesterId], references: [id])
-  approver    User?           @relation("RequestsReviewed", fields: [approverId],  references: [id])
-  grantedPerm UserPermission? @relation("GrantedPerm") // 审批通过后生成的权限记录（1对1）
+  expiresAt DateTime?
 
-  @@index([requesterId])
-  @@index([status])
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+
+  requester User @relation("RequestsMade", fields: [requesterId], references: [id])
+  approver User? @relation("RequestsReviewed", fields: [approverId], references: [id])
+
+  items PermissionRequestItem[]
+}
+
+model PermissionRequestItem {
+  id Int @id @default(autoincrement())
+
+  requestId Int
+  permId Int
+
+  effect Int // 1 allow / 0 deny（如果你要细粒度审批）
+
+  scopeType String? // 可选：ALL / OWN / ...
+
+  request PermissionRequest @relation(fields: [requestId], references: [id])
+  permission Permission @relation(fields: [permId], references: [id])
+}
+
+
+
+
+model Decision {
+  id Int @id @default(autoincrement())
+
+  title String
+
+  creatorId Int     // 谁创建的
+  ownerId   Int?    // 负责人（可选）
+
+  createdAt DateTime @default(now())
+}
+
+model ResourceParticipant {
+  id Int @id @default(autoincrement())
+
+  userId Int
+
+  resourceType String // "decision" | "meeting" | "audit"
+  resourceId   Int
+
+  role String // viewer / editor / approver
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([resourceType, resourceId])
+}
+
+model UserPermission {
+  id Int @id @default(autoincrement())
+
+  userId Int
+  permId Int
+
+  effect Int // 1 allow, 0 deny
+
+  scopeType String?  
+  // ALL | OWN | PARTICIPATED | CUSTOM
+
+  expiresAt DateTime?
+
+  sourceRequestId Int?
+
+  user User @relation(fields: [userId], references: [id])
+  permission Permission @relation(fields: [permId], references: [id])
 }
