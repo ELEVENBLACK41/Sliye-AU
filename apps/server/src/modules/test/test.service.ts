@@ -15,7 +15,24 @@ import { PrismaService } from '../../database/prisma.service';
 export class TestService {
   constructor(private readonly prisma: PrismaService) {}
 
-  getTest() {
+  async getTest() {
+    const count = await this.prisma.user.count();
+    if (count === 0) {
+      await this.prisma.user.createMany({
+        data: [
+          { email: 'alice@example.com', name: 'Alice' },
+          { email: 'bob@example.com', name: 'Bob' },
+          { email: 'charlie@example.com', name: 'Charlie' },
+        ],
+      });
+      await this.prisma.post.createMany({
+        data: [
+          { title: 'Hello World', content: 'Alice 的第一篇文章', published: true, authorId: 1 },
+          { title: 'NestJS 入门', content: 'Bob 写的 NestJS 教程', published: true, authorId: 2 },
+          { title: '草稿', content: null, published: false, authorId: 3 },
+        ],
+      });
+    }
     return this.prisma.user.findMany({
       orderBy: { id: 'asc' },
       include: {

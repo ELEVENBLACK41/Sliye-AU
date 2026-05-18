@@ -55,6 +55,8 @@ model Permission {
   desc      String?
 
   roles     RolePermission[]
+  userPermissions UserPermission[]
+  requestItems PermissionRequestItem[]
 
   createdAt DateTime @default(now())
 }
