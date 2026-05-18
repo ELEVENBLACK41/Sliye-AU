@@ -13,7 +13,7 @@
   "aliases": {
     "components": "@workspace/ui/components",
     "utils": "@workspace/ui/lib/utils",
-    "ui": "@workspace/ui/components/ui",
+    "ui": "@workspace/ui/components",
     "lib": "@workspace/ui/lib",
     "hooks": "@workspace/ui/hooks"
   },

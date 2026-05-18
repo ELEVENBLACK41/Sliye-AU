@@ -11,7 +11,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getTest } from '@/features/test'
-import { Button } from "@workspace/ui/components/ui/button"
+import { Button } from "@workspace/ui/components/button"
+import { Badge } from "@workspace/ui/components/badge"
 
 export default async function Home() {
   const data = await getTest()
@@ -54,6 +55,8 @@ export default async function Home() {
           <Button size="lg">默认按钮</Button>
           <Button variant="outline" size="sm">轮廓按钮</Button>
           <Button variant="destructive" size="lg">危险按钮</Button>
+          <Badge>New</Badge>
+          <Badge variant="outline">Draft</Badge>
           <Link
             href="/dashboard"
             className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-5 text-white transition-colors hover:bg-blue-700 md:w-[158px]"
