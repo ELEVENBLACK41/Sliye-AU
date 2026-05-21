@@ -20,9 +20,15 @@ model User {
   posts Post[]
 
   roles UserRole[]
+  deptId Int?
+
+  
   permissions UserPermission[]
   requestsMade     PermissionRequest[] @relation("RequestsMade")
+  department Department? @relation(fields: [deptId], references: [id])
   requestsReviewed PermissionRequest[] @relation("RequestsReviewed")
+  createdDecisions Decision[] @relation("DecisionCreator")
+  ownedDecisions Decision[] @relation("DecisionOwner")
 }
 
 model Post {
@@ -117,16 +123,28 @@ model PermissionRequestItem {
   requestId Int
   permId Int
 
-  effect Int // 1 allow / 0 deny（如果你要细粒度审批）
+  effect PermissionEffect // 1 allow / 0 deny（如果你要细粒度审批）
 
-  scopeType String? // 可选：ALL / OWN / ...
+  scopeType DataScope? // 可选：ALL / OWN / ...
 
   request PermissionRequest @relation(fields: [requestId], references: [id])
   permission Permission @relation(fields: [permId], references: [id])
 }
 
 
+enum DataScope {
+  ALL
+  OWN
+  DEPT
+  DEPT_AND_CHILD
+  PARTICIPATED
+  CUSTOM
+}
 
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
 
 model Decision {
   id Int @id @default(autoincrement())
@@ -135,8 +153,17 @@ model Decision {
 
   creatorId Int     // 谁创建的
   ownerId   Int?    // 负责人（可选）
-
+  deptId Int
   createdAt DateTime @default(now())
+  department Department @relation(fields: [deptId], references: [id])
+  creator User @relation("DecisionCreator", fields: [creatorId], references: [id])
+  owner User? @relation("DecisionOwner", fields: [ownerId], references: [id])
+}
+
+enum ResourceType {
+  DECISION
+  MEETING
+  AUDIT
 }
 
 model ResourceParticipant {
@@ -144,7 +171,7 @@ model ResourceParticipant {
 
   userId Int
 
-  resourceType String // "decision" | "meeting" | "audit"
+  resourceType ResourceType // "decision" | "meeting" | "audit"
   resourceId   Int
 
   role String // viewer / editor / approver
@@ -161,9 +188,9 @@ model UserPermission {
   userId Int
   permId Int
 
-  effect Int // 1 allow, 0 deny
+  effect PermissionEffect // 1 allow, 0 deny
 
-  scopeType String?  
+  scopeType DataScope?  
   // ALL | OWN | PARTICIPATED | CUSTOM
 
   expiresAt DateTime?
@@ -172,4 +199,18 @@ model UserPermission {
 
   user User @relation(fields: [userId], references: [id])
   permission Permission @relation(fields: [permId], references: [id])
+}
+
+model Department {
+  id Int @id @default(autoincrement())
+
+  name String
+
+  parentId Int?
+
+  parent Department? @relation("DeptTree", fields: [parentId], references: [id])
+  children Department[] @relation("DeptTree")
+
+  users User[]
+  ecisions Decision[]
 }
