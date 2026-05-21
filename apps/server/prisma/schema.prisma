@@ -212,5 +212,5 @@ model Department {
   children Department[] @relation("DeptTree")
 
   users User[]
-  ecisions Decision[]
+  decisions Decision[]
 }
