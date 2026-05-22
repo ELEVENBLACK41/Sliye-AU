@@ -5,24 +5,23 @@
  * @LastEditTime: 2026-05-22 15:12:05
  * @LastEditors: shaoliye
  * @LastEditorsEmail: elevenblack41@gmail.com
- * @Description: 
+ * @Description:
  * @Copyright: Copyright 1990 - 2026
  */
 import type {
-  ConfirmEmailApiResponse,
   ConfirmEmailFormValues,
+  EmailVerificationState,
   LoginFormValues,
   LoginRequestPayload,
-  PasswordPublicKeyApiResponse,
-  RegisterApiResponse,
+  PasswordPublicKey,
   RegisterFormValues,
   RegisterRequestPayload,
-  SanitizedAuthSessionApiResponse,
-  SendEmailVerificationApiResponse,
+  RegisterResult,
+  SanitizedAuthSession,
   SendEmailVerificationFormValues,
 } from "@/features/auth/types/auth.type"
 import { encryptPasswordForTransport } from "@/lib/password-crypto"
-import { request } from '@/services/request'
+import { requestData } from "@/services/request"
 
 export async function login(values: LoginFormValues) {
   const passwordPayload = await encryptPasswordForTransport(values.password)
@@ -31,22 +30,12 @@ export async function login(values: LoginFormValues) {
     ...passwordPayload,
   }
 
-  const response = await fetch("/api/auth/login", {
+  return requestData<SanitizedAuthSession, LoginRequestPayload>("/api/auth/login", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     credentials: "same-origin",
-    body: JSON.stringify(payload),
+    body: payload,
+    errorMessage: "登录失败，请稍后再试",
   })
-
-  const result = (await response.json()) as SanitizedAuthSessionApiResponse
-
-  if (result.code !== 0 || !result.data) {
-    throw new Error(result.message || "登录失败，请稍后再试")
-  }
-
-  return result.data
 }
 
 export async function register(values: RegisterFormValues) {
@@ -57,74 +46,42 @@ export async function register(values: RegisterFormValues) {
     ...passwordPayload,
   }
 
-  const response = await fetch("/api/auth/register", {
+  return requestData<RegisterResult, RegisterRequestPayload>("/api/auth/register", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
     credentials: "same-origin",
-    body: JSON.stringify(payload),
+    body: payload,
+    errorMessage: "注册失败，请稍后再试",
   })
-
-  const result = (await response.json()) as RegisterApiResponse
-
-  if (result.code !== 0 || !result.data) {
-    throw new Error(result.message || "注册失败，请稍后再试")
-  }
-
-  return result.data
 }
 
-export async function getPasswordPublicKey() {
-  const response = await fetch("/api/auth/password-public-key", {
+export function getPasswordPublicKey() {
+  return requestData<PasswordPublicKey>("/api/auth/password-public-key", {
     method: "GET",
     credentials: "same-origin",
+    errorMessage: "无法获取密码加密公钥",
   })
-  const result = (await response.json()) as PasswordPublicKeyApiResponse
-
-  if (!response.ok || result.code !== 0 || !result.data) {
-    throw new Error(result.message || "无法获取密码加密公钥")
-  }
-
-  return result.data
 }
 
-export async function confirmEmail(values: ConfirmEmailFormValues) {
-  const response = await fetch("/api/auth/email-verification/confirm", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+export function confirmEmail(values: ConfirmEmailFormValues) {
+  return requestData<SanitizedAuthSession, ConfirmEmailFormValues>(
+    "/api/auth/email-verification/confirm",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      body: values,
+      errorMessage: "验证失败，请稍后再试",
     },
-    credentials: "same-origin",
-    body: JSON.stringify(values),
-  })
-
-  const result = (await response.json()) as SanitizedAuthSessionApiResponse
-
-  if (result.code !== 0 || !result.data) {
-    throw new Error(result.message || "验证失败，请稍后再试")
-  }
-
-  return result.data
+  )
 }
 
-export async function sendEmailVerification(
-  values: SendEmailVerificationFormValues,
-) {
-  const response = await fetch("/api/auth/email-verification/send", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+export function sendEmailVerification(values: SendEmailVerificationFormValues) {
+  return requestData<EmailVerificationState, SendEmailVerificationFormValues>(
+    "/api/auth/email-verification/send",
+    {
+      method: "POST",
+      credentials: "same-origin",
+      body: values,
+      errorMessage: "发送验证码失败，请稍后再试",
     },
-    credentials: "same-origin",
-    body: JSON.stringify(values),
-  })
-
-  const result = (await response.json()) as SendEmailVerificationApiResponse
-
-  if (!response.ok || result.code !== 0 || !result.data) {
-    throw new Error(result.message || "发送验证码失败，请稍后再试")
-  }
-
-  return result.data
+  )
 }

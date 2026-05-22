@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { apiError, apiErrorFromUnknown } from "@/app/api/_utils/response"
 import {
   AUTH_ACCESS_COOKIE_NAME,
   AUTH_REFRESH_COOKIE_NAME,
@@ -13,16 +14,12 @@ export async function POST(request: Request) {
     const email = values.email?.trim()
     const code = values.code?.trim() ?? ""
 
+    // 验证码格式在 BFF 先拦一次，是否过期、是否匹配由 NestJS 判断。
     if (!email || !/^\d{6}$/.test(code)) {
-      return NextResponse.json(
-        {
-          code: 400,
-          message: "请输入有效邮箱和 6 位验证码",
-          data: null,
-          timestamp: Date.now(),
-        },
-        { status: 400 },
-      )
+      return apiError({
+        status: 400,
+        message: "请输入有效邮箱和 6 位验证码",
+      })
     }
 
     const upstream = await requestConfirmEmailFromNest({
@@ -44,6 +41,7 @@ export async function POST(request: Request) {
     if (upstream.status >= 200 && upstream.status < 300 && upstream.body.data) {
       const { tokens } = upstream.body.data
 
+      // 邮箱验证成功等同完成登录，同样只把 token 放进 httpOnly Cookie。
       response.cookies.set({
         name: AUTH_ACCESS_COOKIE_NAME,
         value: tokens.accessToken,
@@ -67,14 +65,6 @@ export async function POST(request: Request) {
 
     return response
   } catch (error) {
-    return NextResponse.json(
-      {
-        code: 500,
-        message: error instanceof Error ? error.message : "验证失败，请稍后再试",
-        data: null,
-        timestamp: Date.now(),
-      },
-      { status: 500 },
-    )
+    return apiErrorFromUnknown(error, "验证失败，请稍后再试", 500)
   }
 }

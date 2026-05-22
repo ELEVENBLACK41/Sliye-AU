@@ -25,6 +25,7 @@ export async function POST() {
     status: upstream.status,
   })
 
+  // 不管 Nest 注销是否有 token，都清掉浏览器 Cookie，保证本机状态退出。
   response.cookies.delete(AUTH_ACCESS_COOKIE_NAME)
   response.cookies.delete(AUTH_REFRESH_COOKIE_NAME)
 

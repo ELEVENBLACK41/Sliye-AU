@@ -2,26 +2,22 @@ import type {
   PasswordPayload,
   PasswordPublicKey,
 } from "@/features/auth/types/auth.type"
+import { requestData } from "@/services/request"
 
 export async function encryptPasswordForTransport(
   password: string,
 ): Promise<PasswordPayload> {
-  // Avoid exposing plaintext passwords in DevTools request bodies; HTTPS is still required in production.
-  const response = await fetch("/api/auth/password-public-key", {
-    method: "GET",
-    credentials: "same-origin",
-  })
-  const result = (await response.json()) as {
-    code: number
-    message: string
-    data: PasswordPublicKey | null
-  }
+  // 先拿一次性公钥，密码只把密文传给 BFF，避免明文出现在请求体里。
+  const publicKey = await requestData<PasswordPublicKey>(
+    "/api/auth/password-public-key",
+    {
+      method: "GET",
+      credentials: "same-origin",
+      errorMessage: "无法获取密码加密公钥",
+    },
+  )
 
-  if (!response.ok || result.code !== 0 || !result.data) {
-    throw new Error(result.message || "无法获取密码加密公钥")
-  }
-
-  const key = await importRsaOaepPublicKey(result.data.publicKeyPem)
+  const key = await importRsaOaepPublicKey(publicKey.publicKeyPem)
   const encrypted = await crypto.subtle.encrypt(
     { name: "RSA-OAEP" },
     key,
@@ -30,7 +26,7 @@ export async function encryptPasswordForTransport(
 
   return {
     passwordCiphertext: arrayBufferToBase64(encrypted),
-    passwordKeyId: result.data.keyId,
+    passwordKeyId: publicKey.keyId,
   }
 }
 

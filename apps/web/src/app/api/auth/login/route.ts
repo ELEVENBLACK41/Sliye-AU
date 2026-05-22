@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 
+import { apiError, apiErrorFromUnknown } from "@/app/api/_utils/response"
 import {
   AUTH_ACCESS_COOKIE_NAME,
   AUTH_REFRESH_COOKIE_NAME,
@@ -14,16 +15,12 @@ export async function POST(request: Request) {
     const passwordCiphertext = values.passwordCiphertext?.trim()
     const passwordKeyId = values.passwordKeyId?.trim()
 
+    // BFF 先做基础参数校验，复杂账号规则仍由 NestJS 兜底。
     if (!email || !passwordCiphertext || !passwordKeyId) {
-      return NextResponse.json(
-        {
-          code: 400,
-          message: "请输入有效邮箱和加密后的密码",
-          data: null,
-          timestamp: Date.now(),
-        },
-        { status: 400 },
-      )
+      return apiError({
+        status: 400,
+        message: "请输入有效邮箱和加密后的密码",
+      })
     }
 
     const upstream = await requestLoginFromNest({
@@ -46,6 +43,7 @@ export async function POST(request: Request) {
     if (upstream.status >= 200 && upstream.status < 300 && upstream.body.data) {
       const { tokens } = upstream.body.data
 
+      // token 只写入 httpOnly Cookie，不返回给浏览器 JS，降低 XSS 泄露风险。
       response.cookies.set({
         name: AUTH_ACCESS_COOKIE_NAME,
         value: tokens.accessToken,
@@ -69,14 +67,6 @@ export async function POST(request: Request) {
 
     return response
   } catch (error) {
-    return NextResponse.json(
-      {
-        code: 401,
-        message: error instanceof Error ? error.message : "登录失败，请稍后再试",
-        data: null,
-        timestamp: Date.now(),
-      },
-      { status: 401 },
-    )
+    return apiErrorFromUnknown(error, "登录失败，请稍后再试", 401)
   }
 }

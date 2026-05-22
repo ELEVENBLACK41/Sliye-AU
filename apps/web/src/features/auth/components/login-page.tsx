@@ -1,3 +1,13 @@
+/*
+ * @Author: shaoliye
+ * @Date: 2026-05-22 11:49:37
+ * @Email: elevenblack41@gmail.com
+ * @LastEditTime: 2026-05-22 16:39:06
+ * @LastEditors: shaoliye
+ * @LastEditorsEmail: elevenblack41@gmail.com
+ * @Description: 
+ * @Copyright: Copyright 1990 - 2026
+ */
 import { LoginForm } from "@/features/auth/components/login-form"
 
 type LoginPageProps = {
@@ -14,7 +24,7 @@ export function LoginPage({ redirectTo }: LoginPageProps) {
             登录
           </h1>
           <p className="text-sm leading-6 text-muted-foreground">
-            进入决策协作系统，继续推进团队关键决策。
+            进入决策协作系统
           </p>
         </div>
           <LoginForm redirectTo={redirectTo} />

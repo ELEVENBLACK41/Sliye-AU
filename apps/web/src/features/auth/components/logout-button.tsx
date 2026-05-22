@@ -4,6 +4,8 @@ import { useState } from "react"
 import { Loader2, LogOut } from "lucide-react"
 import { useRouter } from "next/navigation"
 
+import type { OperationResult } from "@/features/auth/types/auth.type"
+import { requestData } from "@/services/request"
 import { Button } from "@workspace/ui/components/button"
 
 export function LogoutButton() {
@@ -18,9 +20,10 @@ export function LogoutButton() {
     setIsPending(true)
 
     try {
-      await fetch("/api/auth/logout", {
+      await requestData<OperationResult>("/api/auth/logout", {
         method: "POST",
         credentials: "same-origin",
+        errorMessage: "退出登录失败，请稍后再试",
       })
       router.replace("/login")
       router.refresh()
