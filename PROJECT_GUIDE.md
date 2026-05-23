@@ -237,6 +237,8 @@ pnpm prisma studio
 
 环境变量文件不提交到 git。新增变量时，同步更新根 README 或本文件里的说明。
 
+不管写前端还是后端代码 要求写注释 注释不用复杂化简单说明即可
+
 后端 `apps/server/.env`：
 
 ```bash
