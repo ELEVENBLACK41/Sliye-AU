@@ -54,13 +54,13 @@ export async function register(values: RegisterFormValues) {
   })
 }
 
-export function getPasswordPublicKey() {
-  return requestData<PasswordPublicKey>("/api/auth/password-public-key", {
-    method: "GET",
-    credentials: "same-origin",
-    errorMessage: "无法获取密码加密公钥",
-  })
-}
+// export function getPasswordPublicKey() {
+//   return requestData<PasswordPublicKey>("/api/auth/password-public-key", {
+//     method: "GET",
+//     credentials: "same-origin",
+//     errorMessage: "无法获取密码加密公钥",
+//   })
+// }
 
 export function confirmEmail(values: ConfirmEmailFormValues) {
   return requestData<SanitizedAuthSession, ConfirmEmailFormValues>(
