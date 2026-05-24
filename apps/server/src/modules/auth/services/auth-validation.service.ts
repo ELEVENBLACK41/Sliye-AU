@@ -27,6 +27,12 @@ export class AuthValidationService {
   constructor(private readonly passwordCryptoService: PasswordCryptoService) {}
 
   parseRegister(dto: RegisterDto): RegisterInput {
+    // 先消耗 nonce，再解密密码——确保同一密文无法被重放
+    this.passwordCryptoService.consumeNonce(
+      this.parseRequiredString(dto.nonce, 'nonce'),
+      this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId'),
+    );
+
     const password = this.passwordCryptoService.decryptPassword(
       this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext'),
       this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId'),
@@ -40,6 +46,12 @@ export class AuthValidationService {
   }
 
   parseLogin(dto: LoginDto): LoginInput {
+    // 先消耗 nonce，再解密密码——确保同一密文无法被重放
+    this.passwordCryptoService.consumeNonce(
+      this.parseRequiredString(dto.nonce, 'nonce'),
+      this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId'),
+    );
+
     const password = this.passwordCryptoService.decryptPassword(
       this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext'),
       this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId'),

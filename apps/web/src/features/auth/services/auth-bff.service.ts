@@ -18,15 +18,11 @@ import type { NestResponse } from '@/services/bff-request';
 export type { NestResponse };
 
 export function requestLoginFromNest(
-  values: LoginRequestPayload,  //这里是参数的类型定义，要求必须包含email,passwordCiphertext,passwordKeyId这三个字段，并且都是string类型，如果缺了或者类型不对，编译器就会报错
-): Promise<NestResponse<NonNullable<LoginApiResponse['data']>>> {  //这里是返回值的类型
-  return requestNest<NonNullable<LoginApiResponse['data']>, LoginRequestPayload>('/auth/login', {  //第1个泛型：告诉 TData 是什么  第2个泛型：告诉 TBody 是什么
+  values: LoginRequestPayload,
+): Promise<NestResponse<NonNullable<LoginApiResponse['data']>>> {
+  return requestNest<NonNullable<LoginApiResponse['data']>, LoginRequestPayload>('/auth/login', {
     method: 'POST',
-    body: {
-      email: values.email,
-      passwordCiphertext: values.passwordCiphertext,
-      passwordKeyId: values.passwordKeyId,
-    },
+    body: values,
   });
 }
 
@@ -35,12 +31,7 @@ export function requestRegisterFromNest(
 ): Promise<NestResponse<NonNullable<RegisterApiResponse['data']>>> {
   return requestNest<NonNullable<RegisterApiResponse['data']>, RegisterRequestPayload>('/auth/register', {
     method: 'POST',
-    body: {
-      email: values.email,
-      passwordCiphertext: values.passwordCiphertext,
-      passwordKeyId: values.passwordKeyId,
-      name: values.name,
-    },
+    body: values,
   });
 }
 

@@ -6,7 +6,7 @@ import type { PasswordPayload, PasswordPublicKey } from '@/features/auth/types/a
 import { requestData } from '@/services/request';
 
 export async function encryptPasswordForTransport(password: string): Promise<PasswordPayload> {
-  // 先拿一次性公钥，密码只把密文传给 BFF，避免明文出现在请求体里。
+  // 先拿一次性公钥 + nonce，密码只把密文传给 BFF，避免明文出现在请求体里。
   const publicKey = await requestData<PasswordPublicKey>('/api/auth/password-public-key', {
     method: 'GET',
     credentials: 'same-origin',
@@ -19,6 +19,7 @@ export async function encryptPasswordForTransport(password: string): Promise<Pas
   return {
     passwordCiphertext: arrayBufferToBase64(encrypted),
     passwordKeyId: publicKey.keyId,
+    nonce: publicKey.nonce,
   };
 }
 

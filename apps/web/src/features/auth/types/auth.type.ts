@@ -8,11 +8,15 @@ export type PasswordPublicKey = {
   algorithm: "RSA-OAEP-256"
   publicKeyPem: string
   expiresAt: string
+  /** 一次性随机数，登录/注册时必须原样回传，消耗后不可重放 */
+  nonce: string
 }
 
 export type PasswordPayload = {
   passwordCiphertext: string
   passwordKeyId: string
+  /** 与公钥一起下发的一次性 nonce，防重放 */
+  nonce: string
 }
 
 export type LoginRequestPayload = {

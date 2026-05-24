@@ -14,9 +14,10 @@ export async function POST(request: Request) {
     const email = values.email?.trim()
     const passwordCiphertext = values.passwordCiphertext?.trim()
     const passwordKeyId = values.passwordKeyId?.trim()
+    const nonce = values.nonce?.trim()
 
     // BFF 先做基础参数校验，复杂账号规则仍由 NestJS 兜底。
-    if (!email || !passwordCiphertext || !passwordKeyId) {
+    if (!email || !passwordCiphertext || !passwordKeyId || !nonce) {
       return apiError({
         status: 400,
         message: "请输入有效邮箱和加密后的密码",
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
       email,
       passwordCiphertext,
       passwordKeyId,
+      nonce,
     })
     const responseBody = upstream.body.data
       ? {
