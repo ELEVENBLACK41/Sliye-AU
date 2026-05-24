@@ -23,9 +23,9 @@ import type {
 import { encryptPasswordForTransport } from "@/lib/password-crypto"
 import { requestData } from "@/services/request"
 
-export async function login(values: LoginFormValues) {
+export async function login(values: LoginFormValues) {  //这里的values是从login-form组件传过来的，包含email和password 类型判
   const passwordPayload = await encryptPasswordForTransport(values.password)
-  const payload: LoginRequestPayload = {
+  const payload: LoginRequestPayload = { //这里这么写的好处是编译时候首位，如果passwordPayload里缺了passwordCiphertext或者passwordKeyId或者字段名字改了，编译器就会报错，提示类型不匹配，而不是运行的时候才发现
     email: values.email,
     ...passwordPayload,
   }

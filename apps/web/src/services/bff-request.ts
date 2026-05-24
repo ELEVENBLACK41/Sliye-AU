@@ -52,7 +52,7 @@ type NestRequestOptions<TBody = unknown> = Omit<RequestInit, "body"> & {
  * @param path     - NestJS 路径（如 `/auth/login`），会自动拼接 NEST_BASE_URL
  * @param options  - fetch 选项，body 支持普通对象自动 JSON 序列化
  */
-export async function requestNest<TData, TBody = unknown>(
+export async function requestNest<TData, TBody = unknown>(  //简单理解 requestNest<收到什么, 寄出什么>(地址, 包裹)
   path: string,
   options?: NestRequestOptions<TBody>,
 ): Promise<NestResponse<TData>> {

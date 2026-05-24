@@ -84,8 +84,10 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
       : 0;
   const canResend = mode === 'confirm' && cooldownSeconds <= 0 && !isSubmitting;
 
+
+  // 登录
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    event.preventDefault(); //阻止表单默认行文，防止页面刷新
 
     if (!canLogin || isSubmitting) {
       return;
@@ -116,6 +118,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
     }
   }
 
+  //注册
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
