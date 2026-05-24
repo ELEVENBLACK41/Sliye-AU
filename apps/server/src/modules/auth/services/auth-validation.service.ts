@@ -27,15 +27,19 @@ export class AuthValidationService {
   constructor(private readonly passwordCryptoService: PasswordCryptoService) {}
 
   parseRegister(dto: RegisterDto): RegisterInput {
-    // 先消耗 nonce，再解密密码——确保同一密文无法被重放
+    const passwordCiphertext = this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext');
+    const passwordKeyId = this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId');
+
+    // 先消耗 nonce + 校验密文去重，再解密密码——确保同一密文无法被重放
     this.passwordCryptoService.consumeNonce(
       this.parseRequiredString(dto.nonce, 'nonce'),
-      this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId'),
+      passwordKeyId,
+      passwordCiphertext,
     );
 
     const password = this.passwordCryptoService.decryptPassword(
-      this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext'),
-      this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId'),
+      passwordCiphertext,
+      passwordKeyId,
     );
 
     return {
@@ -46,15 +50,19 @@ export class AuthValidationService {
   }
 
   parseLogin(dto: LoginDto): LoginInput {
-    // 先消耗 nonce，再解密密码——确保同一密文无法被重放
+    const passwordCiphertext = this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext');
+    const passwordKeyId = this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId');
+
+    // 先消耗 nonce + 校验密文去重，再解密密码——确保同一密文无法被重放
     this.passwordCryptoService.consumeNonce(
       this.parseRequiredString(dto.nonce, 'nonce'),
-      this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId'),
+      passwordKeyId,
+      passwordCiphertext,
     );
 
     const password = this.passwordCryptoService.decryptPassword(
-      this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext'),
-      this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId'),
+      passwordCiphertext,
+      passwordKeyId,
     );
 
     return {

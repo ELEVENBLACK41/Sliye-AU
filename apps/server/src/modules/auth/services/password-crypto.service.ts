@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   constants,
+  createHash,
   generateKeyPairSync,
   privateDecrypt,
   randomUUID,
@@ -44,6 +45,14 @@ export class PasswordCryptoService {
    */
   private readonly nonces = new Map<string, NonceRecord>();
 
+  /**
+   * 密文去重存储：keyId → Set<ciphertextHash>
+   * - 同一 keyId 下，同一密文只能被解密一次（即使换了新 nonce）
+   * - 防止攻击者截获密文后，获取新 nonce 搭配旧密文重放
+   * - RSA-OAEP 每次加密产生不同密文，所以合法用户不会误触
+   */
+  private readonly usedCiphertexts = new Map<string, Set<string>>();
+
   getPublicKey(): PasswordPublicKeyResponse {
     const key = this.getCurrentKey();
 
@@ -64,12 +73,16 @@ export class PasswordCryptoService {
   }
 
   /**
-   * 消耗 nonce：校验有效性后立即标记已用。
+   * 消耗 nonce 并校验密文唯一性。
    * 必须在密码解密之前调用，确保同一密文无法被重放。
    *
-   * @throws BadRequestException — nonce 不存在 / 已消耗 / 已过期 / keyId 不匹配
+   * 双重防护：
+   * 1. nonce 一次性消耗 — 防止同一请求原样重放
+   * 2. 密文哈希去重 — 防止截获密文后换新 nonce 重放（同一 keyId 下）
+   *
+   * @throws BadRequestException — nonce 无效 / 密文已被使用
    */
-  consumeNonce(nonce: string, keyId: string): void {
+  consumeNonce(nonce: string, keyId: string, ciphertext: string): void {
     const record = this.nonces.get(nonce);
 
     if (!record) {
@@ -91,8 +104,26 @@ export class PasswordCryptoService {
       throw new BadRequestException('Nonce does not match keyId');
     }
 
-    // 标记已用
+    // --- 密文去重：同一 keyId 下，同一密文只能用一次 ---
+    const ciphertextHash = createHash('sha256').update(ciphertext).digest('hex');
+    const usedSet = this.usedCiphertexts.get(keyId);
+
+    if (usedSet?.has(ciphertextHash)) {
+      this.logger.warn(
+        `Replay attack detected: ciphertext already used with keyId=${keyId}`,
+      );
+      throw new BadRequestException('Password ciphertext has already been used');
+    }
+
+    // 标记 nonce 已用
     record.used = true;
+
+    // 记录密文哈希
+    if (!usedSet) {
+      this.usedCiphertexts.set(keyId, new Set([ciphertextHash]));
+    } else {
+      usedSet.add(ciphertextHash);
+    }
 
     // 惰性清理：每次消耗时顺便清理一批过期 nonce，防止内存泄漏
     this.cleanupExpiredNonces();
@@ -129,6 +160,13 @@ export class PasswordCryptoService {
     }
 
     this.currentKey = this.createKey();
+
+    // 新密钥生成时，清理已过期密钥的密文记录
+    if (this.previousKey && this.previousKey.expiresAt.getTime() <= now) {
+      this.usedCiphertexts.delete(this.previousKey.keyId);
+      this.previousKey = null;
+    }
+
     return this.currentKey;
   }
 
