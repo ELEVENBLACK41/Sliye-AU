@@ -12,11 +12,13 @@ import { AuthenticatedRequest } from '../types/auth.types';
 
 @Injectable()
 export class AccessTokenGuard implements CanActivate {
+  // 注入 Prisma 和令牌服务以校验访问会话。
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenService: TokenService,
   ) {}
 
+  // 校验 Bearer access token 并把当前用户写入请求上下文。
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const token = this.extractBearerToken(request.headers.authorization);
@@ -54,6 +56,7 @@ export class AccessTokenGuard implements CanActivate {
     return true;
   }
 
+  // 从 Authorization 头中提取 Bearer token。
   private extractBearerToken(authorization?: string): string {
     if (!authorization) {
       throw new UnauthorizedException('Authorization header is required');

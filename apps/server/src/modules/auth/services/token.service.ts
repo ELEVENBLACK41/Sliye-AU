@@ -36,6 +36,7 @@ export class TokenService {
   private readonly accessTokenTtlSeconds: number;
   private readonly refreshTokenTtlSeconds: number;
 
+  // 注入配置服务并读取令牌密钥和过期时间。
   constructor(private readonly configService: ConfigService) {
     this.accessSecret = this.readSecret();
     this.accessTokenTtlSeconds = this.readPositiveInteger(
@@ -48,6 +49,7 @@ export class TokenService {
     );
   }
 
+  // 签发包含用户和会话信息的 access JWT。
   issueAccessToken(input: AccessTokenInput): IssuedAccessToken {
     const now = Math.floor(Date.now() / 1000);
     const expiresIn = this.accessTokenTtlSeconds;
@@ -72,6 +74,7 @@ export class TokenService {
     };
   }
 
+  // 校验 access JWT 的签名、结构和过期时间。
   verifyAccessToken(token: string): AccessTokenPayload {
     const parts = token.split('.');
 
@@ -108,6 +111,7 @@ export class TokenService {
     return payload;
   }
 
+  // 签发随机 refresh token 并生成数据库存储哈希。
   issueRefreshToken(now = new Date()): IssuedRefreshToken {
     const token = randomBytes(48).toString('base64url');
     const expiresAt = new Date(
@@ -122,10 +126,12 @@ export class TokenService {
     };
   }
 
+  // 对不透明 token 做 sha256 哈希用于入库或查询。
   hashOpaqueToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
   }
 
+  // 读取 access token 签名密钥。
   private readSecret(): string {
     const configuredSecret =
       this.configService.get<string>('AUTH_ACCESS_TOKEN_SECRET') ??
@@ -141,6 +147,7 @@ export class TokenService {
     return 'nextnest-development-access-secret-change-me';
   }
 
+  // 读取正整数配置项并在非法时使用默认值。
   private readPositiveInteger(key: string, fallback: number): number {
     const rawValue = this.configService.get<string>(key);
     const value = rawValue ? Number(rawValue) : fallback;
@@ -148,10 +155,12 @@ export class TokenService {
     return Number.isInteger(value) && value > 0 ? value : fallback;
   }
 
+  // 将 JSON 对象编码为 base64url 字符串。
   private encodeJson(value: unknown): string {
     return Buffer.from(JSON.stringify(value)).toString('base64url');
   }
 
+  // 从 base64url 字符串解码并解析 JSON。
   private decodeJson<T>(value: string): T {
     try {
       return JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as T;
@@ -160,12 +169,14 @@ export class TokenService {
     }
   }
 
+  // 使用 HMAC-SHA256 生成 JWT 签名。
   private sign(value: string): string {
     return createHmac('sha256', this.accessSecret)
       .update(value)
       .digest('base64url');
   }
 
+  // 使用固定时间比较校验签名。
   private safeEqual(actual: string, expected: string): boolean {
     const actualBuffer = Buffer.from(actual);
     const expectedBuffer = Buffer.from(expected);

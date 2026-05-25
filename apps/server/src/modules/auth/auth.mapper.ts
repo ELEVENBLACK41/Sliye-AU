@@ -14,6 +14,7 @@ type AuthUserRecord = Pick<
   | 'updatedAt'
 >;
 
+// 将数据库用户记录转换为认证接口对外返回结构。
 export function toAuthUserResponse(user: AuthUserRecord): AuthUserResponse {
   return {
     id: user.id,

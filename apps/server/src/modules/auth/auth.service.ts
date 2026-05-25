@@ -51,6 +51,7 @@ interface AuditLogInput {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  // 注入认证链路所需的数据访问、校验、密码、令牌和邮箱验证码服务。
   constructor(
     private readonly prisma: PrismaService,
     private readonly validationService: AuthValidationService,
@@ -59,6 +60,7 @@ export class AuthService {
     private readonly emailVerificationService: EmailVerificationService,
   ) {}
 
+  // 注册用户并生成邮箱验证码。
   async register(
     dto: RegisterDto,
     meta: RequestClientMeta,
@@ -146,6 +148,7 @@ export class AuthService {
     };
   }
 
+  // 为未完成验证的用户重新发送邮箱验证码。
   async sendEmailVerification(
     dto: SendEmailVerificationDto,
     meta: RequestClientMeta,
@@ -185,6 +188,7 @@ export class AuthService {
     return emailVerification;
   }
 
+  // 校验邮箱验证码、激活用户并创建登录会话。
   async confirmEmail(
     dto: ConfirmEmailDto,
     meta: RequestClientMeta,
@@ -251,6 +255,7 @@ export class AuthService {
     return this.issueSession(activatedUser, meta);
   }
 
+  // 校验登录凭据并签发当前设备的登录会话。
   async login(
     dto: LoginDto,
     meta: RequestClientMeta,
@@ -261,6 +266,7 @@ export class AuthService {
       include: { passwordCredential: true },
     });
 
+    //如果没成功记录日志
     if (!user?.passwordCredential) {
       await this.writeAuditLog({
         event: AUTH_AUDIT_EVENTS.loginFailed,
@@ -272,13 +278,15 @@ export class AuthService {
       throw new UnauthorizedException('Email or password is incorrect');
     }
 
-    await this.assertAccountAvailableForLogin(user, meta);
+    await this.assertAccountAvailableForLogin(user, meta); //如果账号不可用也记录日志，reason是ACCOUNT_NOT_AVAILABLE
 
+    //验证密码
     const passwordMatched = await this.passwordService.verifyPassword(
       input.password,
       user.passwordCredential.passwordHash,
     );
 
+    //如果密码不匹配记录日志，reason是INVALID_CREDENTIALS
     if (!passwordMatched) {
       await this.writeAuditLog({
         userId: user.id,
@@ -291,8 +299,9 @@ export class AuthService {
       throw new UnauthorizedException('Email or password is incorrect');
     }
 
+    //验证邮箱验证码
     await this.assertEmailVerifiedForLogin(user, meta);
-
+    //到这里说明登录成功了，记录日志，event是loginSucceeded
     const session = await this.issueSession(user, meta);
 
     await this.writeAuditLog({
@@ -306,6 +315,7 @@ export class AuthService {
     return session;
   }
 
+  // 校验 refresh token 并完成令牌轮换。
   async refresh(
     dto: RefreshTokenDto,
     meta: RequestClientMeta,
@@ -401,6 +411,7 @@ export class AuthService {
     };
   }
 
+  // 注销当前认证上下文对应的登录会话。
   async logout(
     auth: AuthRequestContext,
     meta: RequestClientMeta,
@@ -418,6 +429,7 @@ export class AuthService {
     return { success: true };
   }
 
+  // 查询可用用户的认证资料。
   async getProfile(userId: number): Promise<AuthUserResponse> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
@@ -428,6 +440,7 @@ export class AuthService {
     return toAuthUserResponse(user);
   }
 
+  // 登录前检查账号状态是否允许使用。
   private async assertAccountAvailableForLogin(
     user: UserWithPasswordCredential,
     meta: RequestClientMeta,
@@ -447,6 +460,7 @@ export class AuthService {
     }
   }
 
+  // 登录前检查邮箱是否已经验证。
   private async assertEmailVerifiedForLogin(
     user: UserWithPasswordCredential,
     meta: RequestClientMeta,
@@ -466,6 +480,7 @@ export class AuthService {
     }
   }
 
+  // 创建服务端登录会话并签发 access/refresh token。
   private async issueSession(
     user: User,
     meta: RequestClientMeta,
@@ -512,6 +527,7 @@ export class AuthService {
     };
   }
 
+  // 组装对外返回的 token 元数据。
   private buildTokenResponse(
     accessToken: { token: string; expiresAt: Date; expiresIn: number },
     refreshToken: { token: string; expiresAt: Date; expiresIn: number },
@@ -527,6 +543,7 @@ export class AuthService {
     };
   }
 
+  // 撤销指定登录会话及其所有未撤销 refresh token。
   private async revokeSession(
     sessionId: string,
     reason: string,
@@ -557,6 +574,7 @@ export class AuthService {
     ]);
   }
 
+  // 将指定登录会话标记为过期。
   private async expireSession(sessionId: string): Promise<void> {
     await this.prisma.authSession.updateMany({
       where: {
@@ -569,6 +587,7 @@ export class AuthService {
     });
   }
 
+  // 写入认证审计日志，失败时只记录警告避免阻塞主流程。
   private async writeAuditLog(input: AuditLogInput): Promise<void> {
     try {
       await this.prisma.authAuditLog.create({

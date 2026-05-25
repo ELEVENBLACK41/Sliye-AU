@@ -50,9 +50,10 @@ export class PasswordCryptoService {
    * - 同一 keyId 下，同一密文只能被解密一次（即使换了新 nonce）
    * - 防止攻击者截获密文后，获取新 nonce 搭配旧密文重放
    * - RSA-OAEP 每次加密产生不同密文，所以合法用户不会误触
-   */
+  */
   private readonly usedCiphertexts = new Map<string, Set<string>>();
 
+  // 返回当前密码传输公钥并签发一次性 nonce。
   getPublicKey(): PasswordPublicKeyResponse {
     const key = this.getCurrentKey();
 
@@ -82,6 +83,7 @@ export class PasswordCryptoService {
    *
    * @throws BadRequestException — nonce 无效 / 密文已被使用
    */
+  // 消费 nonce 并记录密文哈希以防止重复提交。
   consumeNonce(nonce: string, keyId: string, ciphertext: string): void {
     const record = this.nonces.get(nonce);
 
@@ -129,6 +131,7 @@ export class PasswordCryptoService {
     this.cleanupExpiredNonces();
   }
 
+  // 使用指定 keyId 对应私钥解密密码密文。
   decryptPassword(ciphertext: string, keyId: string): string {
     const key = this.findDecryptKey(keyId);
 
@@ -148,6 +151,7 @@ export class PasswordCryptoService {
     }
   }
 
+  // 获取当前有效密钥，必要时生成新密钥并轮换旧密钥。
   private getCurrentKey(): PasswordTransportKey {
     const now = Date.now();
 
@@ -170,6 +174,7 @@ export class PasswordCryptoService {
     return this.currentKey;
   }
 
+  // 根据 keyId 查找仍可用于解密的当前或上一把私钥。
   private findDecryptKey(keyId: string): PasswordTransportKey {
     const now = Date.now();
     const key =
@@ -186,6 +191,7 @@ export class PasswordCryptoService {
     return key;
   }
 
+  // 生成新的 RSA-OAEP 密码传输密钥对。
   private createKey(): PasswordTransportKey {
     const { publicKey, privateKey } = generateKeyPairSync('rsa', {
       modulusLength: 2048,
@@ -204,11 +210,13 @@ export class PasswordCryptoService {
   }
 
   /** 删除单个 nonce */
+  // 删除指定 nonce 记录。
   private cleanupNonce(nonce: string): void {
     this.nonces.delete(nonce);
   }
 
   /** 惰性清理所有过期 nonce，限制单次扫描量避免阻塞事件循环 */
+  // 批量清理已过期 nonce，限制单次扫描数量。
   private cleanupExpiredNonces(): void {
     const now = Date.now();
     let scanned = 0;

@@ -26,6 +26,7 @@ export class PasswordService {
     maxmem: 64 * 1024 * 1024,
   };
 
+  // 使用 scrypt 对明文密码生成带参数和盐值的哈希。
   async hashPassword(password: string): Promise<string> {
     const salt = randomBytes(16).toString('base64url');
     const derivedKey = await this.deriveKey(
@@ -44,6 +45,7 @@ export class PasswordService {
     ].join('$');
   }
 
+  // 使用存储哈希中的参数校验明文密码是否匹配。
   async verifyPassword(password: string, storedHash: string): Promise<boolean> {
     const parsedHash = this.parseScryptHash(storedHash);
 
@@ -69,6 +71,7 @@ export class PasswordService {
     return timingSafeEqual(actual, expected);
   }
 
+  // 解析项目自定义的 scrypt 哈希字符串。
   private parseScryptHash(storedHash: string): ParsedScryptHash | null {
     const [algorithm, version, rawParams, salt, hash] = storedHash.split('$');
 
@@ -104,6 +107,7 @@ export class PasswordService {
     };
   }
 
+  // 调用 Node scrypt 派生密码密钥。
   private deriveKey(
     password: string,
     salt: string,

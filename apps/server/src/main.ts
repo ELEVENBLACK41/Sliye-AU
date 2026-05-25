@@ -13,6 +13,7 @@ import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
+// 启动 Nest 应用并注册全局中间能力。
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 

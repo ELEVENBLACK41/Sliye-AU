@@ -22,6 +22,7 @@ export class EmailVerificationService {
   private readonly maxAttempts: number;
   private readonly codeSecret: string;
 
+  // 注入 Prisma 和配置服务并读取验证码相关配置。
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -41,6 +42,7 @@ export class EmailVerificationService {
     this.codeSecret = this.readCodeSecret();
   }
 
+  // 生成新的邮箱验证码并只保存验证码哈希。
   async issueCode(
     user: EmailVerificationUser,
     purpose: string,
@@ -88,6 +90,7 @@ export class EmailVerificationService {
     };
   }
 
+  // 消费用户最新的未使用邮箱验证码。
   async consumeLatestCode(
     user: EmailVerificationUser,
     code: string,
@@ -144,6 +147,7 @@ export class EmailVerificationService {
     });
   }
 
+  // 返回邮箱无需验证时的统一状态。
   verificationNotRequired(email: string): EmailVerificationState {
     return {
       required: false,
@@ -153,6 +157,7 @@ export class EmailVerificationService {
     };
   }
 
+  // 检查验证码重发冷却时间。
   private async assertCooldown(
     user: EmailVerificationUser,
     now: Date,
@@ -189,12 +194,14 @@ export class EmailVerificationService {
     }
   }
 
+  // 使用邮箱、验证码和服务端密钥生成验证码哈希。
   private hashCode(email: string, code: string): string {
     return createHash('sha256')
       .update(`${email}:${code}:${this.codeSecret}`)
       .digest('hex');
   }
 
+  // 读取邮箱验证码哈希密钥。
   private readCodeSecret(): string {
     const configuredSecret = this.configService.get<string>(
       'AUTH_EMAIL_CODE_SECRET',
@@ -210,6 +217,7 @@ export class EmailVerificationService {
     return 'nextnest-development-email-code-secret';
   }
 
+  // 读取正整数配置项并在非法时使用默认值。
   private readPositiveInteger(key: string, fallback: number): number {
     const rawValue = this.configService.get<string>(key);
     const value = rawValue ? Number(rawValue) : fallback;
@@ -217,6 +225,7 @@ export class EmailVerificationService {
     return Number.isInteger(value) && value > 0 ? value : fallback;
   }
 
+  // 使用固定时间比较避免哈希比较时序泄露。
   private safeEqual(actual: string, expected: string): boolean {
     const actualBuffer = Buffer.from(actual);
     const expectedBuffer = Buffer.from(expected);

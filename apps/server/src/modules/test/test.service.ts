@@ -13,8 +13,10 @@ import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
 export class TestService {
+  // 注入 Prisma 服务以访问测试数据表。
   constructor(private readonly prisma: PrismaService) {}
 
+  // 查询测试用户数据，必要时写入初始示例数据。
   async getTest() {
     const count = await this.prisma.user.count();
     if (count === 0) {
@@ -44,6 +46,7 @@ export class TestService {
     });
   }
 
+  // 返回固定测试消息。
   getTest1() {
     return {
       msg: 'hello nest my name is shaoliye this is a test message11111231231',
@@ -54,6 +57,7 @@ export class TestService {
    * 查询所有用户（含关联文章）。
    * 若表中无数据，先执行初始化 seed，再返回结果。
    */
+  // 查询所有用户及其关联文章。
   async getUsers() {
     return this.prisma.user.findMany({
       orderBy: { id: 'asc' },

@@ -24,8 +24,10 @@ export interface ConfirmEmailInput {
 
 @Injectable()
 export class AuthValidationService {
+  // 注入密码传输解密服务以解析加密后的登录注册密码。
   constructor(private readonly passwordCryptoService: PasswordCryptoService) {}
 
+  // 解析注册请求并还原出可落库的注册输入。
   parseRegister(dto: RegisterDto): RegisterInput {
     const passwordCiphertext = this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext');
     const passwordKeyId = this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId');
@@ -49,6 +51,7 @@ export class AuthValidationService {
     };
   }
 
+  // 解析登录请求并还原出可校验的登录输入。
   parseLogin(dto: LoginDto): LoginInput {
     const passwordCiphertext = this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext');
     const passwordKeyId = this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId');
@@ -71,10 +74,12 @@ export class AuthValidationService {
     };
   }
 
+  // 解析发送邮箱验证码请求中的邮箱。
   parseSendEmailVerification(dto: SendEmailVerificationDto): string {
     return this.parseEmail(dto.email);
   }
 
+  // 解析邮箱验证码确认请求。
   parseConfirmEmail(dto: ConfirmEmailDto): ConfirmEmailInput {
     return {
       email: this.parseEmail(dto.email),
@@ -82,6 +87,7 @@ export class AuthValidationService {
     };
   }
 
+  // 解析 refresh token 请求体。
   parseRefreshToken(dto: RefreshTokenDto): string {
     const refreshToken = this.parseRequiredString(
       dto.refreshToken,
@@ -95,6 +101,7 @@ export class AuthValidationService {
     return refreshToken;
   }
 
+  // 校验并规范化邮箱地址。
   private parseEmail(value: unknown): string {
     const email = this.parseRequiredString(value, 'email').toLowerCase();
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -106,6 +113,7 @@ export class AuthValidationService {
     return email;
   }
 
+  // 校验注册密码长度。
   private parsePassword(value: unknown): string {
     const password = this.parseRequiredString(value, 'password');
 
@@ -118,6 +126,7 @@ export class AuthValidationService {
     return password;
   }
 
+  // 校验 6 位数字邮箱验证码。
   private parseVerificationCode(value: unknown): string {
     const code = this.parseRequiredString(value, 'code');
 
@@ -128,6 +137,7 @@ export class AuthValidationService {
     return code;
   }
 
+  // 校验可选用户名并返回规范化结果。
   private parseOptionalName(value: unknown): string | undefined {
     if (value === undefined || value === null || value === '') {
       return undefined;
@@ -142,6 +152,7 @@ export class AuthValidationService {
     return name;
   }
 
+  // 校验必填字符串并去除首尾空白。
   private parseRequiredString(value: unknown, fieldName: string): string {
     if (typeof value !== 'string') {
       throw new BadRequestException(`${fieldName} is required`);
