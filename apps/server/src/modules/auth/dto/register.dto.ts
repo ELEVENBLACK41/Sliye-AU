@@ -1,4 +1,6 @@
-export class RegisterDto {
+import type { RegisterRequestPayload } from '@workspace/contracts/auth';
+
+export class RegisterDto implements RegisterRequestPayload {
   email!: string;
   passwordCiphertext!: string;
   passwordKeyId!: string;

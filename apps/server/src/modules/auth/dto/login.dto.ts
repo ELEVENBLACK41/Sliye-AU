@@ -1,4 +1,6 @@
-export class LoginDto {
+import type { LoginRequestPayload } from '@workspace/contracts/auth';
+
+export class LoginDto implements LoginRequestPayload {
   email!: string;
   passwordCiphertext!: string;
   passwordKeyId!: string;

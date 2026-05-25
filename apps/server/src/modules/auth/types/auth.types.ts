@@ -1,21 +1,17 @@
 import { Request } from 'express';
-import { UserStatus } from '../../../generated/prisma';
+
+export type {
+  AuthSession as AuthSessionResponse,
+  AuthTokens as AuthTokensResponse,
+  AuthUser as AuthUserResponse,
+  EmailVerificationState,
+  OperationResult,
+  RegisterResult as RegisterResponse,
+} from '@workspace/contracts/auth';
 
 export interface RequestClientMeta {
   ipAddress?: string;
   userAgent?: string;
-}
-
-export interface AuthUserResponse {
-  id: number;
-  email: string;
-  name: string | null;
-  avatarUrl: string | null;
-  status: UserStatus;
-  emailVerifiedAt: string | null;
-  lastLoginAt: string | null;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export interface AccessTokenPayload {
@@ -37,36 +33,5 @@ export interface AuthRequestContext {
 
 export interface AuthenticatedRequest extends Request {
   auth?: AuthRequestContext;
-  user?: AuthUserResponse;
-}
-
-export interface AuthTokensResponse {
-  tokenType: 'Bearer';
-  accessToken: string;
-  accessTokenExpiresAt: string;
-  accessTokenExpiresIn: number;
-  refreshToken: string;
-  refreshTokenExpiresAt: string;
-  refreshTokenExpiresIn: number;
-}
-
-export interface AuthSessionResponse {
-  user: AuthUserResponse;
-  tokens: AuthTokensResponse;
-}
-
-export interface EmailVerificationState {
-  required: boolean;
-  sentTo: string;
-  expiresAt: string | null;
-  cooldownSeconds: number;
-}
-
-export interface RegisterResponse {
-  user: AuthUserResponse;
-  emailVerification: EmailVerificationState;
-}
-
-export interface OperationResult {
-  success: boolean;
+  user?: import('@workspace/contracts/auth').AuthUser;
 }

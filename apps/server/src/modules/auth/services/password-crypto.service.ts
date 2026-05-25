@@ -7,6 +7,7 @@ import {
   randomUUID,
   type KeyObject,
 } from 'node:crypto';
+import type { PasswordPublicKey } from '@workspace/contracts/auth';
 
 type PasswordTransportKey = {
   keyId: string;
@@ -22,14 +23,7 @@ type NonceRecord = {
   expiresAt: Date;
 };
 
-export type PasswordPublicKeyResponse = {
-  keyId: string;
-  algorithm: 'RSA-OAEP-256';
-  publicKeyPem: string;
-  expiresAt: string;
-  /** 一次性随机数，登录/注册时必须原样回传，消耗后不可重放 */
-  nonce: string;
-};
+export type PasswordPublicKeyResponse = PasswordPublicKey;
 
 @Injectable()
 export class PasswordCryptoService {
