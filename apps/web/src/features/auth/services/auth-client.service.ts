@@ -13,7 +13,6 @@ import type {
   EmailVerificationState,
   LoginFormValues,
   LoginRequestPayload,
-  PasswordPublicKey,
   RegisterFormValues,
   RegisterRequestPayload,
   RegisterResult,
