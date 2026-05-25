@@ -1,3 +1,13 @@
+/*
+ * @Author: shaoliye
+ * @Date: 2026-05-22 10:31:15
+ * @Email: elevenblack41@gmail.com
+ * @LastEditTime: 2026-05-22 11:20:14
+ * @LastEditors: shaoliye
+ * @LastEditorsEmail: elevenblack41@gmail.com
+ * @Description: 
+ * @Copyright: Copyright 1990 - 2026
+ */
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -13,108 +23,681 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+  LOCKED
+}
+
+enum AuthProvider {
+  PASSWORD
+  GITHUB
+  GOOGLE
+}
+
+enum AuthSessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+enum DataScope {
+  ALL
+  OWN
+  DEPT
+  DEPT_AND_CHILD
+  PARTICIPATED
+  CUSTOM
+}
+
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
+
+enum ResourceType {
+  DECISION
+  MEETING
+  AUDIT
+}
+
+enum ParticipantRole {
+  VIEWER
+  EDITOR
+  APPROVER
+  OWNER
+}
+
+enum DecisionStatus {
+  DRAFT
+  DISCUSSING
+  VOTING
+  DECIDED
+  ARCHIVED
+}
+
+enum ProposalStatus {
+  OPEN
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum VoteOption {
+  APPROVE
+  REJECT
+  ABSTAIN
+}
+
+enum TaskStatus {
+  TODO
+  DOING
+  DONE
+  CANCELLED
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum DecisionEventType {
+  DECISION_CREATED
+  DECISION_UPDATED
+  STATUS_CHANGED
+  PARTICIPANT_ADDED
+  PARTICIPANT_REMOVED
+  PROPOSAL_CREATED
+  PROPOSAL_UPDATED
+  VOTE_CAST
+  VOTE_CLOSED
+  TASK_CREATED
+  TASK_UPDATED
+  MEETING_STARTED
+  MEETING_ENDED
+  AI_SUMMARY_CREATED
+}
+
 model User {
-  id    Int     @default(autoincrement()) @id
+  id    Int     @id @default(autoincrement())
   email String  @unique
   name  String?
-  posts Post[]
 
-  roles UserRole[]
+  avatarUrl       String?
+  status          UserStatus @default(PENDING)
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @default(now()) @updatedAt
+
+  deptId     Int?
+  department Department? @relation(fields: [deptId], references: [id], onDelete: SetNull)
+
+  passwordCredential  UserPasswordCredential?
+  authAccounts        AuthAccount[]
+  authSessions        AuthSession[]
+  emailVerifyTokens   EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
+  authLogs            AuthAuditLog[]
+
+  roles       UserRole[]
   permissions UserPermission[]
+
   requestsMade     PermissionRequest[] @relation("RequestsMade")
   requestsReviewed PermissionRequest[] @relation("RequestsReviewed")
+
+  posts Post[]
+
+  createdDecisions     Decision[]            @relation("DecisionCreator")
+  ownedDecisions       Decision[]            @relation("DecisionOwner")
+  decisionParticipants DecisionParticipant[]
+  proposalsCreated     DecisionProposal[]    @relation("ProposalCreator")
+  votesCast            DecisionVote[]
+  assignedTasks        DecisionTask[]        @relation("TaskAssignee")
+  createdTasks         DecisionTask[]        @relation("TaskCreator")
+  decisionEvents       DecisionEvent[]       @relation("DecisionEventActor")
+  meetingParticipants  MeetingParticipant[]
+
+  @@index([deptId])
+  @@index([status])
+}
+
+model UserPasswordCredential {
+  id Int @id @default(autoincrement())
+
+  userId            Int      @unique
+  passwordHash      String
+  passwordAlgo      String   @default("argon2id")
+  passwordChangedAt DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthAccount {
+  id Int @id @default(autoincrement())
+
+  userId            Int
+  provider          AuthProvider
+  providerAccountId String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model AuthSession {
+  id String @id @default(cuid())
+
+  userId Int
+  status AuthSessionStatus @default(ACTIVE)
+
+  userAgent    String?
+  ipAddress    String?
+  lastUsedAt   DateTime?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  revokeReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id String @id @default(cuid())
+
+  sessionId String
+  tokenHash String @unique
+
+  expiresAt         DateTime
+  usedAt            DateTime?
+  revokedAt         DateTime?
+  replacedByTokenId String?   @unique
+  createdAt         DateTime  @default(now())
+
+  session         AuthSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  replacedByToken RefreshToken? @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id])
+  replacesToken   RefreshToken? @relation("RefreshTokenRotation")
+
+  @@index([sessionId])
+  @@index([expiresAt])
+}
+
+model EmailVerificationToken {
+  id String @id @default(cuid())
+
+  userId Int
+
+  sentTo       String
+  tokenHash    String    @unique
+  attemptCount Int       @default(0)
+  lastSentAt   DateTime?
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sentTo])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id String @id @default(cuid())
+
+  userId    Int
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthAuditLog {
+  id Int @id @default(autoincrement())
+
+  userId Int?
+  event  String
+
+  ipAddress String?
+  userAgent String?
+  success   Boolean
+  reason    String?
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([event])
+  @@index([createdAt])
+}
+
+model OutboxEvent {
+  id String @id @default(cuid())
+
+  topic   String
+  payload Json
+
+  status       OutboxStatus @default(PENDING)
+  retryCount   Int          @default(0)
+  nextRetryAt  DateTime?
+  sentAt       DateTime?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([topic])
+  @@index([status])
+  @@index([nextRetryAt])
+  @@index([createdAt])
 }
 
 model Post {
-  id        Int      @default(autoincrement()) @id
+  id        Int      @id @default(autoincrement())
   title     String
   content   String?
   published Boolean? @default(false)
-  author    User?    @relation(fields: [authorId], references: [id])
   authorId  Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([authorId])
 }
 
 model Role {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique   // admin / user / viewer
-  desc      String?
+  id   Int     @id @default(autoincrement())
+  name String  @unique
+  desc String?
 
-  users     UserRole[]
-  perms     RolePermission[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  users UserRole[]
+  perms RolePermission[]
 }
 
 model Permission {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique   // user:create / user:delete
-  desc      String?
+  id Int @id @default(autoincrement())
 
-  roles     RolePermission[]
+  code   String  @unique
+  name   String?
+  module String
+  action String
+  desc   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  roles           RolePermission[]
+  userPermissions UserPermission[]
+  requestItems    PermissionRequestItem[]
+
+  @@unique([module, action])
+  @@index([module])
 }
 
 model UserRole {
   userId Int
   roleId Int
 
-  user User @relation(fields: [userId], references: [id])
-  role Role @relation(fields: [roleId], references: [id])
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
+  @@index([roleId])
 }
 
 model RolePermission {
   roleId Int
   permId Int
 
-  role Role @relation(fields: [roleId], references: [id])
-  perm Permission @relation(fields: [permId], references: [id])
+  grantedAt DateTime @default(now())
+
+  role Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  perm Permission @relation(fields: [permId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permId])
-}
-
-model UserPermission {
-  id        Int    @id @default(autoincrement())
-  userId    Int
-  permCode  String
-
-  effect    Int    // 1=允许 0=禁止（核心）
-
-  expiresAt       DateTime? // null=永久，有值=临时权限
-  sourceRequestId Int?      @unique
-
-  user          User               @relation(fields: [userId], references: [id])
-  sourceRequest PermissionRequest? @relation("GrantedPerm", fields: [sourceRequestId], references: [id])
-
-  @@index([userId])
-  @@index([permCode])
-  @@index([expiresAt])
-}
-
-enum RequestStatus {
-  PENDING   // 待审批
-  APPROVED  // 已批准
-  REJECTED  // 已拒绝
-  REVOKED   // 已撤销
+  @@index([permId])
 }
 
 model PermissionRequest {
-  id           Int           @id @default(autoincrement())
-  requesterId  Int
-  permCode     String
-  reason       String?       // 申请理由
+  id Int @id @default(autoincrement())
 
-  status       RequestStatus @default(PENDING)
+  requesterId Int
+  reason      String?
+
+  status RequestStatus @default(PENDING)
+
   approverId   Int?
-  approvalNote String?       // 审批意见
+  approvalNote String?
 
-  expiresAt    DateTime?     // 申请的到期时间，null=申请永久权限
+  expiresAt DateTime?
 
-  createdAt    DateTime      @default(now())
-  reviewedAt   DateTime?
+  createdAt  DateTime  @default(now())
+  reviewedAt DateTime?
 
-  requester   User            @relation("RequestsMade",     fields: [requesterId], references: [id])
-  approver    User?           @relation("RequestsReviewed", fields: [approverId],  references: [id])
-  grantedPerm UserPermission? @relation("GrantedPerm") // 审批通过后生成的权限记录（1对1）
+  requester User  @relation("RequestsMade", fields: [requesterId], references: [id], onDelete: Cascade)
+  approver  User? @relation("RequestsReviewed", fields: [approverId], references: [id], onDelete: SetNull)
+
+  items       PermissionRequestItem[]
+  permissions UserPermission[]
 
   @@index([requesterId])
+  @@index([approverId])
   @@index([status])
+  @@index([createdAt])
+}
+
+model PermissionRequestItem {
+  id Int @id @default(autoincrement())
+
+  requestId Int
+  permId    Int
+
+  effect    PermissionEffect
+  scopeType DataScope?
+
+  request    PermissionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  permission Permission        @relation(fields: [permId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, permId, effect, scopeType])
+  @@index([permId])
+}
+
+model UserPermission {
+  id Int @id @default(autoincrement())
+
+  userId Int
+  permId Int
+
+  effect    PermissionEffect
+  scopeType DataScope?
+
+  expiresAt       DateTime?
+  sourceRequestId Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission    Permission         @relation(fields: [permId], references: [id], onDelete: Cascade)
+  sourceRequest PermissionRequest? @relation(fields: [sourceRequestId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, permId, effect, scopeType])
+  @@index([permId])
+  @@index([expiresAt])
+  @@index([sourceRequestId])
+}
+
+model Department {
+  id Int @id @default(autoincrement())
+
+  name     String
+  parentId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  parent   Department?  @relation("DeptTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Department[] @relation("DeptTree")
+
+  users     User[]
+  decisions Decision[]
+
+  @@index([parentId])
+}
+
+model Decision {
+  id Int @id @default(autoincrement())
+
+  title       String
+  description String?
+  status      DecisionStatus @default(DRAFT)
+
+  creatorId Int
+  ownerId   Int?
+  deptId    Int
+
+  decidedAt  DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  department Department @relation(fields: [deptId], references: [id], onDelete: Restrict)
+  creator    User       @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  owner      User?      @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  participants DecisionParticipant[]
+  proposals    DecisionProposal[]
+  tasks        DecisionTask[]
+  events       DecisionEvent[]
+  meetings     MeetingSession[]
+
+  @@index([deptId])
+  @@index([creatorId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model DecisionParticipant {
+  id Int @id @default(autoincrement())
+
+  decisionId Int
+  userId     Int
+  role       ParticipantRole @default(VIEWER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([decisionId, userId])
+  @@index([userId])
+  @@index([role])
+}
+
+model ResourceParticipant {
+  id Int @id @default(autoincrement())
+
+  userId Int
+
+  resourceType ResourceType
+  resourceId   Int
+  role         ParticipantRole @default(VIEWER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId, resourceType, resourceId])
+  @@index([userId])
+  @@index([resourceType, resourceId])
+}
+
+model DecisionProposal {
+  id Int @id @default(autoincrement())
+
+  decisionId Int
+  creatorId  Int
+
+  title       String
+  description String?
+  status      ProposalStatus @default(OPEN)
+
+  acceptedAt DateTime?
+  closedAt   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  creator  User     @relation("ProposalCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+
+  votes  DecisionVote[]
+  events DecisionEvent[]
+
+  @@index([decisionId])
+  @@index([creatorId])
+  @@index([status])
+}
+
+model DecisionVote {
+  id Int @id @default(autoincrement())
+
+  proposalId Int
+  voterId    Int
+
+  option VoteOption
+  reason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  proposal DecisionProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  voter    User             @relation(fields: [voterId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, voterId])
+  @@index([voterId])
+  @@index([option])
+}
+
+model DecisionTask {
+  id Int @id @default(autoincrement())
+
+  decisionId Int
+  creatorId  Int
+  assigneeId Int?
+
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  dueAt       DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  creator  User     @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  assignee User?    @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  events DecisionEvent[]
+
+  @@index([decisionId])
+  @@index([creatorId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([dueAt])
+}
+
+model MeetingSession {
+  id Int @id @default(autoincrement())
+
+  decisionId Int
+  title      String
+  status     MeetingStatus @default(SCHEDULED)
+
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  participants MeetingParticipant[]
+  events       DecisionEvent[]
+
+  @@index([decisionId])
+  @@index([status])
+}
+
+model MeetingParticipant {
+  id Int @id @default(autoincrement())
+
+  meetingId Int
+  userId    Int
+
+  joinedAt  DateTime?
+  leftAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  meeting MeetingSession @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([userId])
+}
+
+model DecisionEvent {
+  id Int @id @default(autoincrement())
+
+  decisionId Int
+  actorId    Int?
+  meetingId  Int?
+  proposalId Int?
+  taskId     Int?
+
+  type  DecisionEventType
+  title String
+
+  payload Json?
+  before  Json?
+  after   Json?
+
+  occurredAt        DateTime @default(now())
+  recordingOffsetMs Int?
+  createdAt         DateTime @default(now())
+
+  decision Decision          @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  actor    User?             @relation("DecisionEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  meeting  MeetingSession?   @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  proposal DecisionProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  task     DecisionTask?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([decisionId])
+  @@index([actorId])
+  @@index([meetingId])
+  @@index([proposalId])
+  @@index([taskId])
+  @@index([type])
+  @@index([occurredAt])
 }

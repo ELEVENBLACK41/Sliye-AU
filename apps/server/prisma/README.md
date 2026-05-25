@@ -79,5 +79,5 @@ pnpm prisma studio
 
 ## 注意事项
 
-- `generated/` 目录由 `prisma generate` 自动生成，已加入 `.gitignore`，**不要手动修改**。
-- 每次修改 `schema.prisma` 后都必须执行 `prisma migrate dev`（开发）或 `prisma migrate deploy`（生产），并重新运行 `prisma generate`。
+- `generated/` 目录由 `pnpm prisma generate` 自动生成，已加入 `.gitignore`，**不要手动修改**。
+- 每次修改 `schema.prisma` 后都必须执行 `pnpm prisma migrate dev`（开发）或 `prisma migrate deploy`（生产），并重新运行 `prisma generate`。

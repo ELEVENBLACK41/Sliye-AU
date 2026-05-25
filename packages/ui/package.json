@@ -5,7 +5,8 @@
   "exports": {
     "./*": "./*.tsx",
     "./lib/*": "./lib/*.ts",
-    "./components/*": "./components/*.tsx"
+    "./components/*": "./components/*.tsx",
+    "./components/ui/*": "./components/*.tsx"
   },
   "scripts": {
     "check-types": "tsc --noEmit"

@@ -1,0 +1,251 @@
+<mxfile host="app.diagrams.net" modified="2026-05-24T00:00:00.000Z" agent="Codex" version="26.0.0">
+  <diagram id="database-erd" name="数据库 ERD">
+    <mxGraphModel dx="2200" dy="1600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2300" pageHeight="1700" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="Sliye-AU 数据库架构 / ERD" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#1F2937;" vertex="1" parent="1">
+          <mxGeometry x="760" y="20" width="760" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="基于 apps/server/prisma/schema.prisma。字段仅保留 PK / FK / UQ / 核心业务字段，完整字段以 Prisma schema 为准。" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#4B5563;" vertex="1" parent="1">
+          <mxGeometry x="610" y="62" width="1060" height="28" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lane_auth" value="认证与身份" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1976D2;startSize=34;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="520" height="760" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_rbac" value="RBAC 与权限申请" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;startSize=34;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="120" width="620" height="760" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_decision" value="Decision Replay 主链路" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#388E3C;startSize=34;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="120" width="900" height="980" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_support" value="组织、辅助与演进表" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#7B1FA2;startSize=34;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="930" width="1180" height="320" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_notes" value="图例与说明" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#9CA3AF;startSize=34;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="1130" width="900" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="user" value="&lt;b&gt;User&lt;/b&gt;&lt;br&gt;PK id Int&lt;br&gt;UQ email&lt;br&gt;name / avatarUrl&lt;br&gt;status UserStatus&lt;br&gt;emailVerifiedAt&lt;br&gt;lastLoginAt&lt;br&gt;FK deptId -&amp;gt; Department.id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="180" width="210" height="220" as="geometry"/>
+        </mxCell>
+        <mxCell id="credential" value="&lt;b&gt;UserPasswordCredential&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;UQ FK userId&lt;br&gt;passwordHash&lt;br&gt;passwordAlgo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="330" y="180" width="190" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="auth_account" value="&lt;b&gt;AuthAccount&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK userId&lt;br&gt;provider&lt;br&gt;providerAccountId&lt;br&gt;UQ provider + accountId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="330" y="310" width="190" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="auth_session" value="&lt;b&gt;AuthSession&lt;/b&gt;&lt;br&gt;PK id String/cuid&lt;br&gt;FK userId&lt;br&gt;status AuthSessionStatus&lt;br&gt;expiresAt / revokedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="330" y="465" width="190" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="refresh_token" value="&lt;b&gt;RefreshToken&lt;/b&gt;&lt;br&gt;PK id String/cuid&lt;br&gt;FK sessionId&lt;br&gt;UQ tokenHash&lt;br&gt;UQ replacedByTokenId&lt;br&gt;expiresAt / usedAt / revokedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="330" y="615" width="190" height="135" as="geometry"/>
+        </mxCell>
+        <mxCell id="email_token" value="&lt;b&gt;EmailVerificationToken&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK userId&lt;br&gt;sentTo&lt;br&gt;UQ tokenHash&lt;br&gt;attemptCount / expiresAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="440" width="210" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="password_reset" value="&lt;b&gt;PasswordResetToken&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK userId&lt;br&gt;UQ tokenHash&lt;br&gt;expiresAt / usedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="590" width="210" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="auth_audit" value="&lt;b&gt;AuthAuditLog&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK userId nullable&lt;br&gt;event / success / reason&lt;br&gt;ipAddress / userAgent / metadata" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="725" width="210" height="115" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="role" value="&lt;b&gt;Role&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;UQ name&lt;br&gt;desc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="640" y="180" width="200" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="permission" value="&lt;b&gt;Permission&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;UQ code&lt;br&gt;module / action&lt;br&gt;UQ module + action" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="970" y="180" width="210" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="user_role" value="&lt;b&gt;UserRole&lt;/b&gt;&lt;br&gt;PK userId + roleId&lt;br&gt;FK userId&lt;br&gt;FK roleId&lt;br&gt;assignedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="640" y="350" width="220" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="role_permission" value="&lt;b&gt;RolePermission&lt;/b&gt;&lt;br&gt;PK roleId + permId&lt;br&gt;FK roleId&lt;br&gt;FK permId&lt;br&gt;grantedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="960" y="350" width="220" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="user_permission" value="&lt;b&gt;UserPermission&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK userId&lt;br&gt;FK permId&lt;br&gt;effect ALLOW/DENY&lt;br&gt;scopeType DataScope&lt;br&gt;FK sourceRequestId nullable&lt;br&gt;UQ userId + permId + effect + scopeType" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="640" y="525" width="250" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="permission_request" value="&lt;b&gt;PermissionRequest&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK requesterId -&amp;gt; User&lt;br&gt;FK approverId -&amp;gt; User nullable&lt;br&gt;status RequestStatus&lt;br&gt;reason / approvalNote / expiresAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="940" y="525" width="240" height="145" as="geometry"/>
+        </mxCell>
+        <mxCell id="permission_request_item" value="&lt;b&gt;PermissionRequestItem&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK requestId&lt;br&gt;FK permId&lt;br&gt;effect / scopeType&lt;br&gt;UQ requestId + permId + effect + scopeType" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="940" y="725" width="240" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="decision" value="&lt;b&gt;Decision&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;title / description&lt;br&gt;status DecisionStatus&lt;br&gt;FK creatorId -&amp;gt; User&lt;br&gt;FK ownerId -&amp;gt; User nullable&lt;br&gt;FK deptId -&amp;gt; Department&lt;br&gt;decidedAt / archivedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="180" width="250" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="decision_participant" value="&lt;b&gt;DecisionParticipant&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK decisionId&lt;br&gt;FK userId&lt;br&gt;role ParticipantRole&lt;br&gt;UQ decisionId + userId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1590" y="180" width="230" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="decision_proposal" value="&lt;b&gt;DecisionProposal&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK decisionId&lt;br&gt;FK creatorId -&amp;gt; User&lt;br&gt;title / status&lt;br&gt;acceptedAt / closedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1860" y="180" width="240" height="125" as="geometry"/>
+        </mxCell>
+        <mxCell id="decision_vote" value="&lt;b&gt;DecisionVote&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK proposalId&lt;br&gt;FK voterId -&amp;gt; User&lt;br&gt;option VoteOption&lt;br&gt;UQ proposalId + voterId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1860" y="345" width="240" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="decision_task" value="&lt;b&gt;DecisionTask&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK decisionId&lt;br&gt;FK creatorId -&amp;gt; User&lt;br&gt;FK assigneeId -&amp;gt; User nullable&lt;br&gt;title / status / dueAt / completedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1590" y="345" width="230" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="meeting_session" value="&lt;b&gt;MeetingSession&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK decisionId&lt;br&gt;title / status&lt;br&gt;startedAt / endedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="430" width="250" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="meeting_participant" value="&lt;b&gt;MeetingParticipant&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK meetingId&lt;br&gt;FK userId&lt;br&gt;joinedAt / leftAt&lt;br&gt;UQ meetingId + userId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="590" width="250" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="decision_event" value="&lt;b&gt;DecisionEvent&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;FK decisionId&lt;br&gt;FK actorId -&amp;gt; User nullable&lt;br&gt;FK meetingId nullable&lt;br&gt;FK proposalId nullable&lt;br&gt;FK taskId nullable&lt;br&gt;type DecisionEventType&lt;br&gt;title / payload / before / after&lt;br&gt;occurredAt / recordingOffsetMs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1590" y="550" width="290" height="190" as="geometry"/>
+        </mxCell>
+        <mxCell id="decision_note" value="&lt;b&gt;主链路闭环&lt;/b&gt;&lt;br&gt;Decision 创建后沉淀参与者、提案、投票、任务、会议和事件时间线；DecisionEvent 是审计、回放和 diff 展示的核心表。" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#FFFFFF;strokeColor=#388E3C;fontSize=12;align=left;verticalAlign=top;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="795" width="800" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="department" value="&lt;b&gt;Department&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;name&lt;br&gt;FK parentId -&amp;gt; Department.id&lt;br&gt;用于部门树和数据范围" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="995" width="230" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="outbox_event" value="&lt;b&gt;OutboxEvent&lt;/b&gt;&lt;br&gt;PK id String/cuid&lt;br&gt;topic&lt;br&gt;payload Json&lt;br&gt;status OutboxStatus&lt;br&gt;retryCount / nextRetryAt / sentAt&lt;br&gt;用于后续异步投递" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="350" y="995" width="240" height="145" as="geometry"/>
+        </mxCell>
+        <mxCell id="resource_participant" value="&lt;b&gt;ResourceParticipant&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;userId logical FK&lt;br&gt;resourceType&lt;br&gt;resourceId&lt;br&gt;role ParticipantRole&lt;br&gt;UQ userId + resourceType + resourceId&lt;br&gt;给非 Decision 资源预留" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="630" y="995" width="250" height="155" as="geometry"/>
+        </mxCell>
+        <mxCell id="post" value="&lt;b&gt;Post&lt;/b&gt;&lt;br&gt;PK id&lt;br&gt;title / content / published&lt;br&gt;FK authorId -&amp;gt; User nullable&lt;br&gt;demo 测试表，后续可隔离或移除" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacing=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="995" width="250" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend" value="实线：Prisma schema 显式 @relation。虚线：自引用或逻辑关联。Cascade / SetNull / Restrict 删除策略可在 schema 与 DATA_MODEL.md 中查看。" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9CA3AF;fontSize=12;align=left;verticalAlign=middle;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="1180" width="800" height="45" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_user_credential" value="1 - 0..1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="credential">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_auth_account" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="auth_account">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_session" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="auth_session">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_session_refresh" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="auth_session" target="refresh_token">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_refresh_self" value="rotation" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="refresh_token" target="refresh_token">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="530" y="690" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_user_email_token" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="email_token">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_password_reset" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="password_reset">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_auth_audit" value="1 - N nullable" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="auth_audit">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_user_user_role" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="user_role">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_role_user_role" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="role" target="user_role">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_role_role_permission" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="role" target="role_permission">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_permission_role_permission" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="permission" target="role_permission">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_user_permission" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="user_permission">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_permission_user_permission" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="permission" target="user_permission">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_request" value="requester / approver" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="permission_request">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_request_item" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="permission_request" target="permission_request_item">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_permission_request_item" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="permission" target="permission_request_item">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_request_user_permission" value="sourceRequest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="permission_request" target="user_permission">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_department_user" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="department" target="user">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_department_self" value="parent / children" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="department" target="department">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_department_decision" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="department" target="decision">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_post" value="author nullable" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="user" target="post">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_resource" value="logical userId" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="user" target="resource_participant">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_user_decision" value="creator / owner" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="decision">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_decision_participant" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="decision" target="decision_participant">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_decision_participant" value="userId" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="decision_participant">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_decision_proposal" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="decision" target="decision_proposal">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_proposal" value="creatorId" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="decision_proposal">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_proposal_vote" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="decision_proposal" target="decision_vote">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_vote" value="voterId" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="decision_vote">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_decision_task" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="decision" target="decision_task">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_task" value="creator / assignee" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="decision_task">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_decision_meeting" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="decision" target="meeting_session">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_meeting_participant" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="meeting_session" target="meeting_participant">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_meeting_participant" value="userId" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="meeting_participant">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_decision_event" value="1 - N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="decision" target="decision_event">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_user_event" value="actorId nullable" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="user" target="decision_event">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_meeting_event" value="meetingId nullable" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="meeting_session" target="decision_event">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_proposal_event" value="proposalId nullable" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="decision_proposal" target="decision_event">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_task_event" value="taskId nullable" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="decision_task" target="decision_event">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

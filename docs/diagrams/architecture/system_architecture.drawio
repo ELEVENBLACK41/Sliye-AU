@@ -1,0 +1,147 @@
+<mxfile host="app.diagrams.net" modified="2026-05-24T00:00:00.000Z" agent="Codex" version="26.0.0">
+  <diagram id="system-architecture" name="系统架构图">
+    <mxGraphModel dx="1500" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Sliye-AU / NextNest 系统架构图" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#1F2937;" vertex="1" parent="1">
+          <mxGeometry x="450" y="20" width="600" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="pnpm monorepo：Next.js 前台 + Next.js 管理端 + NestJS API + Prisma/PostgreSQL" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#4B5563;" vertex="1" parent="1">
+          <mxGeometry x="390" y="62" width="720" height="28" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lane_clients" value="客户端 / 入口" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#C2185B;startSize=32;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="300" height="450" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_frontend" value="Next.js 应用层" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1976D2;startSize=32;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="120" width="360" height="450" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_backend" value="NestJS 服务层" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;startSize=32;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="120" width="340" height="450" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_data" value="数据与异步基础" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#388E3C;startSize=32;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="120" width="300" height="450" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_shared" value="Monorepo 共享与工程能力" style="swimlane;horizontal=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#7B1FA2;startSize=32;fontStyle=1;fontSize=14;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="610" width="1080" height="200" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="browser" value="浏览器 / SSR&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;访问 web 前台&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C2185B;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="180" width="220" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="admin_user" value="管理员&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;访问 admin 管理端&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C2185B;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="300" width="220" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="mobile_future" value="后续移动端&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;apps/app，当前未实现&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C2185B;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="420" width="220" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="web_app" value="apps/web&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;Next.js 16 / React 19&lt;br&gt;App Router、Auth UI、Dashboard&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="170" width="280" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="web_bff" value="Route Handlers / BFF&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;/api/auth/*、/api/test/*&lt;br&gt;requestNest() 转发 NestJS&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF4FF;strokeColor=#1976D2;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="305" width="280" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="cookie_node" value="httpOnly Cookie&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;access / refresh token&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9C4;strokeColor=#F57F17;strokeWidth=2;fontSize=12;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="510" y="435" width="130" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="admin_app" value="apps/admin&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;Next.js 管理端预留&lt;br&gt;用户 / 角色 / 权限 / 审计&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="450" width="280" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="nest_app" value="apps/server&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;NestJS 11 AppModule&lt;br&gt;ConfigModule / PrismaModule&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="820" y="170" width="260" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="auth_module" value="AuthModule&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;register / login / refresh / logout&lt;br&gt;email verification / profile&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="820" y="285" width="260" height="85" as="geometry"/>
+        </mxCell>
+        <mxCell id="test_module" value="TestModule&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;demo /test、/test/users&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E65100;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="820" y="405" width="260" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="crosscutting" value="全局响应边界&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;AllExceptionsFilter&lt;br&gt;TransformInterceptor&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#E65100;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="820" y="495" width="260" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="prisma_service" value="PrismaService&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;Prisma 7 + @prisma/adapter-pg&lt;br&gt;读取 DATABASE_URL&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1195" y="180" width="230" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="postgres" value="PostgreSQL&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;单库优先&lt;br&gt;用户 / 权限 / 决策 / 事件&lt;/font&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#FFFFFF;strokeColor=#388E3C;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1195" y="315" width="230" height="95" as="geometry"/>
+        </mxCell>
+        <mxCell id="outbox" value="OutboxEvent&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;后续邮件 / 通知 / MQ / AI 任务&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F8E9;strokeColor=#388E3C;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1195" y="450" width="230" height="75" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="workspace" value="pnpm workspace&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;apps/* + packages/*&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="670" width="220" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui_package" value="packages/ui&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;shadcn 风格基础组件&lt;br&gt;Radix / lucide / cva&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="680" y="670" width="220" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="scripts" value="统一脚本&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;pnpm dev / build / lint / test&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="940" y="670" width="220" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="envs" value="环境变量边界&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;NEXT_PUBLIC_BASE_URL / NEST_BASE_URL&lt;br&gt;DATABASE_URL / PORT&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="670" width="220" height="65" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_browser_web" value="页面 / API 请求" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="browser" target="web_app">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_admin_adminapp" value="管理端页面" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="admin_user" target="admin_app">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_web_bff" value="同域 /api/*" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="web_app" target="web_bff">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_bff_cookie" value="登录成功写入" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F57F17;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="web_bff" target="cookie_node">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_cookie_browser" value="后续请求携带" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F57F17;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="cookie_node" target="browser">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_bff_nest" value="NEST_BASE_URL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="web_bff" target="nest_app">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_nest_auth" value="imports / controllers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="nest_app" target="auth_module">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_nest_test" value="demo module" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="nest_app" target="test_module">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_auth_prisma" value="Prisma queries / transactions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="auth_module" target="prisma_service">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_test_prisma" value="demo data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9CA3AF;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="test_module" target="prisma_service">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_prisma_postgres" value="SQL over pg adapter" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="prisma_service" target="postgres">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_auth_outbox" value="未来异步投递" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#388E3C;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="auth_module" target="outbox">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_web_ui" value="复用组件" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="web_app" target="ui_package">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_admin_ui" value="复用组件" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="admin_app" target="ui_package">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_workspace_scripts" value="根脚本编排" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="workspace" target="scripts">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_env_bff" value="请求边界配置" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="envs" target="web_bff">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_env_prisma" value="数据库连接" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;dashed=1;fontSize=11;" edge="1" parent="1" source="envs" target="prisma_service">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="note_current" value="当前已实现重点：认证 BFF、AuthModule、统一响应/异常边界、Prisma/PostgreSQL 数据访问。Decision/RBAC schema 已建模，业务模块仍待逐步落地。" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#FFFFFF;strokeColor=#9CA3AF;fontSize=12;align=left;verticalAlign=top;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="840" width="1420" height="80" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

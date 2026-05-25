@@ -1,0 +1,132 @@
+<mxfile host="app.diagrams.net" modified="2026-05-25T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="auth-login-register-flow" name="登录注册链路">
+    <mxGraphModel dx="2200" dy="1600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1750" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="登录 / 注册 / 邮箱验证完整链路&#xa;重点：密码传输加密、密码哈希、验证码哈希、会话与 token 入库时机" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;fontSize=22;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="900" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lane_browser" value="浏览器 / React" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;startSize=34;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="110" width="390" height="1600" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_bff" value="Next.js Route Handler / BFF" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1976D2;startSize=34;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="430" y="110" width="380" height="1600" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_nest" value="NestJS AuthModule" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;startSize=34;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="810" y="110" width="520" height="1600" as="geometry"/>
+        </mxCell>
+        <mxCell id="lane_db" value="PostgreSQL / Prisma" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#7B1FA2;startSize=34;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="110" width="420" height="1600" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="start" value="用户打开登录页&#xa;LoginForm 三种模式：login / register / confirm" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2E7D32;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_browser">
+          <mxGeometry x="40" y="55" width="300" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="get_key_client" value="提交登录或注册前&#xa;encryptPasswordForTransport(password)&#xa;GET /api/auth/password-public-key" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2E7D32;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_browser">
+          <mxGeometry x="40" y="165" width="300" height="85" as="geometry"/>
+        </mxCell>
+        <mxCell id="get_key_bff" value="/api/auth/password-public-key&#xa;BFF 转发到 Nest&#xa;不生成密钥、不落库" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_bff">
+          <mxGeometry x="40" y="165" width="295" height="85" as="geometry"/>
+        </mxCell>
+        <mxCell id="get_key_nest" value="PasswordCryptoService.getPublicKey()&#xa;内存生成或复用 RSA 2048 密钥对&#xa;返回 keyId + publicKeyPem + nonce&#xa;TTL 10 分钟，nonce 只在内存保存" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_nest">
+          <mxGeometry x="45" y="155" width="405" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="encrypt_client" value="浏览器 Web Crypto 加密密码&#xa;RSA-OAEP + SHA-256&#xa;请求体只带 passwordCiphertext / passwordKeyId / nonce&#xa;明文密码不进入 BFF 请求体" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2E7D32;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_browser">
+          <mxGeometry x="40" y="285" width="300" height="105" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="branch" value="业务分支" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#F57F17;strokeWidth=2;fontSize=13;fontStyle=1;" vertex="1" parent="lane_browser">
+          <mxGeometry x="110" y="430" width="160" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="register_bff" value="注册：POST /api/auth/register&#xa;BFF 只校验明显缺参&#xa;email / name / 加密密码字段透传 Nest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_bff">
+          <mxGeometry x="40" y="430" width="295" height="95" as="geometry"/>
+        </mxCell>
+        <mxCell id="register_validate" value="AuthValidationService.parseRegister()&#xa;1. consumeNonce(nonce,keyId,ciphertext)&#xa;2. 同 keyId 下 ciphertext sha256 去重&#xa;3. 私钥 RSA-OAEP-SHA256 解密密码&#xa;4. 校验 email / password 8-128 / name &lt;= 40" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_nest">
+          <mxGeometry x="45" y="390" width="405" height="125" as="geometry"/>
+        </mxCell>
+        <mxCell id="register_hash" value="PasswordService.hashPassword()&#xa;scrypt v1&#xa;salt = randomBytes(16).base64url&#xa;keyLength = 64&#xa;N=16384, r=8, p=1, maxmem=64MB&#xa;存储格式：scrypt$v1$N=...,r=...,p=...$salt$hash" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_nest">
+          <mxGeometry x="45" y="545" width="405" height="135" as="geometry"/>
+        </mxCell>
+        <mxCell id="register_db_user" value="注册事务写库&#xa;新用户：create User(status=PENDING,email,name)&#xa;同时 create UserPasswordCredential(passwordHash,passwordAlgo='scrypt')&#xa;已有 PENDING 用户：update User name/status，再 upsert 密码凭据&#xa;ACTIVE 冲突；DISABLED/LOCKED 禁止" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_db">
+          <mxGeometry x="40" y="525" width="335" height="145" as="geometry"/>
+        </mxCell>
+        <mxCell id="register_email_code" value="EmailVerificationService.issueCode(user,'register')&#xa;旧的未使用验证码：updateMany usedAt=now&#xa;生成 6 位 code，TTL 默认 10 分钟&#xa;tokenHash = sha256(email:code:AUTH_EMAIL_CODE_SECRET)&#xa;create EmailVerificationToken(sentTo,tokenHash,lastSentAt,expiresAt)&#xa;明文 code 只打印到 Nest 日志" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_db">
+          <mxGeometry x="40" y="705" width="335" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="register_audit" value="写 AuthAuditLog&#xa;event = auth.register.requested&#xa;success = true&#xa;metadata.email + ipAddress + userAgent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_db">
+          <mxGeometry x="40" y="895" width="335" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="register_ui_confirm" value="注册响应不带 token&#xa;前端清空密码，进入 confirm 模式&#xa;提示查看 Nest 日志里的验证码" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2E7D32;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_browser">
+          <mxGeometry x="40" y="735" width="300" height="95" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="confirm_bff" value="邮箱验证：POST /api/auth/email-verification/confirm&#xa;BFF 校验 email + 6 位数字 code&#xa;成功后只把 token 写 httpOnly Cookie，响应给前端时剥掉 tokens" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_bff">
+          <mxGeometry x="40" y="735" width="295" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="confirm_nest" value="AuthService.confirmEmail()&#xa;查 User，拒绝不存在 / DISABLED / LOCKED&#xa;ACTIVE 且已验证则冲突&#xa;consumeLatestCode(user, code)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_nest">
+          <mxGeometry x="45" y="720" width="405" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="confirm_code_db" value="验证码消费规则&#xa;取最新未 usedAt 的 EmailVerificationToken&#xa;过期：usedAt=now 后失败&#xa;attemptCount >= 5：usedAt=now 后失败&#xa;不匹配：attemptCount + 1&#xa;匹配：usedAt=now" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_db">
+          <mxGeometry x="40" y="1015" width="335" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="confirm_activate_db" value="验证成功事务写库&#xa;update User(status=ACTIVE,emailVerifiedAt=now)&#xa;upsert AuthAccount(provider=PASSWORD, providerAccountId=email)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_db">
+          <mxGeometry x="40" y="1185" width="335" height="95" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="login_bff" value="登录：POST /api/auth/login&#xa;BFF 校验 email + 加密密码字段&#xa;成功后设置 httpOnly Cookie&#xa;nextnest_access_token / nextnest_refresh_token" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1976D2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_bff">
+          <mxGeometry x="40" y="1015" width="295" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="login_nest" value="AuthService.login()&#xa;parseLogin 同样先 consumeNonce + 解密密码&#xa;findUnique User by email + passwordCredential&#xa;拒绝不存在凭据 / DISABLED / LOCKED&#xa;PasswordService.verifyPassword() 使用 scrypt 派生后 timingSafeEqual&#xa;未验证邮箱：重新 issueCode('login_unverified') 并拒绝登录" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_nest">
+          <mxGeometry x="45" y="895" width="405" height="160" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="issue_session_nest" value="issueSession(user, meta)&#xa;生成 refresh raw token = randomBytes(48).base64url&#xa;refresh token 入库前 sha256(token)&#xa;生成 access JWT：HS256，payload 含 sub/email/sid/type/iat/exp/jti&#xa;access 默认 15 分钟；refresh 默认 7 天" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#E65100;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_nest">
+          <mxGeometry x="45" y="1090" width="405" height="145" as="geometry"/>
+        </mxCell>
+        <mxCell id="session_db" value="会话事务写库&#xa;create AuthSession(userId,status=ACTIVE,userAgent,ipAddress,lastUsedAt,expiresAt)&#xa;嵌套 create RefreshToken(sessionId,tokenHash,expiresAt)&#xa;update User.lastLoginAt=now" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7B1FA2;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_db">
+          <mxGeometry x="40" y="1310" width="335" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="cookies_client" value="浏览器只收到 user data&#xa;access / refresh 被 BFF 放入 httpOnly sameSite=lax Cookie&#xa;前端 JS 拿不到 token&#xa;登录或验证成功后 router.replace('/dashboard')" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#2E7D32;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_browser">
+          <mxGeometry x="40" y="1045" width="300" height="115" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="audit_login_db" value="审计日志补充&#xa;登录成功：auth.login.succeeded&#xa;登录失败：auth.login.failed + reason&#xa;邮箱验证成功：auth.email_verification.confirmed&#xa;刷新：auth.token.refreshed&#xa;退出：auth.logout.succeeded" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#AD1457;strokeWidth=2;fontSize=12;align=left;spacing=8;" vertex="1" parent="lane_db">
+          <mxGeometry x="40" y="1450" width="335" height="125" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="refresh_note" value="Refresh 链路：POST /auth/refresh 时，用请求 refresh token 做 sha256 查 RefreshToken。若已 used/revoked，撤销整条 session 防重放；正常则创建新 RefreshToken，旧 token 标记 usedAt + replacedByTokenId，更新 AuthSession.lastUsedAt/expiresAt，再签发新 access JWT。" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;fillColor=#FFFFFF;strokeColor=#9CA3AF;fontSize=12;align=left;verticalAlign=top;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="930" y="30" width="780" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e1" value="请求公钥" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="get_key_client" target="get_key_bff"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="转发" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="get_key_bff" target="get_key_nest"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="返回 publicKey + keyId + nonce" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;dashed=1;" edge="1" parent="1" source="get_key_nest" target="encrypt_client"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2E7D32;strokeWidth=2;endArrow=classic;" edge="1" parent="1" source="start" target="get_key_client"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#2E7D32;strokeWidth=2;endArrow=classic;" edge="1" parent="1" source="encrypt_client" target="branch"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="注册" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="branch" target="register_bff"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="透传 Nest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="register_bff" target="register_validate"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="明文密码仅在 Nest 内存短暂出现" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="register_validate" target="register_hash"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="passwordHash 入库" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="register_hash" target="register_db_user"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" value="发验证码" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="register_db_user" target="register_email_code"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" value="审计" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="register_email_code" target="register_audit"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e12" value="返回 emailVerification" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;dashed=1;" edge="1" parent="1" source="register_email_code" target="register_ui_confirm"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e13" value="提交验证码" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="register_ui_confirm" target="confirm_bff"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e14" value="转发" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="confirm_bff" target="confirm_nest"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e15" value="查验 tokenHash" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="confirm_nest" target="confirm_code_db"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e16" value="验证通过后激活" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="confirm_code_db" target="confirm_activate_db"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e17" value="验证后自动登录" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="confirm_activate_db" target="issue_session_nest"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e18" value="登录" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="branch" target="login_bff"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e19" value="透传 Nest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1976D2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="login_bff" target="login_nest"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e20" value="密码匹配且已验证" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#E65100;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="login_nest" target="issue_session_nest"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e21" value="session + refreshHash + lastLoginAt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#7B1FA2;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="issue_session_nest" target="session_db"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e22" value="返回 tokens 给 BFF" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;dashed=1;" edge="1" parent="1" source="issue_session_nest" target="login_bff"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e23" value="Set-Cookie；响应只保留 user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#374151;strokeWidth=2;endArrow=classic;fontSize=11;dashed=1;" edge="1" parent="1" source="login_bff" target="cookies_client"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e24" value="写审计日志" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#AD1457;strokeWidth=2;endArrow=classic;fontSize=11;" edge="1" parent="1" source="issue_session_nest" target="audit_login_db"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

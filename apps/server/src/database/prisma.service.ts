@@ -21,6 +21,7 @@ export class PrismaService
 {
   private readonly logger = new Logger(PrismaService.name);
 
+  // 初始化 Prisma PostgreSQL 适配器并交给 PrismaClient。
   constructor() {
     // Prisma 7 通过 driver adapter 传入数据库连接，不再支持 schema 中写 url
     const adapter = new PrismaPg({
@@ -29,11 +30,13 @@ export class PrismaService
     super({ adapter });
   }
 
+  // 模块启动时建立数据库连接。
   async onModuleInit() {
     await this.$connect();
     this.logger.log('Database connected');
   }
 
+  // 模块销毁时关闭数据库连接。
   async onModuleDestroy() {
     await this.$disconnect();
     this.logger.log('Database disconnected');

@@ -26,6 +26,7 @@ export class TransformInterceptor<T> implements NestInterceptor<
   T,
   ApiResponse<T>
 > {
+  // 将控制器返回值统一包装成标准 API 响应体。
   intercept(
     context: ExecutionContext,
     next: CallHandler,
