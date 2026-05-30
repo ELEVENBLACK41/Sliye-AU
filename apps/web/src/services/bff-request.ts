@@ -1,77 +1,75 @@
-import type { ApiResponse } from "@workspace/contracts/common"
+import type { ApiResponse } from '@workspace/contracts/common';
 
 export type NestResponse<T> = {
-  body: ApiResponse<T | null>
-  status: number
-}
+  body: ApiResponse<T | null>;
+  status: number;
+};
 
-type NestRequestOptions<TBody = unknown> = Omit<RequestInit, "body"> & {
-  body?: TBody
-}
+type NestRequestOptions<TBody = unknown> = Omit<RequestInit, 'body'> & {
+  body?: TBody;
+};
 
 // BFF 侧请求 NestJS，上游不可用时也返回统一结构，避免 Route Handler 泄漏框架 500。
 export async function requestNest<TData, TBody = unknown>(
   path: string,
   options?: NestRequestOptions<TBody>,
 ): Promise<NestResponse<TData>> {
-  const baseUrl = getNestBaseUrl()
+  const baseUrl = getNestBaseUrl();
 
   if (!baseUrl) {
-    return createBffError<TData>("NEST_BASE_URL 未配置，无法连接后端服务", 500)
+    return createBffError<TData>('NEST_BASE_URL 未配置，无法连接后端服务', 500);
   }
 
-  const headers = new Headers(options?.headers)
-  const body = formatBody(options?.body, headers)
+  const headers = new Headers(options?.headers);
+  const body = formatBody(options?.body, headers);
 
   try {
     const response = await fetch(`${baseUrl}${path}`, {
       ...options,
       headers,
       body,
-      cache: options?.cache ?? "no-store",
-    })
+      cache: options?.cache ?? 'no-store',
+    });
 
     return {
       body: await parseNestBody<TData>(response),
       status: response.status,
-    }
+    };
   } catch {
-    return createBffError<TData>("后端服务暂不可用，请稍后再试", 503)
+    return createBffError<TData>('后端服务暂不可用，请稍后再试', 503);
   }
 }
 
 function getNestBaseUrl() {
-  return process.env.NEST_BASE_URL?.replace(/\/$/, "")
+  return process.env.NEST_BASE_URL?.replace(/\/$/, '');
 }
 
 function formatBody<TBody>(body: TBody | undefined, headers: Headers) {
   if (body === undefined || body === null) {
-    return undefined
+    return undefined;
   }
 
-  if (typeof body === "string" || body instanceof FormData) {
-    return body
+  if (typeof body === 'string' || body instanceof FormData) {
+    return body;
   }
 
-  if (!headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json")
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
-  return JSON.stringify(body)
+  return JSON.stringify(body);
 }
 
-async function parseNestBody<T>(
-  response: Response,
-): Promise<ApiResponse<T | null>> {
+async function parseNestBody<T>(response: Response): Promise<ApiResponse<T | null>> {
   try {
-    return (await response.json()) as ApiResponse<T | null>
+    return (await response.json()) as ApiResponse<T | null>;
   } catch {
     return {
       code: response.status,
-      message: response.ok ? "success" : "后端服务响应格式异常",
+      message: response.ok ? 'success' : '后端服务响应格式异常',
       data: null,
       timestamp: Date.now(),
-    }
+    };
   }
 }
 
@@ -84,5 +82,5 @@ function createBffError<T>(message: string, status: number): NestResponse<T> {
       data: null,
       timestamp: Date.now(),
     },
-  }
+  };
 }
