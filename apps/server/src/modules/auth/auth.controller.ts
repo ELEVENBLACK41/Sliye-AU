@@ -7,6 +7,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -23,6 +24,7 @@ import type {
   RequestClientMeta,
 } from './types/auth.types';
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   // 注入认证服务和密码传输加密服务。
@@ -80,6 +82,7 @@ export class AuthController {
 
   // 查询当前登录用户的个人资料。
   @Get('profile')
+  @ApiBearerAuth()
   @UseGuards(AccessTokenGuard)
   profile(@CurrentUser() user: AuthUserResponse) {
     return this.authService.getProfile(user.id);
@@ -87,6 +90,7 @@ export class AuthController {
 
   // 查询当前登录用户的个人资料别名接口。
   @Get('me')
+  @ApiBearerAuth()
   @UseGuards(AccessTokenGuard)
   me(@CurrentUser() user: AuthUserResponse) {
     return this.authService.getProfile(user.id);
@@ -95,6 +99,7 @@ export class AuthController {
   // 注销当前访问令牌对应的登录会话。
   @Post('logout')
   @HttpCode(200)
+  @ApiBearerAuth()
   @UseGuards(AccessTokenGuard)
   logout(@Req() request: AuthenticatedRequest) {
     return this.authService.logout(request.auth!, this.getClientMeta(request));

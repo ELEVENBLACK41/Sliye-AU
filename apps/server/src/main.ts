@@ -9,9 +9,10 @@
  * @Copyright: Copyright 1990 - 2026
  */
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 // 启动 Nest 应用并注册全局中间能力。
 async function bootstrap() {
@@ -24,7 +25,17 @@ async function bootstrap() {
   // 全局响应拦截器
   app.useGlobalInterceptors(new TransformInterceptor());
 
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('NextNest API')
+    .setDescription('NextNest backend API documentation')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api-docs', app, swaggerDocument);
+
   await app.listen(process.env.PORT ?? 3001);
   //不与前端端口冲突
 }
+
 bootstrap();
