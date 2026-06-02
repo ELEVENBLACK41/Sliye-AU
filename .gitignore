@@ -17,3 +17,5 @@ apps/server/src/generated/
 
 # editor
 .DS_Store
+# idea
+.idea
