@@ -1,6 +1,16 @@
+/*
+ * @Author: shaoliye
+ * @Date: 2026-05-15 13:49:43
+ * @Email: elevenblack41@gmail.com
+ * @LastEditTime: 2026-06-02 16:00:08
+ * @LastEditors: shaoliye
+ * @LastEditorsEmail: elevenblack41@gmail.com
+ * @Description: 
+ * @Copyright: Copyright 1990 - 2026
+ */
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import "@/src/styles/globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

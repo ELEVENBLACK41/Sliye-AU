@@ -87,9 +87,7 @@ export type OperationResult = {
 
 export type LoginApiResponse = ApiResponse<AuthSession | null>;
 export type RegisterApiResponse = ApiResponse<RegisterResult | null>;
-export type SendEmailVerificationApiResponse =
-  ApiResponse<EmailVerificationState | null>;
+export type SendEmailVerificationApiResponse = ApiResponse<EmailVerificationState | null>;
 export type ConfirmEmailApiResponse = ApiResponse<AuthSession | null>;
 export type PasswordPublicKeyApiResponse = ApiResponse<PasswordPublicKey | null>;
-export type SanitizedAuthSessionApiResponse =
-  ApiResponse<SanitizedAuthSession | null>;
+export type SanitizedAuthSessionApiResponse = ApiResponse<SanitizedAuthSession | null>;
