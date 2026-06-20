@@ -14,6 +14,7 @@ import {
   GitBranch,
   Home,
   Settings,
+  ShieldCheck,
   UsersRound,
 } from "lucide-react"
 
@@ -49,6 +50,11 @@ const dashboardMenus = [
     icon: ClipboardList,
   },
   {
+    title: "用户管理",
+    href: "/dashboard/users",
+    icon: ShieldCheck,
+  },
+  {
     title: "会议协作",
     href: "/dashboard/meetings",
     icon: UsersRound,
@@ -57,11 +63,6 @@ const dashboardMenus = [
     title: "时间线",
     href: "/dashboard/timeline",
     icon: GitBranch,
-  },
-  {
-    title: "用户管理",
-    href: "/dashboard/user",
-    icon: UsersRound,
   },
   {
     title: "系统设置",
@@ -137,4 +138,3 @@ export function DashboardShell({ children }: DashboardShellProps) {
     </SidebarProvider>
   )
 }
-
