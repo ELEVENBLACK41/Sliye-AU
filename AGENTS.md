@@ -40,7 +40,7 @@
 - `packages/contracts` 是前后端共享类型契约包，包名 `@workspace/contracts`，在写这个的时候也要写注释。
 - API 请求体、响应体、跨端共享枚举、认证用户、token 等结构放进 contracts。
 - 页面表单、组件 props、后端实体、Prisma model、Nest 上下文、store 状态不要放进 contracts。
-- contracts 只导出类型，不写请求函数、不放业务实现、不依赖 app 代码。
+- contracts 只导出类型，不写请求函数、不放业务实现、不依赖 app 代码，共享类型也要写详细的备注
 - 调用方使用 `import type`，例如：
 
 ```ts

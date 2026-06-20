@@ -155,6 +155,18 @@ node dist/src/main.js
 | POST | `/api/v1/auth/refresh` | 刷新 access token |
 | GET | `/api/v1/auth/me` | 获取当前登录用户 |
 | POST | `/api/v1/auth/logout` | 注销当前会话 |
+| GET | `/api/v1/access-management/users` | 查询用户、角色和用户级授权 |
+| GET | `/api/v1/access-management/roles` | 查询角色列表 |
+| POST | `/api/v1/access-management/roles` | 创建角色 |
+| PATCH | `/api/v1/access-management/roles/:roleId` | 更新角色 |
+| GET | `/api/v1/access-management/permissions` | 查询权限列表 |
+| POST | `/api/v1/access-management/permissions` | 创建权限 |
+| POST | `/api/v1/access-management/users/:userId/roles` | 给用户绑定角色 |
+| DELETE | `/api/v1/access-management/users/:userId/roles/:roleId` | 解除用户角色 |
+| POST | `/api/v1/access-management/roles/:roleId/permissions` | 给角色绑定权限 |
+| DELETE | `/api/v1/access-management/roles/:roleId/permissions/:permissionId` | 解除角色权限 |
+| POST | `/api/v1/access-management/users/:userId/permissions` | 给用户添加直接授权或拒绝 |
+| DELETE | `/api/v1/access-management/users/:userId/permissions/:userPermissionId` | 删除用户级直接授权或拒绝 |
 
 ---
 

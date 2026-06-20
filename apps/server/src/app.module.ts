@@ -14,6 +14,7 @@ import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { validateEnvConfig } from './config/env.config';
 import { HealthModule } from './modules/health/health.module';
+import { AccessManagementModule } from './modules/access-management/access-management.module';
 // import { AppController } from './app.controller';
 // import { AppService } from './app.service';
 
@@ -26,6 +27,7 @@ import { HealthModule } from './modules/health/health.module';
     PrismaModule,
     AuthModule,
     HealthModule,
+    AccessManagementModule,
   ],
   // controllers: [AppController],
   // providers: [AppService],
