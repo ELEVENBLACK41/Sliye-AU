@@ -18,6 +18,7 @@ import {
   UsersRound,
 } from "lucide-react"
 
+import { LogoutButton } from "@/features/auth/components/logout-button"
 import {
   Sidebar,
   SidebarContent,
@@ -122,14 +123,17 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
-          <SidebarTrigger />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">Sliye-AU</p>
-            <p className="truncate text-xs text-muted-foreground">
-              先把导航和页面骨架搭稳
-            </p>
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <SidebarTrigger />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">Sliye-AU</p>
+              <p className="truncate text-xs text-muted-foreground">
+                先把导航和页面骨架搭稳
+              </p>
+            </div>
           </div>
+          <LogoutButton />
         </header>
         <div className="flex flex-1 flex-col bg-zinc-50 p-4 md:p-6">
           {children}

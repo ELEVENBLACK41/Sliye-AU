@@ -25,6 +25,7 @@ import type {
   AccessPermission,
   AccessUser,
 } from "@/features/access-management/types/access-management.type"
+import { AccessManagementActions } from "./access-management-actions"
 
 type AccessManagementPageProps = {
   data: AccessManagementDashboardData
@@ -57,6 +58,8 @@ export function AccessManagementPage({ data }: AccessManagementPageProps) {
         <SummaryCard title="角色总数" value={data.roles.length} />
         <SummaryCard title="权限码总数" value={data.permissions.length} />
       </div>
+
+      <AccessManagementActions data={data} />
 
       <Card className="rounded-md shadow-none">
         <CardHeader>
