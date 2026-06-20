@@ -29,8 +29,18 @@ export class TestService {
       });
       await this.prisma.post.createMany({
         data: [
-          { title: 'Hello World', content: 'Alice 的第一篇文章', published: true, authorId: 1 },
-          { title: 'NestJS 入门', content: 'Bob 写的 NestJS 教程', published: true, authorId: 2 },
+          {
+            title: 'Hello World',
+            content: 'Alice 的第一篇文章',
+            published: true,
+            authorId: 1,
+          },
+          {
+            title: 'NestJS 入门',
+            content: 'Bob 写的 NestJS 教程',
+            published: true,
+            authorId: 2,
+          },
           { title: '草稿', content: null, published: false, authorId: 3 },
         ],
       });

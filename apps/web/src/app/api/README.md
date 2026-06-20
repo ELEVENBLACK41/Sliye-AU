@@ -39,17 +39,13 @@ URL 和目录保持一致：
 
 ```text
 api/
-  test/
-    route.ts                  # GET /api/test -> Nest GET /test
-    users/
-      route.ts                # GET /api/test/users -> Nest GET /test/users
   auth/
     login/
-      route.ts                # POST /api/auth/login -> Nest POST /auth/login
+      route.ts                # POST /api/auth/login -> Nest POST {NEST_BASE_URL}/auth/login
     logout/
-      route.ts                # POST /api/auth/logout -> Nest POST /auth/logout
+      route.ts                # POST /api/auth/logout -> Nest POST {NEST_BASE_URL}/auth/logout
     register/
-      route.ts                # POST /api/auth/register -> Nest POST /auth/register
+      route.ts                # POST /api/auth/register -> Nest POST {NEST_BASE_URL}/auth/register
 ```
 
 新增接口时优先按业务模块分组，比如：
@@ -125,7 +121,7 @@ return upstreamError(res.status)
 | 大厂常见做法 | 本项目对应做法 |
 | --- | --- |
 | 浏览器请求同域 BFF，不直接请求后端服务 | 浏览器只请求 `/api/*` |
-| 服务端环境变量不加 `NEXT_PUBLIC_` | `NEST_BASE_URL` 只在 Route Handler/BFF service 读取 |
+| 服务端环境变量不加 `NEXT_PUBLIC_` | `NEST_BASE_URL` / `NEST_API_PREFIX` 只在 Route Handler/BFF service 读取 |
 | API 文件只做校验、鉴权、编排 | `route.ts` 保持薄，转发逻辑下沉到 `*-bff.service.ts` |
 | token 不放 localStorage | access/refresh token 写入 `httpOnly` Cookie |
 | 统一响应结构和错误处理 | Nest 返回 `{ code, message, data, timestamp }`，Web 用 `requestData()` 消费 |
@@ -149,17 +145,7 @@ LoginForm
   -> requestData("/api/auth/login")
   -> app/api/auth/login/route.ts
   -> auth-bff.service.ts requestLoginFromNest()
-  -> NestJS POST /auth/login
+  -> NestJS POST {NEST_BASE_URL}/auth/login
   -> BFF 写入 httpOnly Cookie
   -> 页面只拿到 user
-```
-
-测试用户列表：
-
-```text
-dashboard/page.tsx
-  -> features/test/services/test.service.ts getUsers()
-  -> request("/api/test/users")
-  -> app/api/test/users/route.ts
-  -> NestJS GET /test/users
 ```

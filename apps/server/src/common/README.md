@@ -8,10 +8,11 @@
 
 ```
 common/
+├── constants/      # 常量：统一响应码、默认文案等
 ├── interceptors/   # 拦截器：处理请求 / 响应的横切逻辑
 ├── filters/        # 异常过滤器：统一捕获和格式化异常响应
 ├── guards/         # 守卫：路由访问控制（认证 / 权限）[待扩展]
-├── pipes/          # 管道：入参校验与类型转换 [待扩展]
+├── pipes/          # 管道：入参校验与类型转换 [按需扩展]
 ├── decorators/     # 自定义装饰器 [待扩展]
 └── utils/          # 纯函数工具库 [待扩展]
 ```
@@ -50,16 +51,7 @@ export class TransformInterceptor<T> implements NestInterceptor<
 >
 ```
 
-`ApiResponse<T>` 接口也在此文件中导出，供前端类型系统复用：
-
-```ts
-export interface ApiResponse<T> {
-  code: number;
-  message: string;
-  data: T;
-  timestamp: number;
-}
-```
+`ApiResponse<T>` 来自 `@workspace/contracts/common`，前后端共享同一响应契约。
 
 ---
 
@@ -118,14 +110,14 @@ app.useGlobalInterceptors(new TransformInterceptor());
 
 ---
 
-## pipes/ — 管道（待扩展）
+## pipes/ — 管道
 
 **预期用途**：请求入参的校验与转换，典型场景：
 
 - `ValidationPipe`：配合 `class-validator` 校验 DTO
 - `ParseIntPipe`：将字符串路由参数转换为整数
 
-**推荐全局配置**（添加到 `main.ts`）：
+当前已在 `main.ts` 注册全局 `ValidationPipe`：
 
 ```ts
 app.useGlobalPipes(

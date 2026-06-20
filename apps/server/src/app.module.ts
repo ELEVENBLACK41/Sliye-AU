@@ -9,19 +9,23 @@
  * @Copyright: Copyright 1990 - 2026
  */
 import { Module } from '@nestjs/common';
-import { TestModule } from './modules/test/test.module';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './database/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { validateEnvConfig } from './config/env.config';
+import { HealthModule } from './modules/health/health.module';
 // import { AppController } from './app.controller';
 // import { AppService } from './app.service';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: validateEnvConfig,
+    }),
     PrismaModule,
     AuthModule,
-    TestModule,
+    HealthModule,
   ],
   // controllers: [AppController],
   // providers: [AppService],

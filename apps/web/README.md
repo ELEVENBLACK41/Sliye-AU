@@ -46,7 +46,7 @@ pnpm start        # 启动生产服务
 pnpm lint         # ESLint 检查
 ```
 
-> 后端 NestJS 服务需同时运行在 `http://localhost:3001`（见 `server/` 目录）。
+> 后端 NestJS 服务需同时运行在 `http://localhost:3001`，BFF 访问地址默认包含 `/api/v1` 前缀（见 `server/` 目录）。
 
 ---
 
@@ -57,7 +57,7 @@ pnpm lint         # ESLint 检查
 Next.js API Routes 作为 BFF 层，**浏览器页面只访问 `/api/*`，不直接调用 NestJS**，保持跨域安全隔离。
 
 ```
-浏览器 → Next.js /api/*（Server 侧）→ NestJS :3001
+浏览器 → Next.js /api/*（Server 侧）→ NestJS :3001/api/v1
 ```
 
 ### 目录分层原则
@@ -76,4 +76,5 @@ Next.js API Routes 作为 BFF 层，**浏览器页面只访问 `/api/*`，不直
 | 变量 | 说明 | 示例值 |
 |---|---|---|
 | `NEST_BASE_URL` | NestJS 服务地址（BFF Server 侧使用，不暴露给浏览器） | `http://localhost:3001` |
+| `NEST_API_PREFIX` | BFF 请求 NestJS 时拼接的 API 前缀，默认 `api/v1` | `api/v1` |
 | `NEXT_PUBLIC_BASE_URL` | 浏览器可见基础 URL（用于客户端 fetch） | `http://localhost:3000` |

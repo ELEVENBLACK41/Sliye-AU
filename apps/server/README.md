@@ -28,7 +28,8 @@
 | ORM | Prisma 7（Driver Adapter 模式） |
 | 数据库 | PostgreSQL |
 | 数据库连接 | `@prisma/adapter-pg` + `pg` |
-| 配置管理 | `@nestjs/config` |
+| 配置管理 | `@nestjs/config` + 启动期环境变量校验 |
+| 入参校验 | `class-validator` + `class-transformer` |
 | HTTP 平台 | Express（默认） |
 | 构建 | `@nestjs/cli` |
 | 代码规范 | ESLint + Prettier |
@@ -45,7 +46,7 @@ server/
 │   └── migrations/             # 数据库迁移历史
 │
 ├── src/
-│   ├── main.ts                 # 应用入口：注册全局 Filter / Interceptor
+│   ├── main.ts                 # 应用入口：注册全局 Prefix / Pipe / Filter / Interceptor
 │   ├── app.module.ts           # 根模块：汇总所有功能模块
 │   │
 │   ├── database/               # 数据库基础设施层
@@ -56,17 +57,16 @@ server/
 │   │   ├── interceptors/       # 拦截器（统一响应格式）
 │   │   ├── filters/            # 异常过滤器（统一异常格式）
 │   │   ├── guards/             # 守卫（鉴权 / 权限）[待扩展]
-│   │   ├── pipes/              # 管道（入参校验 / 转换）[待扩展]
+│   │   ├── pipes/              # 管道（入参校验 / 转换，当前全局管道在 main.ts 注册）
 │   │   ├── decorators/         # 自定义装饰器 [待扩展]
 │   │   └── utils/              # 工具函数 [待扩展]
 │   │
-│   ├── config/                 # 配置层（env 解析、类型化配置）[待扩展]
+│   ├── config/                 # 配置层（env 解析、启动期校验、默认值收敛）
 │   │
 │   ├── modules/                # 业务功能模块
-│   │   ├── test/               # 测试模块（开发调试用）
-│   │   ├── user/               # 用户模块 [待扩展]
-│   │   ├── auth/               # 认证模块 [待扩展]
-│   │   └── audit/              # 审计日志模块 [待扩展]
+│   │   ├── health/             # 健康检查模块
+│   │   ├── auth/               # 认证模块
+│   │   └── test/               # 历史测试模块（未注册到 AppModule）
 │   │
 │   ├── types/                  # 全局共享类型定义 [待扩展]
 │   └── generated/              # Prisma 自动生成的客户端（勿手动编辑）
@@ -95,6 +95,7 @@ pnpm install
 ```bash
 # 编辑 .env，设置 DATABASE_URL
 DATABASE_URL="postgresql://user:pass@localhost:5432/dbname?schema=public"
+SERVER_API_PREFIX="api/v1"
 ```
 
 ### 数据库迁移
@@ -125,19 +126,35 @@ node dist/src/main.js
 | 变量名 | 说明 | 示例 |
 |--------|------|------|
 | `DATABASE_URL` | PostgreSQL 连接串 | `postgresql://user:pass@localhost:5432/dbname?schema=public` |
+| `NODE_ENV` | 运行环境，可选 `development` / `production` / `test` | `development` |
 | `PORT` | 服务监听端口（可选，默认 3001） | `3001` |
+| `SERVER_API_PREFIX` | 全局 API 前缀（可选，默认 `api/v1`） | `api/v1` |
+| `AUTH_ACCESS_TOKEN_SECRET` | access token 签名密钥，生产环境必填且不少于 32 位 | `replace-with-at-least-32-random-characters` |
+| `AUTH_ACCESS_TOKEN_TTL_SECONDS` | access token 有效期秒数 | `900` |
+| `AUTH_REFRESH_TOKEN_TTL_SECONDS` | refresh token 有效期秒数 | `2592000` |
+| `AUTH_EMAIL_CODE_SECRET` | 邮箱验证码哈希密钥，生产环境必填且不少于 32 位 | `replace-with-at-least-32-random-characters` |
+| `AUTH_EMAIL_CODE_TTL_SECONDS` | 邮箱验证码有效期秒数 | `600` |
+| `AUTH_EMAIL_CODE_COOLDOWN_SECONDS` | 邮箱验证码重发冷却秒数 | `60` |
+| `AUTH_EMAIL_CODE_MAX_ATTEMPTS` | 单个验证码最大尝试次数 | `5` |
 
 ---
 
 ## 接口列表
 
-> 所有响应均包装为统一格式，见下节。
+> 默认全局前缀为 `/api/v1`，所有响应均包装为统一格式，见下节。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/test` | 心跳测试 |
-| GET | `/test/test1` | 心跳测试 2 |
-| GET | `/test/users` | 查询用户列表（含文章），表空自动 seed |
+| GET | `/api/v1/health` | 服务存活检查 |
+| GET | `/api/v1/health/ready` | 服务就绪检查，校验数据库连接 |
+| GET | `/api/v1/auth/password-public-key` | 获取密码传输加密公钥 |
+| POST | `/api/v1/auth/register` | 注册并生成邮箱验证码 |
+| POST | `/api/v1/auth/email-verification/send` | 重新发送邮箱验证码 |
+| POST | `/api/v1/auth/email-verification/confirm` | 确认邮箱验证码并登录 |
+| POST | `/api/v1/auth/login` | 登录 |
+| POST | `/api/v1/auth/refresh` | 刷新 access token |
+| GET | `/api/v1/auth/me` | 获取当前登录用户 |
+| POST | `/api/v1/auth/logout` | 注销当前会话 |
 
 ---
 
@@ -182,6 +199,9 @@ node dist/src/main.js
 | 模块化分层架构 | 按 `database / common / modules / config` 四层划分，职责清晰 |
 | 全局统一响应格式 | `TransformInterceptor` 封装所有成功响应 |
 | 全局统一异常处理 | `AllExceptionsFilter` 捕获全量异常，避免裸露堆栈 |
+| 全局 API 前缀 | 默认 `/api/v1`，通过 `SERVER_API_PREFIX` 配置 |
+| 全局 DTO 校验 | `ValidationPipe` 开启 `whitelist`、`forbidNonWhitelisted`、`transform` |
+| 健康检查 | 提供 `health` / `health/ready` 两类接口 |
 | 数据库连接生命周期管理 | `PrismaService` 实现 `OnModuleInit / OnModuleDestroy`，支持优雅关闭 |
 | 全局 PrismaModule | `@Global()` 装饰，避免在每个业务模块重复导入 |
 | 配置全局化 | `ConfigModule.forRoot({ isGlobal: true })` |
@@ -196,13 +216,10 @@ node dist/src/main.js
 
 | 规范项 | 当前状态 | 建议 |
 |--------|----------|------|
-| 入参校验 | `pipes/` 目录为空，接口无 DTO 校验 | 安装 `class-validator + class-transformer`，为每个接口定义请求 DTO |
-| API 版本控制 | 无版本前缀 | 使用 `app.setGlobalPrefix('api/v1')` 或路由级版本控制 |
-| Swagger 文档 | 无接口文档 | 集成 `@nestjs/swagger`，自动生成 OpenAPI 文档 |
-| 认证鉴权 | `auth/guards/` 目录均为空 | 集成 JWT（`@nestjs/passport` + `passport-jwt`） |
+| Swagger 文档 | 已集成 `/api-docs` | 后续补充更多 `@ApiResponse` 示例 |
+| 认证鉴权 | 已有自研 access token guard | 后续可扩展权限 guard 和策略装饰器 |
 | TypeScript strict 模式 | `noImplicitAny: false` | 逐步开启，消除隐式 `any` |
-| Seed 数据与业务代码混合 | `TestService.getUsers()` 内含 seed 逻辑 | 独立 `prisma/seed.ts`，通过 `prisma db seed` 命令执行 |
-| 环境变量类型安全 | `DATABASE_URL` 为 `string \| undefined` | 用 `Joi` 在启动时校验必填项，防止空值运行时崩溃 |
-| `start:prod` 路径错误 | `package.json` 中写的是 `dist/main` | 应改为 `dist/src/main` |
-| 测试覆盖 | 无业务单元测试 | 补充 `*.spec.ts` 单元测试和 E2E 测试 |
-| 异常过滤器 any 类型 | `exception.getResponse() as any` | 使用类型收窄替代 `as any` |
+| Seed 数据与业务代码混合 | 历史 `TestModule` 仍保留源码但未注册 | 后续删除或迁移为独立 seed 脚本 |
+| 环境变量类型安全 | 已通过 `validateEnvConfig` 启动期校验 | 后续按模块拆分更多类型化配置 |
+| `start:prod` 路径错误 | 已改为 `dist/src/main` | 后续可补 Dockerfile / 部署说明 |
+| 测试覆盖 | 已有配置校验单测，业务测试仍少 | 补充 auth service、guard 和后续 decisions 模块测试 |

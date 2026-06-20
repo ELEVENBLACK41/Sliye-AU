@@ -6,14 +6,20 @@
  * @Copyright: Copyright 1990 - 2026
  */
 import {
-  ExceptionFilter,
-  Catch,
   ArgumentsHost,
+  Catch,
+  ExceptionFilter,
   HttpException,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { API_ERROR_DATA } from '../constants/api-response.constants';
+
+type HttpExceptionBody = {
+  message?: string | string[];
+  error?: string;
+};
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -30,10 +36,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException
-        ? (exception.getResponse() as any)?.message ?? exception.message
-        : 'Internal server error';
+    const message = this.getMessage(exception);
 
     this.logger.error(
       `[${request.method}] ${request.url} → ${status} ${message}`,
@@ -42,9 +45,39 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     response.status(status).json({
       code: status,
-      message: Array.isArray(message) ? message.join('; ') : message,
-      data: null,
+      message,
+      data: API_ERROR_DATA,
       timestamp: Date.now(),
     });
+  }
+
+  // 从 Nest 标准异常体中提取面向调用方的错误文案。
+  private getMessage(exception: unknown): string {
+    if (!(exception instanceof HttpException)) {
+      return 'Internal server error';
+    }
+
+    const response = exception.getResponse();
+
+    if (typeof response === 'string') {
+      return response;
+    }
+
+    if (this.isHttpExceptionBody(response)) {
+      const { message, error } = response;
+
+      if (Array.isArray(message)) {
+        return message.join('; ');
+      }
+
+      return message ?? error ?? exception.message;
+    }
+
+    return exception.message;
+  }
+
+  // 判断异常响应是否是 Nest 常见的对象格式。
+  private isHttpExceptionBody(value: unknown): value is HttpExceptionBody {
+    return typeof value === 'object' && value !== null;
   }
 }

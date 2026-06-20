@@ -29,6 +29,7 @@ packages/
 # apps/server/.env
 DATABASE_URL=postgresql://用户名:密码@localhost:5432/数据库名
 PORT=3001
+SERVER_API_PREFIX=api/v1
 ```
 
 **示例（本地开发）：**
@@ -36,6 +37,7 @@ PORT=3001
 ```bash
 DATABASE_URL=postgresql://postgres:123456@localhost:5432/Sliye
 PORT=3001
+SERVER_API_PREFIX=api/v1
 ```
 
 > 参考模板：[apps/server/.env.example](apps/server/.env.example)
@@ -46,6 +48,7 @@ PORT=3001
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL 连接字符串，Prisma 和 NestJS 都会读取 | 必填 |
 | `PORT` | NestJS 监听端口 | `3001` |
+| `SERVER_API_PREFIX` | NestJS 全局 API 前缀 | `api/v1` |
 
 ### 2. 前端（apps/web）
 
@@ -55,6 +58,7 @@ PORT=3001
 # apps/web/.env.local
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 NEST_BASE_URL=http://localhost:3001
+NEST_API_PREFIX=api/v1
 ```
 
 **变量说明：**
@@ -62,7 +66,8 @@ NEST_BASE_URL=http://localhost:3001
 | 变量名 | 说明 |
 |---|---|
 | `NEXT_PUBLIC_BASE_URL` | 前端页面发起请求的 base URL，指向 Next.js 自身（走 BFF 代理层） |
-| `NEST_BASE_URL` | 服务端（BFF）代理请求时使用的 NestJS 地址，仅服务端可读 |
+| `NEST_BASE_URL` | 服务端（BFF）代理请求时使用的 NestJS 服务地址，仅服务端可读 |
+| `NEST_API_PREFIX` | BFF 请求 NestJS 时自动拼接的 API 前缀，默认 `api/v1` |
 
 > `NEXT_PUBLIC_` 前缀的变量会暴露到浏览器，`NEST_BASE_URL` 不加前缀所以只在服务端可见，更安全。
 
@@ -72,8 +77,8 @@ NEST_BASE_URL=http://localhost:3001
 
 ```
 浏览器 / SSR
-  → http://localhost:3000/api/test      (Next.js BFF 路由)
-  → http://localhost:3001/test          (NestJS 接口)
+  → http://localhost:3000/api/*              (Next.js BFF 路由)
+  → http://localhost:3001/api/v1/*           (NestJS 接口)
   → PostgreSQL 数据库
 ```
 
@@ -101,7 +106,7 @@ pnpm dev
 
 ## 常见问题
 
-**Q: 页面报错 `Failed to parse URL from undefined/api/test`**  
+**Q: 页面报错 `Failed to parse URL from undefined/api/...`**  
 A: `apps/web/.env.local` 未创建或 `NEXT_PUBLIC_BASE_URL` 未设置，按上文步骤创建后重启 web dev server。
 
 **Q: 数据库连接失败**  

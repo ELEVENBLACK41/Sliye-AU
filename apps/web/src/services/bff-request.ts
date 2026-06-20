@@ -1,5 +1,7 @@
 import type { ApiResponse } from '@workspace/contracts/common';
 
+const DEFAULT_NEST_API_PREFIX = 'api/v1';
+
 export type NestResponse<T> = {
   body: ApiResponse<T | null>;
   status: number;
@@ -40,8 +42,28 @@ export async function requestNest<TData, TBody = unknown>(
   }
 }
 
+// 读取 Nest 服务地址，并自动补全默认 API 前缀，兼容旧的本地 NEST_BASE_URL 写法。
 function getNestBaseUrl() {
-  return process.env.NEST_BASE_URL?.replace(/\/$/, '');
+  const baseUrl = process.env.NEST_BASE_URL?.replace(/\/+$/, '');
+
+  if (!baseUrl) {
+    return undefined;
+  }
+
+  const apiPrefix = normalizeApiPrefix(
+    process.env.NEST_API_PREFIX ?? DEFAULT_NEST_API_PREFIX,
+  );
+
+  if (!apiPrefix || baseUrl.endsWith(`/${apiPrefix}`)) {
+    return baseUrl;
+  }
+
+  return `${baseUrl}/${apiPrefix}`;
+}
+
+// 标准化 Nest API 前缀，允许通过 NEST_API_PREFIX="" 显式关闭前缀拼接。
+function normalizeApiPrefix(prefix: string) {
+  return prefix.replace(/^\/+|\/+$/g, '');
 }
 
 function formatBody<TBody>(body: TBody | undefined, headers: Headers) {
