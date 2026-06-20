@@ -4,6 +4,14 @@
  * @Description: 用户管理页面组件，展示用户、角色和权限码的基础管理视图
  * @Copyright: Copyright 1990 - 2026
  */
+import { ShieldCheck } from "lucide-react"
+import { ACCESS_MANAGEMENT_PERMISSIONS } from "@workspace/contracts/access"
+
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@workspace/ui/components/alert"
 import { Badge } from "@workspace/ui/components/badge"
 import {
   Card,
@@ -29,6 +37,7 @@ import { AccessManagementActions } from "./access-management-actions"
 
 type AccessManagementPageProps = {
   data: AccessManagementDashboardData
+  currentUserPermissions: string[]
 }
 
 type AccessManagementErrorPageProps = {
@@ -43,14 +52,29 @@ const userStatusText: Record<AccessUser["status"], string> = {
 }
 
 // 渲染用户、角色、权限码管理页面。
-export function AccessManagementPage({ data }: AccessManagementPageProps) {
+export function AccessManagementPage({
+  data,
+  currentUserPermissions,
+}: AccessManagementPageProps) {
+  const canWrite = currentUserPermissions.includes(
+    ACCESS_MANAGEMENT_PERMISSIONS.write,
+  )
+
   return (
     <main className="flex flex-col gap-4">
-      <section className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-normal">用户管理</h1>
-        <p className="text-sm text-muted-foreground">
-          查看用户、角色和权限码的基础关系，后续可在这里补充绑定和授权操作。
-        </p>
+      <section className="flex flex-col justify-between gap-3 rounded-md border bg-background p-4 md:flex-row md:items-center">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-5 text-emerald-700" aria-hidden />
+            <h1 className="text-xl font-semibold tracking-normal">用户管理</h1>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            维护用户、角色、权限码和直接授权关系；前端只做展示控制，后端接口负责真实拦截。
+          </p>
+        </div>
+        <Badge variant={canWrite ? "default" : "secondary"}>
+          {canWrite ? "可管理授权" : "只读视图"}
+        </Badge>
       </section>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -59,7 +83,17 @@ export function AccessManagementPage({ data }: AccessManagementPageProps) {
         <SummaryCard title="权限码总数" value={data.permissions.length} />
       </div>
 
-      <AccessManagementActions data={data} />
+      {canWrite ? (
+        <AccessManagementActions data={data} />
+      ) : (
+        <Alert className="rounded-md">
+          <ShieldCheck aria-hidden />
+          <AlertTitle>当前账号没有写入权限</AlertTitle>
+          <AlertDescription>
+            你可以查看用户、角色和权限结构，但不能分配角色或变更权限。
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card className="rounded-md shadow-none">
         <CardHeader>
@@ -131,7 +165,7 @@ export function AccessManagementPage({ data }: AccessManagementPageProps) {
                   <TableHead>角色</TableHead>
                   <TableHead>说明</TableHead>
                   <TableHead>用户数</TableHead>
-                  <TableHead>权限数</TableHead>
+                  <TableHead>拥有权限</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -141,7 +175,14 @@ export function AccessManagementPage({ data }: AccessManagementPageProps) {
                       <TableCell className="font-medium">{role.name}</TableCell>
                       <TableCell>{role.desc || "暂无说明"}</TableCell>
                       <TableCell>{role.userCount}</TableCell>
-                      <TableCell>{role.permissionCount}</TableCell>
+                      <TableCell>
+                        <BadgeList
+                          items={role.permissions.map(
+                            (permission) => permission.code,
+                          )}
+                          emptyText="暂无权限"
+                        />
+                      </TableCell>
                     </TableRow>
                   ))
                 ) : (

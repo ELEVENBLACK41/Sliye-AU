@@ -12,6 +12,7 @@
 import type {
   ConfirmEmailApiResponse,
   ConfirmEmailFormValues,
+  AuthUser,
   LoginApiResponse,
   LoginRequestPayload,
   OperationResult,
@@ -83,6 +84,16 @@ export function requestSendEmailVerificationFromNest(
 export function requestLogoutFromNest(accessToken: string): Promise<NestResponse<OperationResult>> {
   return requestNest<OperationResult>('/auth/logout', {
     method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}
+
+// 查询当前登录用户资料，包含服务端计算后的权限码集合。
+export function requestProfileFromNest(accessToken: string): Promise<NestResponse<AuthUser>> {
+  return requestNest<AuthUser>('/auth/profile', {
+    method: 'GET',
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

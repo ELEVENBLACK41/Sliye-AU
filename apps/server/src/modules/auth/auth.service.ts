@@ -431,7 +431,10 @@ export class AuthService {
 
   // 查询可用用户的认证资料。
   async getProfile(userId: number): Promise<AuthUserResponse> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: this.userAccessInclude(),
+    });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedException('User is not available');
@@ -608,5 +611,37 @@ export class AuthService {
         }`,
       );
     }
+  }
+
+  // 统一维护认证资料需要携带的角色权限和用户级直接授权。
+  private userAccessInclude() {
+    return {
+      roles: {
+        include: {
+          role: {
+            include: {
+              perms: {
+                include: {
+                  perm: {
+                    select: {
+                      code: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      permissions: {
+        include: {
+          permission: {
+            select: {
+              code: true,
+            },
+          },
+        },
+      },
+    };
   }
 }

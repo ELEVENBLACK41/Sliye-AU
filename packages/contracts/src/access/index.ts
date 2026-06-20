@@ -8,6 +8,14 @@ export type AccessUserStatus = 'PENDING' | 'ACTIVE' | 'DISABLED' | 'LOCKED';
 
 export type AccessPermissionEffect = 'ALLOW' | 'DENY';
 
+export const ACCESS_MANAGEMENT_PERMISSIONS = {
+  read: 'access-management:read',
+  write: 'access-management:write',
+} as const;
+
+export type AccessManagementPermission =
+  (typeof ACCESS_MANAGEMENT_PERMISSIONS)[keyof typeof ACCESS_MANAGEMENT_PERMISSIONS];
+
 export type AccessDataScope =
   | 'ALL'
   | 'OWN'
@@ -22,6 +30,7 @@ export type AccessRole = {
   desc: string | null;
   createdAt: string;
   updatedAt: string;
+  permissions: AccessPermission[];
   permissionCount: number;
   userCount: number;
 };
@@ -99,4 +108,3 @@ export type AssignDirectPermissionToUserRequestPayload = {
   scopeType?: AccessDataScope;
   expiresAt?: string;
 };
-

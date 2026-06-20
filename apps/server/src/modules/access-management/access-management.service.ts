@@ -50,6 +50,16 @@ export class AccessManagementService {
     const roles = await this.prisma.role.findMany({
       orderBy: { id: 'asc' },
       include: {
+        perms: {
+          orderBy: {
+            perm: {
+              code: 'asc',
+            },
+          },
+          include: {
+            perm: true,
+          },
+        },
         _count: {
           select: {
             users: true,
@@ -70,6 +80,16 @@ export class AccessManagementService {
         desc: dto.desc,
       },
       include: {
+        perms: {
+          orderBy: {
+            perm: {
+              code: 'asc',
+            },
+          },
+          include: {
+            perm: true,
+          },
+        },
         _count: {
           select: {
             users: true,
@@ -93,6 +113,16 @@ export class AccessManagementService {
         desc: dto.desc,
       },
       include: {
+        perms: {
+          orderBy: {
+            perm: {
+              code: 'asc',
+            },
+          },
+          include: {
+            perm: true,
+          },
+        },
         _count: {
           select: {
             users: true,
@@ -284,6 +314,16 @@ export class AccessManagementService {
     const role = await this.prisma.role.findUnique({
       where: { id: roleId },
       include: {
+        perms: {
+          orderBy: {
+            perm: {
+              code: 'asc',
+            },
+          },
+          include: {
+            perm: true,
+          },
+        },
         _count: {
           select: {
             users: true,

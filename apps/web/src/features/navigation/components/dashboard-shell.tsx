@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   UsersRound,
 } from "lucide-react"
+import { ACCESS_MANAGEMENT_PERMISSIONS } from "@workspace/contracts/access"
 
 import { LogoutButton } from "@/features/auth/components/logout-button"
 import {
@@ -37,9 +38,17 @@ import {
 
 type DashboardShellProps = {
   children: ReactNode
+  currentUserPermissions: string[]
 }
 
-const dashboardMenus = [
+type DashboardMenuItem = {
+  title: string
+  href: string
+  icon: typeof Home
+  permission?: string
+}
+
+const dashboardMenus: DashboardMenuItem[] = [
   {
     title: "工作台",
     href: "/dashboard",
@@ -54,6 +63,7 @@ const dashboardMenus = [
     title: "用户管理",
     href: "/dashboard/users",
     icon: ShieldCheck,
+    permission: ACCESS_MANAGEMENT_PERMISSIONS.read,
   },
   {
     title: "会议协作",
@@ -73,8 +83,16 @@ const dashboardMenus = [
 ]
 
 // 渲染 dashboard 的全局侧边栏布局。
-export function DashboardShell({ children }: DashboardShellProps) {
+export function DashboardShell({
+  children,
+  currentUserPermissions,
+}: DashboardShellProps) {
   const pathname = usePathname()
+  const visibleMenus = dashboardMenus.filter(
+    (item) =>
+      !item.permission ||
+      currentUserPermissions.includes(item.permission),
+  )
 
   return (
     <SidebarProvider>
@@ -94,7 +112,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
             <SidebarGroupLabel>主菜单</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {dashboardMenus.map((item) => {
+                {visibleMenus.map((item) => {
                   const isActive =
                     item.href === "/dashboard"
                       ? pathname === item.href

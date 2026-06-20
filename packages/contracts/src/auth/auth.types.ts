@@ -44,6 +44,7 @@ export type AuthUser = {
   name: string | null;
   avatarUrl: string | null;
   status: AuthUserStatus;
+  permissions: string[];
   emailVerifiedAt: string | null;
   lastLoginAt: string | null;
   createdAt: string;

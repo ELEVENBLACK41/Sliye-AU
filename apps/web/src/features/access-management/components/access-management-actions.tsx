@@ -64,6 +64,7 @@ export function AccessManagementActions({ data }: AccessManagementActionsProps) 
   const [directScope, setDirectScope] = useState("ALL")
   const [selectedUserRoleId, setSelectedUserRoleId] = useState("")
   const [selectedUserPermissionId, setSelectedUserPermissionId] = useState("")
+  const [selectedRolePermissionId, setSelectedRolePermissionId] = useState("")
 
   const selectedUser = useMemo(
     () => data.users.find((user) => user.id.toString() === selectedUserId),
@@ -75,6 +76,12 @@ export function AccessManagementActions({ data }: AccessManagementActionsProps) 
   )
   const selectedUserRoles = selectedUser?.roles ?? []
   const selectedUserPermissions = selectedUser?.directPermissions ?? []
+  const selectedRolePermissions = selectedRole?.permissions ?? []
+  const selectedRolePermissionValue = selectedRolePermissions.some(
+    (permission) => permission.id.toString() === selectedRolePermissionId,
+  )
+    ? selectedRolePermissionId
+    : selectedRolePermissions[0]?.id.toString() ?? ""
   const selectedUserRoleValue = selectedUserRoles.some(
     (role) => role.id.toString() === selectedUserRoleId,
   )
@@ -93,6 +100,14 @@ export function AccessManagementActions({ data }: AccessManagementActionsProps) 
     setSelectedUserId(userId)
     setSelectedUserRoleId(nextUser?.roles[0]?.id.toString() ?? "")
     setSelectedUserPermissionId(nextUser?.directPermissions[0]?.id.toString() ?? "")
+  }
+
+  // 切换角色时重置角色已有权限选中项。
+  function handleSelectRole(roleId: string) {
+    const nextRole = data.roles.find((role) => role.id.toString() === roleId)
+
+    setSelectedRoleId(roleId)
+    setSelectedRolePermissionId(nextRole?.permissions[0]?.id.toString() ?? "")
   }
 
   async function handleAssignUserRole(event: FormEvent<HTMLFormElement>) {
@@ -141,14 +156,14 @@ export function AccessManagementActions({ data }: AccessManagementActionsProps) 
 
   // 解除当前角色选中的权限。
   async function handleRemoveRolePermission() {
-    if (!selectedRole || !selectedPermissionId) {
-      setMessage({ type: "error", message: "请先选择角色和权限" })
+    if (!selectedRole || !selectedRolePermissionValue) {
+      setMessage({ type: "error", message: "当前角色暂无可解除的权限" })
       return
     }
 
     await runAction("remove-role-permission", "角色权限解除成功", () =>
       requestJson(
-        `/api/access-management/roles/${selectedRoleId}/permissions/${selectedPermissionId}`,
+        `/api/access-management/roles/${selectedRoleId}/permissions/${selectedRolePermissionValue}`,
         { method: "DELETE" },
       ),
     )
@@ -290,7 +305,7 @@ export function AccessManagementActions({ data }: AccessManagementActionsProps) 
             id="role-permission-role"
             label="角色"
             value={selectedRoleId}
-            onChange={setSelectedRoleId}
+            onChange={handleSelectRole}
             options={data.roles.map((role) => ({
               value: role.id.toString(),
               label: role.name,
@@ -318,13 +333,23 @@ export function AccessManagementActions({ data }: AccessManagementActionsProps) 
             type="button"
             variant="outline"
             className="w-full"
-            disabled={disabled || Boolean(pendingAction)}
+            disabled={!selectedRolePermissionValue || Boolean(pendingAction)}
             onClick={() => {
               void handleRemoveRolePermission()
             }}
           >
             解除所选权限
           </Button>
+          <SelectField
+            id="role-permission-current"
+            label="当前角色已有权限"
+            value={selectedRolePermissionValue}
+            onChange={setSelectedRolePermissionId}
+            options={selectedRolePermissions.map((permission) => ({
+              value: permission.id.toString(),
+              label: permission.code,
+            }))}
+          />
         </ActionForm>
 
         <ActionForm title="用户直接授权" onSubmit={handleAssignDirectPermission}>

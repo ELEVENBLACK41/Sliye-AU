@@ -13,6 +13,7 @@ import type {
   Department,
   Permission,
   Role,
+  RolePermission,
   User,
   UserPermission,
 } from '../../generated/prisma';
@@ -22,6 +23,7 @@ type RoleWithCounts = Role & {
     users: number;
     perms: number;
   };
+  perms: Array<RolePermission & { perm: Permission }>;
 };
 
 type UserRoleRecord = {
@@ -47,6 +49,9 @@ export function toAccessRole(role: RoleWithCounts): AccessRole {
     desc: role.desc,
     createdAt: role.createdAt.toISOString(),
     updatedAt: role.updatedAt.toISOString(),
+    permissions: role.perms.map((rolePermission) =>
+      toAccessPermission(rolePermission.perm),
+    ),
     permissionCount: role._count.perms,
     userCount: role._count.users,
   };
