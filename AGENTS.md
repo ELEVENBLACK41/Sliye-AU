@@ -22,8 +22,9 @@
 - 暂时冻结 admin端，以模块形式先写进web端，以后没我得允许就不写admin了 只在web端写，后续根据权限去展示数据和模块以及功能
 - 每次新增 package下的ui不要自己写 要安装shadcn ui
 - 书写页面的时候要注意语义化。
-- 保持当前技术栈，不随便引入新框架或重型依赖。
+- 保持当前技术栈，不随便引入新框架或重型依赖，如果真实需要得话询问我
 - 改动要小而清楚，不顺手做大重构。
+- 不做顺便的事情，且我未明确要求的修改。
 - 中文文档和注释使用 UTF-8；复杂逻辑写注释说明原因，每个函数前都要写注释，新建文件的时候也要在文件头写明这个文件是干什么的
 - 不提交 `.env`、`.next`、`dist`、coverage、临时调试文件。
 - 删除或移动代码前，先确认没有其他 app/package 依赖。
@@ -51,6 +52,7 @@ import type { ApiResponse } from '@workspace/contracts/common';
 
 - 后端 DTO 可以 `implements` 共享契约；DTO 仍负责 Nest/class-validator 等运行时校验。
 - 前端服务层复用 contracts 的请求/响应类型，UI 表单类型保留在 feature 内。
+- 每一个类型都要写注释，不然就忘了
 
 ## 请求链路
 
@@ -125,6 +127,7 @@ pnpm prisma studio
 
 ## 完成前检查
 
+- 如果改动量很小，不用每次都跑检查，没必要。
 - 优先跑与改动范围相关的 lint/build/test/typecheck。
 - 涉及环境变量时，同步更新 README 或项目说明，并提醒需要重启 dev server。
 - 涉及 contracts 时，同步检查 server、web/admin 引用是否仍然通过类型检查。
