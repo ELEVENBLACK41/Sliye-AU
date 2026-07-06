@@ -80,6 +80,11 @@ const dashboardMenus: DashboardMenuItem[] = [
     href: "/dashboard/settings",
     icon: Settings,
   },
+  {
+    title: "AI测试",
+    href: "/dashboard/ai",
+    icon: ClipboardList,
+  },
 ]
 
 // 渲染 dashboard 的全局侧边栏布局。
