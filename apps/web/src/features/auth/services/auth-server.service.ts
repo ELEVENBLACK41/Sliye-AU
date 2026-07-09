@@ -23,7 +23,7 @@ export async function getCurrentAuthUser() {
   if (
     response.status < 200 ||
     response.status >= 300 ||
-    response.body.code !== 0
+    response.body.code !== 200
   ) {
     return null
   }

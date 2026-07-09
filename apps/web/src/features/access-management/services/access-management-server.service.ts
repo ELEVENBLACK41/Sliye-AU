@@ -57,10 +57,9 @@ async function unwrapResponse<T>(
     throw new Error(response.body.message || fallbackMessage)
   }
 
-  if (response.body.code !== 0 || response.body.data === null) {
+  if (response.body.code !== 200 || response.body.data === null) {
     throw new Error(response.body.message || fallbackMessage)
   }
 
   return response.body.data
 }
-

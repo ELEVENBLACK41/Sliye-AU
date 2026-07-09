@@ -15,7 +15,7 @@ export async function POST() {
     : {
         status: 200,
         body: {
-          code: 0,
+          code: 200,
           message: "success",
           data: { success: true },
           timestamp: Date.now(),

@@ -104,7 +104,7 @@ const responseBody = upstream.body.data
 }
 ```
 
-HTTP 状态码和业务 `code` 都要保留。前端 `requestData()` 会判断 `code !== 0` 并抛错给页面。
+HTTP 状态码和业务 `code` 都要保留。前端 `requestData()` 会判断 `code !== 200` 并抛错给页面。
 
 不要在每个 `route.ts` 里手写这段结构，统一使用 `app/api/_utils/response.ts`：
 

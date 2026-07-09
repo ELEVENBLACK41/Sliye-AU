@@ -194,7 +194,7 @@ node dist/src/main.js
 }
 ```
 
-> - `code: 0` 代表业务成功
+> - `code: 200` 代表业务成功
 > - `code` 为 HTTP 状态码代表异常
 > - `timestamp` 为服务端响应时刻的 Unix 毫秒时间戳
 

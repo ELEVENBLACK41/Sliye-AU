@@ -50,7 +50,7 @@ export async function requestData<TData, TBody = unknown>(
     requestOptions,
   )
 
-  if (result.code !== 0 || result.data === null) {
+  if (result.code !== 200 || result.data === null) {
     throw new Error(result.message || errorMessage || "请求失败，请稍后再试")
   }
 

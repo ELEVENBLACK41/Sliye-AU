@@ -63,7 +63,7 @@ pnpm test:cov
 
 | 接口 | 测试类型 | 预期结果 |
 |------|----------|----------|
-| `GET /test` | 成功 | 返回 `code: 0`，`data.msg` 为字符串 |
-| `GET /test/users` | 成功（表空自动 seed） | 返回 `code: 0`，`data` 为长度 ≥ 1 的数组 |
+| `GET /test` | 成功 | 返回 `code: 200`，`data.msg` 为字符串 |
+| `GET /test/users` | 成功（表空自动 seed） | 返回 `code: 200`，`data` 为长度 ≥ 1 的数组 |
 | `GET /not-exist` | 路由不存在 | 返回 `code: 404` |
 | `GET /test/users` | 数据库连接失败 | 返回 `code: 500` |

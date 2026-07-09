@@ -513,7 +513,7 @@ async function requestJson(
     message?: string
   }
 
-  if (!response.ok || body.code !== 0) {
+  if (!response.ok || body.code !== 200) {
     throw new Error(body.message || "操作失败，请稍后再试")
   }
 }
