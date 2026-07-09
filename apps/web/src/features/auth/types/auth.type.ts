@@ -23,6 +23,7 @@ export type {
   RegisterApiResponse,
   RegisterRequestPayload,
   RegisterResult,
+  RefreshTokenRequestPayload,
   SanitizedAuthSession,
   SanitizedAuthSessionApiResponse,
   SendEmailVerificationApiResponse,

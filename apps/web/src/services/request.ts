@@ -14,14 +14,29 @@ export async function request<T = unknown, TBody = unknown>(
   options?: JsonRequestInit<TBody>,
 ): Promise<T> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ""
+  const requestUrl = `${baseUrl}${url}`
   const headers = new Headers(options?.headers)
   const body = formatBody(options?.body, headers)
 
-  const res = await fetch(`${baseUrl}${url}`, {
+  let res = await fetch(requestUrl, {
     ...options,
     headers,
     body,
+    credentials: options?.credentials ?? "include",
   })
+
+  if (res.status === 401 && shouldRefreshBeforeRetry(url)) {
+    const refreshed = await refreshAuthSession(baseUrl)
+
+    if (refreshed) {
+      res = await fetch(requestUrl, {
+        ...options,
+        headers,
+        body,
+        credentials: options?.credentials ?? "include",
+      })
+    }
+  }
 
   if (!res.ok) {
     let errorMessage = `请求失败 (${res.status})`
@@ -72,4 +87,23 @@ function formatBody<TBody>(body: TBody | undefined, headers: Headers) {
   }
 
   return JSON.stringify(body)
+}
+
+// 判断当前请求是否适合走 refresh + retry，避免登录和刷新接口自己触发循环。
+function shouldRefreshBeforeRetry(url: string) {
+  return !url.startsWith("/api/auth/login") && !url.startsWith("/api/auth/refresh")
+}
+
+// 调用 BFF refresh 接口换新 httpOnly Cookie，失败时让原请求继续抛出 401。
+async function refreshAuthSession(baseUrl: string) {
+  try {
+    const response = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    })
+
+    return response.ok
+  } catch {
+    return false
+  }
 }
