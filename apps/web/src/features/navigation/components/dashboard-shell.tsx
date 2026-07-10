@@ -145,7 +145,7 @@ export function DashboardShell({
         </SidebarContent>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b px-4">
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger />

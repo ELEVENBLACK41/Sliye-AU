@@ -340,7 +340,7 @@ function TableCard({
   children: ReactNode
 }) {
   return (
-    <Card className="rounded-md shadow-none">
+    <Card className="min-w-0 rounded-md shadow-none">
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
