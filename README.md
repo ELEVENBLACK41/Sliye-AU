@@ -10,9 +10,10 @@ Next.js + NestJS + Prisma 全栈 Monorepo 项目。
 apps/
   server/   # NestJS 后端
   web/      # Next.js 前端
-  admin/    # Next.js 管理端
+  admin/    # 已冻结；管理能力统一在 web 中实现
 packages/
   ui/       # 共享组件库
+  contracts/# 前后端权限、认证、响应与决策契约
 ```
 
 ---
@@ -44,11 +45,11 @@ SERVER_API_PREFIX=api/v1
 
 **变量说明：**
 
-| 变量名 | 说明 | 默认值 |
-|---|---|---|
-| `DATABASE_URL` | PostgreSQL 连接字符串，Prisma 和 NestJS 都会读取 | 必填 |
-| `PORT` | NestJS 监听端口 | `3001` |
-| `SERVER_API_PREFIX` | NestJS 全局 API 前缀 | `api/v1` |
+| 变量名              | 说明                                             | 默认值   |
+| ------------------- | ------------------------------------------------ | -------- |
+| `DATABASE_URL`      | PostgreSQL 连接字符串，Prisma 和 NestJS 都会读取 | 必填     |
+| `PORT`              | NestJS 监听端口                                  | `3001`   |
+| `SERVER_API_PREFIX` | NestJS 全局 API 前缀                             | `api/v1` |
 
 ### 2. 前端（apps/web）
 
@@ -63,11 +64,11 @@ NEST_API_PREFIX=api/v1
 
 **变量说明：**
 
-| 变量名 | 说明 |
-|---|---|
+| 变量名                 | 说明                                                            |
+| ---------------------- | --------------------------------------------------------------- |
 | `NEXT_PUBLIC_BASE_URL` | 前端页面发起请求的 base URL，指向 Next.js 自身（走 BFF 代理层） |
-| `NEST_BASE_URL` | 服务端（BFF）代理请求时使用的 NestJS 服务地址，仅服务端可读 |
-| `NEST_API_PREFIX` | BFF 请求 NestJS 时自动拼接的 API 前缀，默认 `api/v1` |
+| `NEST_BASE_URL`        | 服务端（BFF）代理请求时使用的 NestJS 服务地址，仅服务端可读     |
+| `NEST_API_PREFIX`      | BFF 请求 NestJS 时自动拼接的 API 前缀，默认 `api/v1`            |
 
 > `NEXT_PUBLIC_` 前缀的变量会暴露到浏览器，`NEST_BASE_URL` 不加前缀所以只在服务端可见，更安全。
 
@@ -92,8 +93,10 @@ pnpm i
 
 # 2. 配置环境变量（按上文创建 .env 文件）
 
-# 3. 执行数据库迁移（apps/server 目录下）
-pnpm prisma migrate dev
+# 3. 执行数据库迁移和权限目录同步（apps/server 目录下）
+pnpm prisma migrate deploy
+pnpm prisma generate
+pnpm access-control:sync
 
 # 4. 启动后端（apps/server 目录下）
 pnpm dev
@@ -101,6 +104,18 @@ pnpm dev
 # 5. 启动前端（apps/web 目录下）
 pnpm dev
 ```
+
+---
+
+## 权限体系 V2
+
+当前项目已实现单组织部门树、四个系统角色、代码优先权限目录、角色/用户授权、数据范围、授权审计和统一错误响应。应用启动时只读检查权限目录漂移，不会自动写数据库；部署时应显式执行：
+
+```bash
+pnpm --filter @nextnest/server access-control:check
+```
+
+详细模型、角色矩阵、迁移与测试结果见 [项目权限模型](docs/项目权限模型.md)。
 
 ---
 

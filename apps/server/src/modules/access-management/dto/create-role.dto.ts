@@ -1,16 +1,31 @@
 /*
- * @Author: shaoliye
- * @Date: 2026-06-20
- * @Description: 创建角色请求 DTO，校验角色基础信息
- * @Copyright: Copyright 1990 - 2026
+ * @Description: 创建自定义角色 DTO，稳定代码创建后不可修改。
  */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { CreateRoleRequestPayload } from '@workspace/contracts/access';
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
+/** 创建自定义角色的运行时校验 DTO。 */
 export class CreateRoleDto implements CreateRoleRequestPayload {
-  @ApiProperty({ example: 'department_leader' })
+  /** 角色稳定代码。 */
+  @ApiProperty({ example: 'PROJECT_REVIEWER' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @Matches(/^[A-Z][A-Z0-9_]*$/)
+  @MaxLength(50)
+  code!: string;
+
+  /** 角色中文显示名称。 */
+  @ApiProperty({ example: '项目评审人' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
@@ -19,7 +34,8 @@ export class CreateRoleDto implements CreateRoleRequestPayload {
   @MaxLength(50)
   name!: string;
 
-  @ApiPropertyOptional({ example: '部门负责人，管理本部门决策与成员权限' })
+  /** 角色用途说明。 */
+  @ApiPropertyOptional({ example: '负责查看并评审指定范围内的决策。' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )

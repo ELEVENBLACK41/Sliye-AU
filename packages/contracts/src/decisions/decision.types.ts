@@ -1,0 +1,100 @@
+/**
+ * 本文件定义最小决策列表、详情和创建流程使用的跨端数据契约。
+ */
+
+/** 决策从草稿到归档的业务状态。 */
+export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'VOTING' | 'DECIDED' | 'ARCHIVED';
+
+/** 用户参与某个决策时承担的角色。 */
+export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER';
+
+/** 决策所属部门的轻量摘要。 */
+export type DecisionDepartmentSummary = {
+  /** 部门数据库主键。 */
+  id: number;
+  /** 稳定且全局唯一的部门代码。 */
+  code: string;
+  /** 部门中文名称。 */
+  name: string;
+};
+
+/** 决策创建人、负责人或参与人的轻量摘要。 */
+export type DecisionUserSummary = {
+  /** 用户数据库主键。 */
+  id: number;
+  /** 用户显示名称。 */
+  name: string | null;
+  /** 用户头像地址。 */
+  avatarUrl: string | null;
+};
+
+/** 决策列表中的一条摘要。 */
+export type DecisionSummary = {
+  /** 决策数据库主键。 */
+  id: number;
+  /** 决策标题。 */
+  title: string;
+  /** 决策背景或目标说明。 */
+  description: string | null;
+  /** 决策当前业务状态。 */
+  status: DecisionStatus;
+  /** 决策所属部门。 */
+  department: DecisionDepartmentSummary;
+  /** 创建该决策的用户。 */
+  creator: DecisionUserSummary;
+  /** 当前决策负责人；尚未指定时为 `null`。 */
+  owner: DecisionUserSummary | null;
+  /** 当前决策参与者数量。 */
+  participantCount: number;
+  /** 决策形成最终结论的时间；尚未形成时为 `null`。 */
+  decidedAt: string | null;
+  /** 决策归档时间；尚未归档时为 `null`。 */
+  archivedAt: string | null;
+  /** 决策创建时间，使用 ISO 8601 字符串。 */
+  createdAt: string;
+  /** 决策最后更新时间，使用 ISO 8601 字符串。 */
+  updatedAt: string;
+};
+
+/** 决策详情中的一名参与者。 */
+export type DecisionParticipant = {
+  /** 决策参与关系主键。 */
+  id: number;
+  /** 参与用户摘要。 */
+  user: DecisionUserSummary;
+  /** 用户在当前决策中承担的角色。 */
+  role: DecisionParticipantRole;
+  /** 用户加入决策的时间，使用 ISO 8601 字符串。 */
+  createdAt: string;
+};
+
+/** 决策详情，包含摘要信息和完整参与者列表。 */
+export type DecisionDetail = DecisionSummary & {
+  /** 当前决策的全部参与者。 */
+  participants: DecisionParticipant[];
+};
+
+/** 创建决策的请求体。 */
+export type CreateDecisionRequestPayload = {
+  /** 决策标题。 */
+  title: string;
+  /** 决策背景或目标说明。 */
+  description?: string;
+  /** 决策所属的启用部门主键。 */
+  departmentId: number;
+  /** 初始负责人用户主键；省略或传入 `null` 时由服务端使用创建人。 */
+  ownerId?: number | null;
+};
+
+/** 决策列表接口返回的业务数据。 */
+export type DecisionListResponse = DecisionSummary[];
+
+/** 决策列表接口支持的筛选条件。 */
+export type DecisionListQuery = {
+  /** 按标题或说明执行模糊搜索的关键词。 */
+  keyword?: string;
+  /** 按决策状态筛选。 */
+  status?: DecisionStatus;
+  /** 按部门主键筛选，仍会叠加当前用户的数据范围。 */
+  departmentId?: number;
+};

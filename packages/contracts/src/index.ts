@@ -1,3 +1,8 @@
-export type * from './auth';
-export type * from './common';
-export type * from './access';
+/**
+ * 本文件提供共享契约包的根入口。
+ */
+
+export type * from './auth/index.ts';
+export * from './common/index.ts';
+export * from './access/index.ts';
+export type * from './decisions/index.ts';

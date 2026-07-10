@@ -1,3 +1,6 @@
+/**
+ * 本文件实现注册、邮箱验证、登录、令牌轮换、注销和实时认证资料读取。
+ */
 import {
   ConflictException,
   ForbiddenException,
@@ -21,6 +24,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SendEmailVerificationDto } from './dto/send-email-verification.dto';
 import { EmailVerificationService } from './services/email-verification.service';
+import { AuthorizationService } from './services/authorization.service';
 import { AuthValidationService } from './services/auth-validation.service';
 import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
@@ -32,35 +36,48 @@ import {
   OperationResult,
   RegisterResponse,
   RequestClientMeta,
+  type AuthorizationUserRecord,
 } from './types/auth.types';
 
+/** 包含密码登录凭据关系的数据库用户。 */
 type UserWithPasswordCredential = User & {
+  /** 密码凭据；未设置密码时为空。 */
   passwordCredential: UserPasswordCredential | null;
 };
 
+/** 写入认证审计日志所需的安全字段。 */
 interface AuditLogInput {
+  /** 关联用户主键；用户不存在的失败场景允许为空。 */
   userId?: number | null;
+  /** 稳定的认证审计事件代码。 */
   event: string;
+  /** 本次认证事件是否成功。 */
   success: boolean;
+  /** 可选的稳定失败原因。 */
   reason?: string;
+  /** 不含密码、验证码和 Token 的审计元数据。 */
   metadata?: Record<string, string | number | boolean | null>;
+  /** 当前请求的客户端和追踪信息。 */
   meta: RequestClientMeta;
 }
 
+/** 认证业务服务，负责服务端会话生命周期和安全审计。 */
 @Injectable()
 export class AuthService {
+  /** 认证流程日志记录器。 */
   private readonly logger = new Logger(AuthService.name);
 
-  // 注入认证链路所需的数据访问、校验、密码、令牌和邮箱验证码服务。
+  /** 注入认证链路所需的数据访问、校验、密码、令牌、邮箱验证和授权服务。 */
   constructor(
     private readonly prisma: PrismaService,
     private readonly validationService: AuthValidationService,
     private readonly passwordService: PasswordService,
     private readonly tokenService: TokenService,
     private readonly emailVerificationService: EmailVerificationService,
+    private readonly authorizationService: AuthorizationService,
   ) {}
 
-  // 注册用户并生成邮箱验证码。
+  /** 注册新用户、保存密码凭据并生成邮箱验证码。 */
   async register(
     dto: RegisterDto,
     meta: RequestClientMeta,
@@ -148,7 +165,7 @@ export class AuthService {
     };
   }
 
-  // 为未完成验证的用户重新发送邮箱验证码。
+  /** 为尚未完成验证的用户重新发送邮箱验证码。 */
   async sendEmailVerification(
     dto: SendEmailVerificationDto,
     meta: RequestClientMeta,
@@ -188,7 +205,7 @@ export class AuthService {
     return emailVerification;
   }
 
-  // 校验邮箱验证码、激活用户并创建登录会话。
+  /** 校验邮箱验证码、激活用户并创建登录会话。 */
   async confirmEmail(
     dto: ConfirmEmailDto,
     meta: RequestClientMeta,
@@ -255,7 +272,7 @@ export class AuthService {
     return this.issueSession(activatedUser, meta);
   }
 
-  // 校验登录凭据并签发当前设备的登录会话。
+  /** 校验登录凭据并签发当前设备的服务端会话。 */
   async login(
     dto: LoginDto,
     meta: RequestClientMeta,
@@ -315,7 +332,7 @@ export class AuthService {
     return session;
   }
 
-  // 校验 refresh token 并完成令牌轮换。
+  /** 校验一次性 refresh token 并原子完成令牌轮换。 */
   async refresh(
     dto: RefreshTokenDto,
     meta: RequestClientMeta,
@@ -406,12 +423,12 @@ export class AuthService {
     });
 
     return {
-      user: toAuthUserResponse(user),
+      user: await this.getAuthUserResponse(user.id),
       tokens: this.buildTokenResponse(accessToken, newRefreshToken),
     };
   }
 
-  // 注销当前认证上下文对应的登录会话。
+  /** 注销当前认证上下文对应的服务端会话。 */
   async logout(
     auth: AuthRequestContext,
     meta: RequestClientMeta,
@@ -429,21 +446,12 @@ export class AuthService {
     return { success: true };
   }
 
-  // 查询可用用户的认证资料。
+  /** 查询包含最新部门、角色和权限码的认证资料。 */
   async getProfile(userId: number): Promise<AuthUserResponse> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: this.userAccessInclude(),
-    });
-
-    if (!user || user.status !== UserStatus.ACTIVE) {
-      throw new UnauthorizedException('User is not available');
-    }
-
-    return toAuthUserResponse(user);
+    return this.getAuthUserResponse(userId);
   }
 
-  // 登录前检查账号状态是否允许使用。
+  /** 登录前检查账号状态是否允许使用。 */
   private async assertAccountAvailableForLogin(
     user: UserWithPasswordCredential,
     meta: RequestClientMeta,
@@ -463,7 +471,7 @@ export class AuthService {
     }
   }
 
-  // 登录前检查邮箱是否已经验证。
+  /** 登录前检查邮箱是否已验证，未验证时重新签发验证码。 */
   private async assertEmailVerifiedForLogin(
     user: UserWithPasswordCredential,
     meta: RequestClientMeta,
@@ -483,7 +491,7 @@ export class AuthService {
     }
   }
 
-  // 创建服务端登录会话并签发 access/refresh token。
+  /** 创建服务端登录会话并签发 access/refresh token。 */
   private async issueSession(
     user: User,
     meta: RequestClientMeta,
@@ -525,12 +533,12 @@ export class AuthService {
     });
 
     return {
-      user: toAuthUserResponse(updatedUser),
+      user: await this.getAuthUserResponse(updatedUser.id),
       tokens: this.buildTokenResponse(accessToken, refreshToken),
     };
   }
 
-  // 组装对外返回的 token 元数据。
+  /** 组装对外返回的令牌元数据。 */
   private buildTokenResponse(
     accessToken: { token: string; expiresAt: Date; expiresIn: number },
     refreshToken: { token: string; expiresAt: Date; expiresIn: number },
@@ -546,7 +554,7 @@ export class AuthService {
     };
   }
 
-  // 撤销指定登录会话及其所有未撤销 refresh token。
+  /** 撤销指定登录会话及其尚未撤销的 refresh token。 */
   private async revokeSession(
     sessionId: string,
     reason: string,
@@ -577,7 +585,7 @@ export class AuthService {
     ]);
   }
 
-  // 将指定登录会话标记为过期。
+  /** 将指定登录会话标记为过期。 */
   private async expireSession(sessionId: string): Promise<void> {
     await this.prisma.authSession.updateMany({
       where: {
@@ -590,7 +598,7 @@ export class AuthService {
     });
   }
 
-  // 写入认证审计日志，失败时只记录警告避免阻塞主流程。
+  /** 写入认证审计日志；日志失败只记录告警，不能阻塞主认证流程。 */
   private async writeAuditLog(input: AuditLogInput): Promise<void> {
     try {
       await this.prisma.authAuditLog.create({
@@ -613,9 +621,48 @@ export class AuthService {
     }
   }
 
-  // 统一维护认证资料需要携带的角色权限和用户级直接授权。
+  /** 查询并映射包含实时权限、部门和角色的认证用户资料。 */
+  private async getAuthUserResponse(userId: number): Promise<AuthUserResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: this.userAccessInclude(),
+    });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('当前用户不可用，请重新登录');
+    }
+
+    const authorization = this.authorizationService.buildContext({
+      id: user.id,
+      deptId: user.deptId,
+      roleCodes: user.roles.map(({ role }) => role.code),
+      roleGrants: user.roles.flatMap(({ role }) =>
+        role.perms.map((grant) => ({
+          code: grant.perm.code,
+          scopeType: grant.scopeType,
+        })),
+      ),
+      directGrants: user.permissions.map((grant) => ({
+        code: grant.permission.code,
+        effect: grant.effect,
+        scopeType: grant.scopeType,
+        expiresAt: grant.expiresAt,
+      })),
+    } satisfies AuthorizationUserRecord);
+
+    return toAuthUserResponse(user, {
+      permissions:
+        this.authorizationService.getEffectiveSystemPermissionCodes(
+          authorization,
+        ),
+      isSuperAdmin: authorization.isSuperAdmin,
+    });
+  }
+
+  /** 统一维护认证资料需要携带的部门、角色权限和用户级直接授权。 */
   private userAccessInclude() {
     return {
+      department: true,
       roles: {
         include: {
           role: {

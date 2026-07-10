@@ -1,79 +1,111 @@
-/*
- * @Author: shaoliye
- * @Date: 2026-06-20
- * @Description: 用户管理页面组件，使用 Suspense 分区流式渲染用户、角色和权限数据
- * @Copyright: Copyright 1990 - 2026
+/**
+ * 本文件实现权限管理工作区，按照细粒度权限分别加载用户、部门、角色、权限目录和审计数据。
  */
-import { Suspense, type ReactNode } from "react"
-import { ShieldCheck } from "lucide-react"
-import { ACCESS_MANAGEMENT_PERMISSIONS } from "@workspace/contracts/access"
+import { Suspense, type ReactNode } from 'react';
+import { ShieldCheck } from 'lucide-react';
+import {
+  SYSTEM_PERMISSIONS,
+  type AccessAuditLog,
+  type AccessDepartmentTreeNode,
+  type AccessPermission,
+  type AccessRole,
+  type AccessUser,
+  type SystemPermissionCode,
+} from '@workspace/contracts/access';
+
+import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
+import { Badge } from '@workspace/ui/components/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
+import { Skeleton } from '@workspace/ui/components/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@workspace/ui/components/alert"
-import { Badge } from "@workspace/ui/components/badge"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@workspace/ui/components/card"
-import { Skeleton } from "@workspace/ui/components/skeleton"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table"
-
-import {
-  getAccessManagementDashboardData,
+  getAccessAuditLogs,
+  getAccessDepartments,
   getAccessPermissions,
   getAccessRoles,
   getAccessUsers,
-} from "@/features/access-management/services/access-management-server.service"
-import type {
-  AccessPermission,
-  AccessUser,
-} from "@/features/access-management/types/access-management.type"
-import { AccessManagementActions } from "./access-management-actions"
+  type AccessManagementDashboardData,
+} from '@/features/access-management/services/access-management-server.service';
+import { AccessManagementActions } from './access-management-actions';
 
+/** 权限管理页面属性。 */
 type AccessManagementPageProps = {
-  currentUserPermissions: string[]
-}
+  /** 当前用户实时生效的系统权限码。 */
+  currentUserPermissions: SystemPermissionCode[];
+};
 
+/** 页面级错误兜底属性。 */
 type AccessManagementErrorPageProps = {
-  message: string
-}
+  /** 面向用户展示的中文错误。 */
+  message: string;
+};
 
-type SectionResult<T> =
-  | {
-      ok: true
-      data: T
-    }
-  | {
-      ok: false
-      message: string
-    }
+/** 页面各区域是否允许读取或修改的能力集合。 */
+export type AccessManagementCapabilities = {
+  /** 是否允许读取用户。 */
+  canReadUsers: boolean;
+  /** 是否允许修改用户状态。 */
+  canUpdateUserStatus: boolean;
+  /** 是否允许调整用户部门。 */
+  canUpdateUserDepartment: boolean;
+  /** 是否允许读取部门。 */
+  canReadDepartments: boolean;
+  /** 是否允许创建部门。 */
+  canCreateDepartment: boolean;
+  /** 是否允许修改或启停部门。 */
+  canUpdateDepartment: boolean;
+  /** 是否允许移动部门。 */
+  canMoveDepartment: boolean;
+  /** 是否允许读取角色。 */
+  canReadRoles: boolean;
+  /** 是否允许创建自定义角色。 */
+  canCreateRole: boolean;
+  /** 是否允许修改自定义角色。 */
+  canUpdateRole: boolean;
+  /** 是否允许为用户分配角色。 */
+  canAssignUserRole: boolean;
+  /** 是否允许读取权限目录。 */
+  canReadPermissions: boolean;
+  /** 是否允许维护自定义角色授权。 */
+  canAssignRolePermission: boolean;
+  /** 是否允许维护用户直接授权。 */
+  canAssignUserPermission: boolean;
+  /** 是否允许读取访问控制审计。 */
+  canReadAudit: boolean;
+};
 
-const userStatusText: Record<AccessUser["status"], string> = {
-  PENDING: "待验证",
-  ACTIVE: "正常",
-  DISABLED: "已禁用",
-  LOCKED: "已锁定",
-}
+/** 用户状态对应的中文文案。 */
+const userStatusText: Record<AccessUser['status'], string> = {
+  PENDING: '待验证',
+  ACTIVE: '正常',
+  DISABLED: '已禁用',
+  LOCKED: '已锁定',
+};
 
-// 渲染用户、角色、权限码管理页面骨架，数据区块由 Suspense 独立流式填充。
-export function AccessManagementPage({
-  currentUserPermissions,
-}: AccessManagementPageProps) {
-  const canWrite = currentUserPermissions.includes(
-    ACCESS_MANAGEMENT_PERMISSIONS.write,
-  )
+/** 审计动作对应的中文文案。 */
+const auditActionText: Partial<Record<AccessAuditLog['action'], string>> = {
+  DEPARTMENT_CREATED: '创建部门',
+  DEPARTMENT_UPDATED: '修改部门',
+  DEPARTMENT_MOVED: '移动部门',
+  DEPARTMENT_STATUS_UPDATED: '部门状态变更',
+  ROLE_CREATED: '创建角色',
+  ROLE_UPDATED: '修改角色',
+  ROLE_DELETED: '删除角色',
+  ROLE_PERMISSION_ASSIGNED: '角色增加授权',
+  ROLE_PERMISSION_REMOVED: '角色移除授权',
+  USER_ROLE_ASSIGNED: '用户分配角色',
+  USER_ROLE_REMOVED: '用户解除角色',
+  USER_PERMISSION_ASSIGNED: '用户直接授权',
+  USER_PERMISSION_REMOVED: '用户移除直接授权',
+  USER_STATUS_UPDATED: '用户状态变更',
+  USER_DEPARTMENT_UPDATED: '用户部门变更',
+  PERMISSION_CATALOG_SYNCED: '权限目录同步',
+};
+
+/** 渲染权限管理工作区，并把每个权限码转换成页面能力。 */
+export function AccessManagementPage({ currentUserPermissions }: AccessManagementPageProps) {
+  const capabilities = buildCapabilities(currentUserPermissions);
 
   return (
     <main className="flex flex-col gap-4">
@@ -81,132 +113,206 @@ export function AccessManagementPage({
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex items-center gap-2">
             <ShieldCheck className="size-5 text-emerald-700" aria-hidden />
-            <h1 className="text-xl font-semibold tracking-normal">用户管理</h1>
+            <h1 className="text-xl font-semibold tracking-normal">权限与组织管理</h1>
           </div>
           <p className="text-sm text-muted-foreground">
-            维护用户、角色、权限码和直接授权关系；前端只做展示控制，后端接口负责真实拦截。
+            部门数据范围和功能权限均由后端强制执行，页面只展示当前账号可操作的区域。
           </p>
         </div>
-        <Badge variant={canWrite ? "default" : "secondary"}>
-          {canWrite ? "可管理授权" : "只读视图"}
+        <Badge variant={hasWriteCapability(capabilities) ? 'default' : 'secondary'}>
+          {hasWriteCapability(capabilities) ? '可执行授权操作' : '只读视图'}
         </Badge>
       </section>
 
-      <Suspense fallback={<SummaryCardsFallback />}>
-        <SummaryCardsSection />
+      <Suspense fallback={<WorkspaceFallback />}>
+        <AccessManagementWorkspace capabilities={capabilities} />
       </Suspense>
+    </main>
+  );
+}
 
-      {canWrite ? (
-        <Suspense fallback={<AccessManagementActionsFallback />}>
-          <AccessManagementActionsSection />
-        </Suspense>
+/** 渲染权限管理页面的统一错误状态。 */
+export function AccessManagementErrorPage({ message }: AccessManagementErrorPageProps) {
+  return (
+    <main className="rounded-md border bg-background p-6">
+      <h1 className="text-xl font-semibold tracking-normal">权限与组织管理</h1>
+      <p className="mt-2 text-sm text-destructive">{message}</p>
+    </main>
+  );
+}
+
+/** 按能力并发读取所需数据，并渲染操作区与只读数据表。 */
+async function AccessManagementWorkspace({
+  capabilities,
+}: {
+  /** 当前账号在权限管理模块中的页面能力。 */
+  capabilities: AccessManagementCapabilities;
+}) {
+  const [users, departments, roles, permissions, auditLogs] = await Promise.all([
+    capabilities.canReadUsers ? getAccessUsers() : Promise.resolve([]),
+    capabilities.canReadDepartments ? getAccessDepartments() : Promise.resolve([]),
+    capabilities.canReadRoles ? getAccessRoles() : Promise.resolve([]),
+    capabilities.canReadPermissions ? getAccessPermissions() : Promise.resolve([]),
+    capabilities.canReadAudit ? getAccessAuditLogs() : Promise.resolve({ items: [], total: 0, page: 1, pageSize: 20 }),
+  ]);
+  const data: AccessManagementDashboardData = {
+    users,
+    departments,
+    roles,
+    permissions,
+    auditLogs,
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SummaryCards data={data} capabilities={capabilities} />
+      {hasWriteCapability(capabilities) ? (
+        <AccessManagementActions data={data} capabilities={capabilities} />
       ) : (
         <ReadOnlyAlert />
       )}
-
-      <Suspense fallback={<UsersTableFallback />}>
-        <UsersTableSection />
-      </Suspense>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Suspense fallback={<RolesTableFallback />}>
-          <RolesTableSection />
-        </Suspense>
-        <Suspense fallback={<PermissionsTableFallback />}>
-          <PermissionsTableSection />
-        </Suspense>
-      </div>
-    </main>
-  )
-}
-
-// 渲染用户管理数据加载失败的页面级兜底。
-export function AccessManagementErrorPage({
-  message,
-}: AccessManagementErrorPageProps) {
-  return (
-    <main className="rounded-md border bg-background p-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold tracking-normal">用户管理</h1>
-        <p className="text-sm text-destructive">{message}</p>
-      </div>
-    </main>
-  )
-}
-
-// 渲染汇总统计卡片区。
-async function SummaryCardsSection() {
-  const result = await resolveSection(
-    getAccessManagementDashboardData,
-    "用户管理统计加载失败",
-  )
-
-  if (!result.ok) {
-    return <SectionError message={result.message} />
-  }
-
-  return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <SummaryCard title="用户总数" value={result.data.users.length} />
-      <SummaryCard title="角色总数" value={result.data.roles.length} />
-      <SummaryCard title="权限码总数" value={result.data.permissions.length} />
+      {capabilities.canReadDepartments ? <DepartmentTable departments={departments} /> : null}
+      {capabilities.canReadUsers ? <UsersTable users={users} /> : null}
+      {capabilities.canReadRoles ? <RolesTable roles={roles} /> : null}
+      {capabilities.canReadPermissions ? <PermissionsTable permissions={permissions} /> : null}
+      {capabilities.canReadAudit ? <AuditTable logs={auditLogs.items} /> : null}
     </div>
-  )
+  );
 }
 
-// 渲染权限分配操作区，等待三类数据齐备后挂载客户端表单。
-async function AccessManagementActionsSection() {
-  const result = await resolveSection(
-    getAccessManagementDashboardData,
-    "权限分配数据加载失败",
-  )
+/** 将系统权限码集合转换成清晰的页面能力对象。 */
+function buildCapabilities(permissions: SystemPermissionCode[]): AccessManagementCapabilities {
+  const has = (permission: SystemPermissionCode) => permissions.includes(permission);
 
-  if (!result.ok) {
-    return <SectionError message={result.message} />
-  }
-
-  return <AccessManagementActions data={result.data} />
+  return {
+    canReadUsers: has(SYSTEM_PERMISSIONS.access.user.read),
+    canUpdateUserStatus: has(SYSTEM_PERMISSIONS.access.user.statusUpdate),
+    canUpdateUserDepartment: has(SYSTEM_PERMISSIONS.access.user.departmentUpdate),
+    canReadDepartments: has(SYSTEM_PERMISSIONS.access.department.read),
+    canCreateDepartment: has(SYSTEM_PERMISSIONS.access.department.create),
+    canUpdateDepartment: has(SYSTEM_PERMISSIONS.access.department.update),
+    canMoveDepartment: has(SYSTEM_PERMISSIONS.access.department.move),
+    canReadRoles: has(SYSTEM_PERMISSIONS.access.role.read),
+    canCreateRole: has(SYSTEM_PERMISSIONS.access.role.create),
+    canUpdateRole: has(SYSTEM_PERMISSIONS.access.role.update),
+    canAssignUserRole: has(SYSTEM_PERMISSIONS.access.userRole.assign),
+    canReadPermissions: has(SYSTEM_PERMISSIONS.access.permission.read),
+    canAssignRolePermission: has(SYSTEM_PERMISSIONS.access.rolePermission.assign),
+    canAssignUserPermission: has(SYSTEM_PERMISSIONS.access.userPermission.assign),
+    canReadAudit: has(SYSTEM_PERMISSIONS.access.audit.read),
+  };
 }
 
-// 渲染用户列表区。
-async function UsersTableSection() {
-  const result = await resolveSection(getAccessUsers, "用户列表加载失败")
+/** 判断当前能力集合是否包含任意配置写入操作。 */
+function hasWriteCapability(capabilities: AccessManagementCapabilities): boolean {
+  return (
+    capabilities.canUpdateUserStatus ||
+    capabilities.canUpdateUserDepartment ||
+    capabilities.canCreateDepartment ||
+    capabilities.canUpdateDepartment ||
+    capabilities.canMoveDepartment ||
+    capabilities.canCreateRole ||
+    capabilities.canUpdateRole ||
+    capabilities.canAssignUserRole ||
+    capabilities.canAssignRolePermission ||
+    capabilities.canAssignUserPermission
+  );
+}
 
-  if (!result.ok) {
-    return <TableErrorCard title="用户列表" message={result.message} />
-  }
+/** 渲染用户、部门、角色、权限与审计的汇总数据。 */
+function SummaryCards({
+  data,
+  capabilities,
+}: {
+  /** 已加载的权限管理数据。 */
+  data: AccessManagementDashboardData;
+  /** 决定统计项是否展示的页面能力。 */
+  capabilities: AccessManagementCapabilities;
+}) {
+  const summaries = [
+    capabilities.canReadUsers ? { title: '可见用户', value: data.users.length } : null,
+    capabilities.canReadDepartments ? { title: '可见部门', value: flattenDepartments(data.departments).length } : null,
+    capabilities.canReadRoles ? { title: '角色', value: data.roles.length } : null,
+    capabilities.canReadPermissions ? { title: '权限码', value: data.permissions.length } : null,
+  ].filter((item): item is { title: string; value: number } => item !== null);
 
   return (
-    <UserTableCard>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {summaries.map((summary) => (
+        <Card key={summary.title} className="rounded-md shadow-none">
+          <CardHeader className="gap-1">
+            <CardTitle className="text-sm text-muted-foreground">{summary.title}</CardTitle>
+            <p className="text-2xl font-semibold">{summary.value}</p>
+          </CardHeader>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+/** 渲染只读账号提示。 */
+function ReadOnlyAlert() {
+  return (
+    <Alert>
+      <ShieldCheck aria-hidden />
+      <AlertTitle>当前账号只有查看权限</AlertTitle>
+      <AlertDescription>所有变更按钮已经隐藏，直接调用接口仍会被后端权限守卫拒绝。</AlertDescription>
+    </Alert>
+  );
+}
+
+/** 渲染部门树表格，并保留层级缩进。 */
+function DepartmentTable({ departments }: { departments: AccessDepartmentTreeNode[] }) {
+  const rows = flattenDepartments(departments);
+
+  return (
+    <TableCard title="部门树" headers={['部门', '代码', '状态', '直属成员', '决策数']}>
       <TableBody>
-        {result.data.length > 0 ? (
-          result.data.map((user) => (
+        {rows.length ? (
+          rows.map(({ department, depth }) => (
+            <TableRow key={department.id}>
+              <TableCell>
+                <span style={{ paddingLeft: `${depth * 20}px` }}>{department.name}</span>
+              </TableCell>
+              <TableCell className="font-mono text-xs">{department.code}</TableCell>
+              <TableCell>
+                <Badge variant={department.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                  {department.status === 'ACTIVE' ? '启用' : '停用'}
+                </Badge>
+              </TableCell>
+              <TableCell>{department.memberCount}</TableCell>
+              <TableCell>{department.decisionCount}</TableCell>
+            </TableRow>
+          ))
+        ) : (
+          <EmptyRow colSpan={5} text="尚未创建部门" />
+        )}
+      </TableBody>
+    </TableCard>
+  );
+}
+
+/** 渲染当前数据范围内可见的用户及授权摘要。 */
+function UsersTable({ users }: { users: AccessUser[] }) {
+  return (
+    <TableCard title="用户列表" headers={['用户', '状态', '部门', '角色', '直接授权']}>
+      <TableBody>
+        {users.length ? (
+          users.map((user) => (
             <TableRow key={user.id}>
               <TableCell>
-                <div className="flex flex-col">
-                  <span className="font-medium">
-                    {user.name || "未设置姓名"}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {user.email}
-                  </span>
-                </div>
+                <span className="block font-medium">{user.name || '未设置姓名'}</span>
+                <span className="block text-xs text-muted-foreground">{user.email}</span>
               </TableCell>
+              <TableCell>{userStatusText[user.status]}</TableCell>
+              <TableCell>{user.department?.name ?? '未分配'}</TableCell>
               <TableCell>
-                <Badge variant="outline">{userStatusText[user.status]}</Badge>
-              </TableCell>
-              <TableCell>{user.departmentName || "未分配"}</TableCell>
-              <TableCell>
-                <BadgeList
-                  items={user.roles.map((role) => role.name)}
-                  emptyText="暂无角色"
-                />
+                <BadgeList items={user.roles.map((role) => role.name)} emptyText="暂无角色" />
               </TableCell>
               <TableCell>
                 <BadgeList
                   items={user.directPermissions.map(
-                    (permission) =>
-                      `${permission.effect}:${permission.permission.code}`,
+                    (grant) => `${grant.effect}:${grant.permission.code}:${grant.scopeType}`,
                   )}
                   emptyText="暂无直接授权"
                 />
@@ -214,137 +320,135 @@ async function UsersTableSection() {
             </TableRow>
           ))
         ) : (
-          <EmptyRow colSpan={5} text="暂无用户数据" />
+          <EmptyRow colSpan={5} text="当前范围内暂无用户" />
         )}
       </TableBody>
-    </UserTableCard>
-  )
+    </TableCard>
+  );
 }
 
-// 渲染角色概览区。
-async function RolesTableSection() {
-  const result = await resolveSection(getAccessRoles, "角色列表加载失败")
-
-  if (!result.ok) {
-    return <TableErrorCard title="角色概览" message={result.message} />
-  }
-
+/** 渲染角色及其带数据范围的授权记录。 */
+function RolesTable({ roles }: { roles: AccessRole[] }) {
   return (
-    <RoleTableCard>
+    <TableCard title="角色与数据范围" headers={['角色', '类型', '用户数', '权限范围']}>
       <TableBody>
-        {result.data.length > 0 ? (
-          result.data.map((role) => (
+        {roles.length ? (
+          roles.map((role) => (
             <TableRow key={role.id}>
-              <TableCell className="font-medium">{role.name}</TableCell>
-              <TableCell>{role.desc || "暂无说明"}</TableCell>
+              <TableCell>
+                <span className="block font-medium">{role.name}</span>
+                <span className="block font-mono text-xs text-muted-foreground">{role.code}</span>
+              </TableCell>
+              <TableCell>{role.isSystem ? '系统角色' : '自定义角色'}</TableCell>
               <TableCell>{role.userCount}</TableCell>
               <TableCell>
                 <BadgeList
-                  items={role.permissions.map((permission) => permission.code)}
-                  emptyText="暂无权限"
+                  items={role.grants.map((grant) => `${grant.permission.code}:${grant.scopeType}`)}
+                  emptyText="暂无授权"
                 />
               </TableCell>
             </TableRow>
           ))
         ) : (
-          <EmptyRow colSpan={4} text="暂无角色数据" />
+          <EmptyRow colSpan={4} text="暂无角色" />
         )}
       </TableBody>
-    </RoleTableCard>
-  )
+    </TableCard>
+  );
 }
 
-// 渲染权限码概览区。
-async function PermissionsTableSection() {
-  const result = await resolveSection(getAccessPermissions, "权限码加载失败")
+/** 渲染代码优先的只读权限目录。 */
+function PermissionsTable({ permissions }: { permissions: AccessPermission[] }) {
+  return (
+    <TableCard title="权限目录（系统权限只读）" headers={['权限码', '名称', '来源', '允许范围']}>
+      <TableBody>
+        {permissions.length ? (
+          permissions.map((permission) => (
+            <TableRow key={permission.id}>
+              <TableCell className="font-mono text-xs">{permission.code}</TableCell>
+              <TableCell>{permission.name || permission.desc || '未命名权限'}</TableCell>
+              <TableCell>{permission.kind}</TableCell>
+              <TableCell>{permission.allowedScopes.join('、') || '未配置'}</TableCell>
+            </TableRow>
+          ))
+        ) : (
+          <EmptyRow colSpan={4} text="暂无权限目录" />
+        )}
+      </TableBody>
+    </TableCard>
+  );
+}
 
-  if (!result.ok) {
-    return <TableErrorCard title="权限码概览" message={result.message} />
+/** 渲染访问控制配置变更审计，不展示账号密钥等敏感信息。 */
+function AuditTable({ logs }: { logs: AccessAuditLog[] }) {
+  return (
+    <TableCard title="授权审计" headers={['时间', '操作人', '动作', '目标', '请求编号']}>
+      <TableBody>
+        {logs.length ? (
+          logs.map((log) => (
+            <TableRow key={log.id}>
+              <TableCell>{formatDateTime(log.createdAt)}</TableCell>
+              <TableCell>{log.actor.name || log.actor.email}</TableCell>
+              <TableCell>{auditActionText[log.action] ?? log.action}</TableCell>
+              <TableCell>{`${log.targetType}:${log.targetId}`}</TableCell>
+              <TableCell className="font-mono text-xs">{log.requestId}</TableCell>
+            </TableRow>
+          ))
+        ) : (
+          <EmptyRow colSpan={5} text="暂无审计记录" />
+        )}
+      </TableBody>
+    </TableCard>
+  );
+}
+
+/** 递归拍平部门树，供表格和表单保留层级信息。 */
+function flattenDepartments(
+  departments: AccessDepartmentTreeNode[],
+  depth = 0,
+): Array<{ department: AccessDepartmentTreeNode; depth: number }> {
+  return departments.flatMap((department) => [
+    { department, depth },
+    ...flattenDepartments(department.children, depth + 1),
+  ]);
+}
+
+/** 渲染一组紧凑徽标。 */
+function BadgeList({ items, emptyText }: { items: string[]; emptyText: string }) {
+  if (!items.length) {
+    return <span className="text-sm text-muted-foreground">{emptyText}</span>;
   }
 
   return (
-    <PermissionTableCard>
-      <TableBody>
-        {result.data.length > 0 ? (
-          result.data.map((permission) => (
-            <PermissionRow key={permission.id} permission={permission} />
-          ))
-        ) : (
-          <EmptyRow colSpan={4} text="暂无权限码数据" />
-        )}
-      </TableBody>
-    </PermissionTableCard>
-  )
+    <div className="flex max-w-xl flex-wrap gap-1">
+      {items.map((item) => (
+        <Badge key={item} variant="secondary">
+          {item}
+        </Badge>
+      ))}
+    </div>
+  );
 }
 
-// 渲染只读权限提示。
-function ReadOnlyAlert() {
-  return (
-    <Alert className="rounded-md">
-      <ShieldCheck aria-hidden />
-      <AlertTitle>当前账号没有写入权限</AlertTitle>
-      <AlertDescription>
-        你可以查看用户、角色和权限结构，但不能分配角色或变更权限。
-      </AlertDescription>
-    </Alert>
-  )
-}
-
-// 渲染统计卡片。
-function SummaryCard({ title, value }: { title: string; value: number }) {
-  return (
-    <Card className="rounded-md shadow-none">
-      <CardHeader className="gap-1">
-        <CardTitle className="text-sm text-muted-foreground">{title}</CardTitle>
-        <p className="text-2xl font-semibold">{value}</p>
-      </CardHeader>
-    </Card>
-  )
-}
-
-// 渲染用户表格卡片外壳。
-function UserTableCard({ children }: { children: ReactNode }) {
-  return (
-    <TableCard title="用户列表" headers={["用户", "状态", "部门", "角色", "直接授权"]}>
-      {children}
-    </TableCard>
-  )
-}
-
-// 渲染角色表格卡片外壳。
-function RoleTableCard({ children }: { children: ReactNode }) {
-  return (
-    <TableCard title="角色概览" headers={["角色", "说明", "用户数", "拥有权限"]}>
-      {children}
-    </TableCard>
-  )
-}
-
-// 渲染权限码表格卡片外壳。
-function PermissionTableCard({ children }: { children: ReactNode }) {
-  return (
-    <TableCard title="权限码概览" headers={["权限码", "模块", "动作", "说明"]}>
-      {children}
-    </TableCard>
-  )
-}
-
-// 渲染通用表格卡片结构。
+/** 渲染通用表格卡片。 */
 function TableCard({
   title,
   headers,
   children,
 }: {
-  title: string
-  headers: string[]
-  children: ReactNode
+  /** 表格中文标题。 */
+  title: string;
+  /** 表头文案。 */
+  headers: string[];
+  /** 表格主体。 */
+  children: ReactNode;
 }) {
   return (
     <Card className="min-w-0 rounded-md shadow-none">
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -357,193 +461,44 @@ function TableCard({
         </Table>
       </CardContent>
     </Card>
-  )
+  );
 }
 
-// 渲染权限码表格行。
-function PermissionRow({ permission }: { permission: AccessPermission }) {
-  return (
-    <TableRow>
-      <TableCell className="font-mono text-xs">{permission.code}</TableCell>
-      <TableCell>{permission.module}</TableCell>
-      <TableCell>{permission.action}</TableCell>
-      <TableCell>{permission.desc || permission.name || "暂无说明"}</TableCell>
-    </TableRow>
-  )
-}
-
-// 渲染一组徽标。
-function BadgeList({ items, emptyText }: { items: string[]; emptyText: string }) {
-  if (items.length === 0) {
-    return <span className="text-sm text-muted-foreground">{emptyText}</span>
-  }
-
-  return (
-    <div className="flex max-w-80 flex-wrap gap-1">
-      {items.map((item) => (
-        <Badge key={item} variant="secondary">
-          {item}
-        </Badge>
-      ))}
-    </div>
-  )
-}
-
-// 渲染空表格行。
+/** 渲染表格空状态。 */
 function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
   return (
     <TableRow>
-      <TableCell
-        colSpan={colSpan}
-        className="h-24 text-center text-muted-foreground"
-      >
+      <TableCell colSpan={colSpan} className="h-24 text-center text-muted-foreground">
         {text}
       </TableCell>
     </TableRow>
-  )
+  );
 }
 
-// 渲染统计卡片加载态。
-function SummaryCardsFallback() {
+/** 渲染权限管理工作区的加载骨架。 */
+function WorkspaceFallback() {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {["用户总数", "角色总数", "权限码总数"].map((title) => (
-        <Card key={title} className="rounded-md shadow-none">
-          <CardHeader className="gap-2">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-8 w-12" />
-          </CardHeader>
-        </Card>
-      ))}
+    <div className="flex flex-col gap-4" aria-label="权限管理数据加载中">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((item) => (
+          <Card key={item} className="rounded-md shadow-none">
+            <CardHeader className="gap-2">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-8 w-12" />
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
+      <Skeleton className="h-72 w-full rounded-md" />
+      <Skeleton className="h-64 w-full rounded-md" />
     </div>
-  )
+  );
 }
 
-// 渲染操作区加载态。
-function AccessManagementActionsFallback() {
-  return (
-    <Card className="rounded-md shadow-none">
-      <CardHeader className="gap-2">
-        <Skeleton className="h-5 w-20" />
-      </CardHeader>
-      <CardContent className="grid gap-4 xl:grid-cols-3">
-        {[0, 1, 2].map((item) => (
-          <div
-            key={item}
-            className="flex min-w-0 flex-col gap-3 rounded-md border bg-muted/20 p-4"
-          >
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  )
-}
-
-// 渲染用户表格加载态。
-function UsersTableFallback() {
-  return (
-    <TableFallback
-      title="用户列表"
-      headers={["用户", "状态", "部门", "角色", "直接授权"]}
-      columnCount={5}
-    />
-  )
-}
-
-// 渲染角色表格加载态。
-function RolesTableFallback() {
-  return (
-    <TableFallback
-      title="角色概览"
-      headers={["角色", "说明", "用户数", "拥有权限"]}
-      columnCount={4}
-    />
-  )
-}
-
-// 渲染权限码表格加载态。
-function PermissionsTableFallback() {
-  return (
-    <TableFallback
-      title="权限码概览"
-      headers={["权限码", "模块", "动作", "说明"]}
-      columnCount={4}
-    />
-  )
-}
-
-// 渲染通用表格加载态。
-function TableFallback({
-  title,
-  headers,
-  columnCount,
-}: {
-  title: string
-  headers: string[]
-  columnCount: number
-}) {
-  return (
-    <TableCard title={title} headers={headers}>
-      <TableBody>
-        {[0, 1, 2].map((row) => (
-          <TableRow key={row}>
-            {Array.from({ length: columnCount }, (_, column) => (
-              <TableCell key={column}>
-                <Skeleton className="h-5 w-full max-w-40" />
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </TableCard>
-  )
-}
-
-// 渲染普通区块错误提示。
-function SectionError({ message }: { message: string }) {
-  return (
-    <Alert className="rounded-md" variant="destructive">
-      <AlertTitle>数据加载失败</AlertTitle>
-      <AlertDescription>{message}</AlertDescription>
-    </Alert>
-  )
-}
-
-// 渲染表格区块错误提示。
-function TableErrorCard({ title, message }: { title: string; message: string }) {
-  return (
-    <Card className="rounded-md shadow-none">
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-destructive">{message}</p>
-      </CardContent>
-    </Card>
-  )
-}
-
-// 捕获区块级数据读取错误，避免单个接口失败拖垮整页。
-async function resolveSection<T>(
-  loader: () => Promise<T>,
-  fallbackMessage: string,
-): Promise<SectionResult<T>> {
-  try {
-    const data = await loader()
-
-    return {
-      ok: true,
-      data,
-    }
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : fallbackMessage,
-    }
-  }
+/** 将 ISO 时间格式化为中国地区可读时间。 */
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat('zh-CN', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
 }

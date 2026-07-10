@@ -1,116 +1,62 @@
 /*
- * @Author: shaoliye
- * @Date: 2026-06-20
- * @Description: 权限码守卫，基于用户角色权限和用户级直接授权拦截受保护接口
- * @Copyright: Copyright 1990 - 2026
+ * @Description: 全局权限码守卫，校验接口声明的类型安全系统权限。
  */
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PrismaService } from '../../../database/prisma.service';
-import { PermissionEffect } from '../../../generated/prisma';
+import { API_ERROR_CODES } from '@workspace/contracts/common';
+import { BusinessException } from '../../../common/exceptions/business.exception';
+import {
+  REQUIRED_PERMISSIONS_METADATA_KEY,
+  type RequiredPermissionsMetadata,
+} from '../decorators/permissions.decorator';
 import type { AuthenticatedRequest } from '../types/auth.types';
-import { REQUIRED_PERMISSIONS_METADATA_KEY } from '../decorators/permissions.decorator';
+import {
+  AuthorizationService,
+  throwMissingAuthorizationContext,
+} from '../services/authorization.service';
 
 @Injectable()
 export class PermissionGuard implements CanActivate {
-  // 注入反射器和 Prisma，用于读取接口声明并计算当前用户权限。
+  /** 注入反射器和统一授权服务。 */
   constructor(
     private readonly reflector: Reflector,
-    private readonly prisma: PrismaService,
+    private readonly authorizationService: AuthorizationService,
   ) {}
 
-  // 校验当前用户是否拥有接口声明的全部权限码。
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
-      REQUIRED_PERMISSIONS_METADATA_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+  /** 校验当前用户是否满足接口声明的 ALL 或 ANY 权限规则。 */
+  canActivate(context: ExecutionContext): boolean {
+    const requirement =
+      this.reflector.getAllAndOverride<RequiredPermissionsMetadata>(
+        REQUIRED_PERMISSIONS_METADATA_KEY,
+        [context.getHandler(), context.getClass()],
+      );
 
-    if (!requiredPermissions || requiredPermissions.length === 0) {
+    if (!requirement || requirement.permissions.length === 0) {
       return true;
     }
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const userId = request.auth?.userId;
+    const authorization =
+      request.authorization ?? throwMissingAuthorizationContext();
+    const allowed =
+      requirement.mode === 'ANY'
+        ? this.authorizationService.hasAnyPermission(
+            authorization,
+            requirement.permissions,
+          )
+        : this.authorizationService.hasAllPermissions(
+            authorization,
+            requirement.permissions,
+          );
 
-    if (!userId) {
-      throw new ForbiddenException('Permission context is missing');
-    }
-
-    const userPermissions = await this.loadEffectivePermissionCodes(userId);
-    const hasAllPermissions = requiredPermissions.every((permission) =>
-      userPermissions.has(permission),
-    );
-
-    if (!hasAllPermissions) {
-      throw new ForbiddenException('Permission denied');
+    if (!allowed) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.ACCESS_PERMISSION_DENIED,
+        message: '当前账号没有访问该接口的权限',
+        status: 403,
+      });
     }
 
     return true;
-  }
-
-  // 读取用户角色权限和用户直接授权，用户级 DENY 优先于角色授权。
-  private async loadEffectivePermissionCodes(userId: number) {
-    const now = new Date();
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        roles: {
-          select: {
-            role: {
-              select: {
-                perms: {
-                  select: {
-                    perm: {
-                      select: {
-                        code: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        permissions: {
-          where: {
-            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-          },
-          select: {
-            effect: true,
-            permission: {
-              select: {
-                code: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const rolePermissionCodes =
-      user?.roles.flatMap((userRole) =>
-        userRole.role.perms.map((rolePermission) => rolePermission.perm.code),
-      ) ?? [];
-    const deniedCodes = new Set(
-      user?.permissions
-        .filter((permission) => permission.effect === PermissionEffect.DENY)
-        .map((permission) => permission.permission.code) ?? [],
-    );
-    const allowedDirectCodes =
-      user?.permissions
-        .filter((permission) => permission.effect === PermissionEffect.ALLOW)
-        .map((permission) => permission.permission.code) ?? [];
-
-    return new Set(
-      [...rolePermissionCodes, ...allowedDirectCodes].filter(
-        (code) => !deniedCodes.has(code),
-      ),
-    );
   }
 }

@@ -1,67 +1,90 @@
-/*
- * @Author: shaoliye elevenblack41@gmail.com
- * @Date: 2026-07-09 14:57:15
- * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-07-09 16:39:11
- * @FilePath: \NextNest\apps\web\src\app\api\chat\route.ts
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 /**
- * AI 对话测试接口。
- *
- * 用于验证 Vercel AI SDK 的流式对话能力，后续接入 RAG 时再把检索、权限和会话持久化下沉到业务服务中。
+ * 本文件实现受 `ai:chat:use` 保护的 AI SDK 流式对话接口。
+ * 成功流保持 AI UI Message 协议，鉴权和参数失败使用统一 JSON 错误契约。
  */
 import {
-  streamText,
-  UIMessage,
   convertToModelMessages,
-  tool,
-  isStepCount,
   createUIMessageStreamResponse,
+  isStepCount,
+  streamText,
   toUIMessageStream,
+  tool,
+  type UIMessage,
 } from 'ai';
 import { z } from 'zod';
+import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 
-export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+import { apiError, apiErrorFromUnknown } from '@/app/api/_utils/response';
+import { getAuthenticatedRouteUser } from '@/features/auth/services/authenticated-bff-proxy.service';
+import { hasSystemPermission } from '@/features/auth/services/auth-server.service';
 
-  const result = streamText({
-    model: 'openai/gpt-4.1',
-    messages: await convertToModelMessages(messages),
-    stopWhen: isStepCount(5),
-    tools: {
-      weather: tool({
-        description: 'Get the weather in a location (fahrenheit)',
-        inputSchema: z.object({
-          location: z.string().describe('The location to get the weather for'),
-        }),
-        execute: async ({ location }) => {
-          const temperature = Math.round(Math.random() * (90 - 32) + 32);
-          return {
+/** AI 对话请求体运行时校验规则。 */
+const chatRequestSchema = z.object({
+  messages: z.array(z.custom<UIMessage>()),
+});
+
+/** 校验认证与权限后创建 AI SDK 流式响应。 */
+export async function POST(request: Request) {
+  const currentUser = await getAuthenticatedRouteUser();
+
+  if (!currentUser) {
+    return apiError({
+      status: 401,
+      message: '登录状态已失效，请重新登录',
+      path: '/api/chat',
+    });
+  }
+
+  if (!hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.ai.chatUse)) {
+    return apiError({
+      status: 403,
+      message: '当前账号没有使用 AI 对话的权限',
+      path: '/api/chat',
+    });
+  }
+
+  try {
+    const parsed = chatRequestSchema.safeParse(await request.json());
+
+    if (!parsed.success) {
+      return apiError({
+        status: 400,
+        message: 'AI 对话消息格式不正确',
+        path: '/api/chat',
+      });
+    }
+
+    const result = streamText({
+      model: 'openai/gpt-4.1',
+      messages: await convertToModelMessages(parsed.data.messages),
+      stopWhen: isStepCount(5),
+      tools: {
+        weather: tool({
+          description: '查询指定地点的模拟华氏温度',
+          inputSchema: z.object({
+            location: z.string().describe('需要查询天气的地点'),
+          }),
+          execute: async ({ location }) => ({
             location,
-            temperature,
-          };
-        },
-      }),
-      convertFahrenheitToCelsius: tool({
-        description: 'Convert a temperature in fahrenheit to celsius',
-        inputSchema: z.object({
-          temperature: z.number().describe('The temperature in fahrenheit to convert'),
+            temperature: Math.round(Math.random() * (90 - 32) + 32),
+          }),
         }),
-        execute: async ({ temperature }) => {
-          const celsius = Math.round((temperature - 32) * (5 / 9));
-          return {
-            celsius,
-          };
-        },
-      }),
-    },
-    onStepEnd: ({ toolResults }) => {
-      console.log('记录使用工具的步骤----------------------', toolResults);
-    },
-  });
+        convertFahrenheitToCelsius: tool({
+          description: '把华氏温度转换为摄氏温度',
+          inputSchema: z.object({
+            temperature: z.number().describe('需要转换的华氏温度'),
+          }),
+          execute: async ({ temperature }) => ({
+            celsius: Math.round((temperature - 32) * (5 / 9)),
+          }),
+        }),
+      },
+    });
 
-  return createUIMessageStreamResponse({
-    stream: toUIMessageStream({ stream: result.stream }),
-  });
+    return createUIMessageStreamResponse({
+      stream: toUIMessageStream({ stream: result.stream }),
+    });
+  } catch (error) {
+    return apiErrorFromUnknown(error, 'AI 对话暂时不可用，请稍后重试', 500, '/api/chat');
+  }
 }

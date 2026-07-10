@@ -1,14 +1,23 @@
-/*
- * @Author: shaoliye
- * @Date: 2026-06-20
- * @Description: 用户、角色、权限管理前端类型出口，复用 contracts 契约
- * @Copyright: Copyright 1990 - 2026
+/**
+ * 本文件集中导出访问控制管理页面使用的共享契约类型。
  */
+
 export type {
+  AccessAuditListResult,
+  AccessAuditLog,
+  AccessDataScope,
+  AccessDepartment,
+  AccessDepartmentStatus,
+  AccessDepartmentTreeNode,
   AccessPermission,
+  AccessPermissionEffect,
+  AccessPermissionKind,
   AccessRole,
+  AccessRolePermissionGrant,
   AccessUser,
   AccessUserPermission,
   AccessUserRole,
-} from "@workspace/contracts/access"
-
+  AccessUserStatus,
+  GrantableDataScope,
+  SystemPermissionCode,
+} from '@workspace/contracts/access';

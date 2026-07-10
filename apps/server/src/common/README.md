@@ -1,149 +1,111 @@
-# src/common/ — 公共基础设施层
+# `src/common` 公共基础设施
 
-本目录存放与业务无关、可被所有模块复用的基础设施代码，包含 NestJS 五大横切关注点：**拦截器、过滤器、守卫、管道、装饰器**，以及通用工具函数。
-
----
+本目录存放不依赖具体业务模块的 NestJS 横切能力。业务 Service 只返回真实数据或抛出业务异常，成功响应包装、错误归一化、requestId 和日志分级均在这里统一处理。
 
 ## 目录说明
 
-```
+```text
 common/
-├── constants/      # 常量：统一响应码、默认文案等
-├── interceptors/   # 拦截器：处理请求 / 响应的横切逻辑
-├── filters/        # 异常过滤器：统一捕获和格式化异常响应
-├── guards/         # 守卫：路由访问控制（认证 / 权限）[待扩展]
-├── pipes/          # 管道：入参校验与类型转换 [按需扩展]
-├── decorators/     # 自定义装饰器 [待扩展]
-└── utils/          # 纯函数工具库 [待扩展]
+├── constants/        # contracts 业务码转发与服务端默认文案
+├── exceptions/       # 带稳定业务码的 BusinessException
+├── filters/          # 全局异常捕获、映射、脱敏与日志
+├── interceptors/     # 成功响应统一包装
+├── middleware/       # HTTP 请求上下文初始化
+└── request-context/  # requestId 与 AsyncLocalStorage 工具
 ```
 
----
+## 统一成功响应
 
-## interceptors/ — 拦截器
-
-### `transform.interceptor.ts` — 统一响应格式拦截器
-
-**作用**：将所有 Controller 方法的返回值自动包装为标准响应体。
-
-**包装格式**：
+`TransformInterceptor` 将 Controller 返回的真实业务数据包装为：
 
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": <原始返回值>,
-  "timestamp": 1778041000929
+  "success": true,
+  "code": "COMMON.OK",
+  "message": "请求成功",
+  "data": {},
+  "timestamp": 1783700000000,
+  "requestId": "e4f23948-c6a4-4c27-8bcb-86780cde2bf4"
 }
 ```
 
-**注册方式**：在 `main.ts` 中全局注册，作用于所有接口：
+`code` 和 `ApiResponse<T>` 均来自 `@workspace/contracts/common`，服务端不得自行维护另一套业务码。
 
-```ts
-app.useGlobalInterceptors(new TransformInterceptor());
-```
+## 统一错误响应
 
-**泛型设计**：
-
-```ts
-export class TransformInterceptor<T> implements NestInterceptor<
-  T,
-  ApiResponse<T>
->
-```
-
-`ApiResponse<T>` 来自 `@workspace/contracts/common`，前后端共享同一响应契约。
-
----
-
-## filters/ — 异常过滤器
-
-### `all-exceptions.filter.ts` — 全局异常过滤器
-
-**作用**：捕获应用中所有未处理的异常（HTTP 异常和非 HTTP 异常），统一格式化为错误响应，防止裸堆栈信息泄露给用户。
-
-**响应格式**：
+`AllExceptionsFilter` 将业务异常、Nest HTTP 异常、DTO 校验错误和常见 Prisma 异常统一转换为：
 
 ```json
 {
-  "code": 404,
-  "message": "Cannot GET /xxx",
+  "success": false,
+  "code": "COMMON.VALIDATION_FAILED",
+  "message": "请求参数校验失败",
   "data": null,
-  "timestamp": 1778041000929
+  "details": [
+    {
+      "field": "email",
+      "message": "必须是有效的邮箱地址"
+    }
+  ],
+  "timestamp": 1783700000000,
+  "requestId": "e4f23948-c6a4-4c27-8bcb-86780cde2bf4",
+  "path": "/api/v1/auth/login"
 }
 ```
 
-**异常处理逻辑**：
+主要映射规则：
 
-| 异常类型 | `code` 取值 | `message` 取值 |
-|---------|-------------|----------------|
-| `HttpException`（NestJS 标准异常） | `exception.getStatus()` | 响应体中的 `message` 字段 |
-| 其他未知异常（数据库错误等） | `500` | `'Internal server error'` |
+| 异常                     |  HTTP 状态 | 业务码                     |
+| ------------------------ | ---------: | -------------------------- |
+| DTO 校验、400、422       | 400 或 422 | `COMMON.VALIDATION_FAILED` |
+| 未认证                   |        401 | `AUTH.UNAUTHORIZED`        |
+| 无权限                   |        403 | `ACCESS.PERMISSION_DENIED` |
+| 资源不存在               |        404 | `COMMON.NOT_FOUND`         |
+| 资源冲突                 |        409 | `RESOURCE.CONFLICT`        |
+| Prisma `P2002` / `P2003` |        409 | `RESOURCE.CONFLICT`        |
+| Prisma `P2025`           |        404 | `COMMON.NOT_FOUND`         |
+| 未知异常                 |        500 | `COMMON.INTERNAL_ERROR`    |
 
-**注册方式**：在 `main.ts` 中全局注册，**必须先于 Interceptor 注册**：
+4xx 使用 `warn` 记录，5xx 使用 `error` 并在服务端保留堆栈。任何 5xx 响应都只返回统一中文文案，不会向浏览器泄露数据库、路径或堆栈信息。
+
+## 抛出业务异常
+
+业务 Service 使用 `BusinessException` 声明稳定业务码，Controller 不应手工拼接错误响应：
+
+```ts
+throw new BusinessException({
+  status: HttpStatus.CONFLICT,
+  code: API_ERROR_CODES.DEPARTMENT_DISABLED,
+  message: '目标部门已停用',
+  details: [{ field: 'departmentId', message: '请选择启用中的部门' }],
+});
+```
+
+`cause` 可以保留原始异常因果链，但不会进入响应体。
+
+## requestId 请求上下文
+
+`RequestContextMiddleware` 会优先复用长度不超过 64 且只包含安全字符的 `x-request-id`；无效或缺失时生成 UUID。最终 requestId 同时写入：
+
+- Express 请求对象；
+- `x-request-id` 响应头；
+- 成功或失败响应体；
+- AsyncLocalStorage 请求上下文，供日志和授权审计读取。
+
+中间件应在根模块统一接入：
+
+```ts
+consumer.apply(RequestContextMiddleware).forRoutes('*');
+```
+
+即使中间件暂未接入，拦截器和异常过滤器也会调用 `ensureRequestId`，保证所有 API 响应都有 requestId；但需要异步上下文的审计逻辑仍依赖中间件。
+
+## 全局注册
+
+应用需要全局注册异常过滤器、DTO 校验管道和成功响应拦截器：
 
 ```ts
 app.useGlobalFilters(new AllExceptionsFilter());
+app.useGlobalPipes(new ValidationPipe(/* ... */));
 app.useGlobalInterceptors(new TransformInterceptor());
 ```
-
-**日志记录**：使用 NestJS 内置 `Logger` 记录每条异常，格式为：
-
-```
-[ERROR] AllExceptionsFilter [GET] /xxx → 404 Not Found
-```
-
----
-
-## guards/ — 守卫（待扩展）
-
-**预期用途**：路由访问控制，典型场景：
-
-- `JwtAuthGuard`：验证 JWT token，保护需要登录的接口
-- `RolesGuard`：基于用户角色的权限控制
-
-**扩展参考**：
-
-```ts
-// 使用方式：@UseGuards(JwtAuthGuard)
-// 或全局注册：app.useGlobalGuards(new JwtAuthGuard())
-```
-
----
-
-## pipes/ — 管道
-
-**预期用途**：请求入参的校验与转换，典型场景：
-
-- `ValidationPipe`：配合 `class-validator` 校验 DTO
-- `ParseIntPipe`：将字符串路由参数转换为整数
-
-当前已在 `main.ts` 注册全局 `ValidationPipe`：
-
-```ts
-app.useGlobalPipes(
-  new ValidationPipe({
-    whitelist: true,        // 剔除未声明字段
-    forbidNonWhitelisted: true,  // 存在额外字段时直接报错
-    transform: true,        // 自动类型转换
-  }),
-);
-```
-
----
-
-## decorators/ — 自定义装饰器（待扩展）
-
-**预期用途**：提取常用元数据，简化 Controller 代码，典型场景：
-
-- `@CurrentUser()`：从 JWT 中提取当前登录用户
-- `@Roles(...roles)`：声明接口所需角色
-
----
-
-## utils/ — 工具函数（待扩展）
-
-**预期用途**：纯函数工具，不依赖任何 NestJS 上下文，典型场景：
-
-- 分页参数计算
-- 密码加密 / 对比
-- 时间格式化

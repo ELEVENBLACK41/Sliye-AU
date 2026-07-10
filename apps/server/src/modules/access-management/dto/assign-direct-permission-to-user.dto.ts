@@ -1,43 +1,45 @@
 /*
- * @Author: shaoliye
- * @Date: 2026-06-20
- * @Description: 用户直接授权请求 DTO，校验权限、效果和数据范围
- * @Copyright: Copyright 1990 - 2026
+ * @Description: 用户直接授权或全局拒绝 DTO，CUSTOM 范围本期不对外开放。
  */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type {
-  AccessDataScope,
   AccessPermissionEffect,
   AssignDirectPermissionToUserRequestPayload,
+  GrantableDataScope,
 } from '@workspace/contracts/access';
 import { IsDateString, IsIn, IsInt, IsOptional, Min } from 'class-validator';
 
+/** 用户直接权限支持的效果。 */
 const permissionEffects: AccessPermissionEffect[] = ['ALLOW', 'DENY'];
-const dataScopes: AccessDataScope[] = [
+
+/** 本期允许授予的稳定数据范围。 */
+const grantableScopes: GrantableDataScope[] = [
   'ALL',
   'OWN',
   'DEPT',
   'DEPT_AND_CHILD',
   'PARTICIPATED',
-  'CUSTOM',
 ];
 
+/** 用户直接授权的运行时校验 DTO。 */
 export class AssignDirectPermissionToUserDto implements AssignDirectPermissionToUserRequestPayload {
+  /** 系统权限主键。 */
   @ApiProperty({ example: 1 })
   @IsInt()
   @Min(1)
   permissionId!: number;
 
-  @ApiPropertyOptional({ example: 'ALLOW', enum: permissionEffects })
-  @IsOptional()
+  /** 授权或全局拒绝效果。 */
+  @ApiProperty({ example: 'ALLOW', enum: permissionEffects })
   @IsIn(permissionEffects)
-  effect?: AccessPermissionEffect;
+  effect!: AccessPermissionEffect;
 
-  @ApiPropertyOptional({ example: 'DEPT', enum: dataScopes })
-  @IsOptional()
-  @IsIn(dataScopes)
-  scopeType?: AccessDataScope;
+  /** 授权数据范围；DENY 时业务层只允许 ALL。 */
+  @ApiProperty({ example: 'DEPT', enum: grantableScopes })
+  @IsIn(grantableScopes)
+  scopeType!: GrantableDataScope;
 
+  /** 可选的临时授权过期时间。 */
   @ApiPropertyOptional({ example: '2026-12-31T23:59:59.000Z' })
   @IsOptional()
   @IsDateString()

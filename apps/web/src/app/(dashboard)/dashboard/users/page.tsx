@@ -1,24 +1,14 @@
-/*
- * @Author: shaoliye
- * @Date: 2026-06-20
- * @Description: 用户管理页面，负责权限判断并交给页面组件流式渲染管理数据
- * @Copyright: Copyright 1990 - 2026
+/**
+ * 本文件是权限管理页面入口，在服务端执行细粒度权限校验后再渲染管理模块。
  */
-import { notFound } from "next/navigation"
-import { ACCESS_MANAGEMENT_PERMISSIONS } from "@workspace/contracts/access"
+import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 
-import { AccessManagementPage } from "@/features/access-management"
-import { getCurrentAuthUser } from "@/features/auth/services/auth-server.service"
+import { AccessManagementPage } from '@/features/access-management';
+import { requireServerPermission } from '@/features/auth/services/auth-server.service';
 
-// 渲染用户管理页面入口，只等待当前用户权限，不阻塞业务数据区块流式渲染。
+/** 渲染权限管理页；未授权访问统一进入中文 403 页面。 */
 export default async function UsersPage() {
-  const currentUser = await getCurrentAuthUser()
+  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.access.user.read);
 
-  if (!currentUser?.permissions.includes(ACCESS_MANAGEMENT_PERMISSIONS.read)) {
-    notFound()
-  }
-
-  return (
-    <AccessManagementPage currentUserPermissions={currentUser.permissions} />
-  )
+  return <AccessManagementPage currentUserPermissions={currentUser.permissions} />;
 }

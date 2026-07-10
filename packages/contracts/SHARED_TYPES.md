@@ -1,260 +1,77 @@
-# 共享类型设计与使用说明
+# 共享契约设计与使用说明
 
-`packages/contracts` 是 monorepo 内的共享契约包，包名为
-`@workspace/contracts`。它用于沉淀前端、后端、管理端都需要共同遵守的
-TypeScript 类型，例如 API 请求体、API 响应体、认证用户结构和 token 结构。
+`packages/contracts` 是 monorepo 内的前后端共享契约包，包名为 `@workspace/contracts`。它只描述跨端共同遵守的数据形状和只读代码目录，不包含请求函数、数据库访问、组件状态或业务实现。
 
-## 为什么这样设计
-
-### 1. 把“接口契约”放在应用之外
-
-`apps/server`、`apps/web`、`apps/admin` 都会关心同一批数据结构：
-
-- 后端需要知道接口接收什么请求体、返回什么响应体。
-- 前端需要知道请求参数怎么组装、响应数据怎么读取。
-- 管理端也可能复用同一套用户、认证、通用响应类型。
-
-如果这些类型分别写在各个 app 里，很容易出现字段漂移：后端改了字段名，
-前端本地类型却没跟着改，直到运行时才暴露问题。把类型放到
-`packages/contracts` 后，所有应用引用同一个来源，字段变化会在 TypeScript
-检查阶段暴露出来。
-
-### 2. 只放类型，不放业务实现
-
-当前 `@workspace/contracts` 只导出 `type`：
+## 导出入口
 
 ```ts
-export type * from './auth';
-export type * from './common';
-```
-
-这样做有几个好处：
-
-- 不把后端实现、前端状态、UI 组件混进契约层。
-- 不产生运行时依赖，减少打包和循环依赖风险。
-- 让这个包保持稳定：它描述“双方约定的数据形状”，而不是“某端如何实现业务”。
-
-### 3. 按业务域拆分导出
-
-包内使用子路径导出：
-
-```json
-{
-  "exports": {
-    ".": "./src/index.ts",
-    "./auth": "./src/auth/index.ts",
-    "./common": "./src/common/index.ts"
-  }
-}
-```
-
-因此调用方可以按领域引入：
-
-```ts
-import type { LoginRequestPayload } from '@workspace/contracts/auth';
-import type { ApiResponse } from '@workspace/contracts/common';
-```
-
-这样比从一个巨大入口导入更清晰，也方便后续继续扩展 `user`、`billing`、
-`course` 等领域契约。
-
-### 4. 后端 DTO 实现共享契约
-
-后端的 Nest DTO 可以 `implements` 契约类型：
-
-```ts
-import type { LoginRequestPayload } from '@workspace/contracts/auth';
-
-export class LoginDto implements LoginRequestPayload {
-  email!: string;
-  passwordCiphertext!: string;
-  passwordKeyId!: string;
-  nonce!: string;
-}
-```
-
-这表示 DTO 的字段必须满足共享契约。DTO 仍然可以保留 Nest 侧需要的 class
-形态、校验装饰器、转换逻辑；共享包只负责约束字段结构。
-
-### 5. 前端复用 API 类型，但保留 UI 表单类型
-
-前端可以直接复用请求和响应类型：
-
-```ts
+import { API_ERROR_CODES, API_SUCCESS_CODE } from '@workspace/contracts/common';
+import {
+  SYSTEM_PERMISSION_CODES,
+  SYSTEM_PERMISSION_DEFINITIONS,
+  SYSTEM_PERMISSIONS,
+} from '@workspace/contracts/access';
 import type {
-  LoginApiResponse,
-  LoginRequestPayload,
-} from '@workspace/contracts/auth';
+  AccessDepartmentTreeNode,
+  AccessRole,
+  AccessUser,
+  GrantableDataScope,
+  SystemPermissionCode,
+} from '@workspace/contracts/access';
+import type { AuthUser, LoginRequestPayload } from '@workspace/contracts/auth';
+import type { CreateDecisionRequestPayload, DecisionDetail, DecisionSummary } from '@workspace/contracts/decisions';
 ```
 
-但不是所有前端类型都应该放进 contracts。例如登录表单里可能有明文
-`password` 字段，而真实接口发送的是加密后的 `passwordCiphertext`：
+当前支持以下子路径：
 
-```ts
-export type LoginFormValues = {
-  email: string;
-  password: string;
-};
-```
+- `@workspace/contracts/common`：统一成功与错误响应、稳定业务码。
+- `@workspace/contracts/access`：系统权限目录、系统角色目录、RBAC、部门树和授权审计。
+- `@workspace/contracts/auth`：登录、注册、令牌和当前认证用户。
+- `@workspace/contracts/decisions`：最小决策列表、详情与创建请求。
 
-这类只服务 UI 的类型应继续留在前端 feature 内。`contracts` 只放跨端共同认可的
-接口数据结构。
+## 允许的只读运行时常量
 
-## 使用方式
+契约包通常只导出类型，但权限 V2 允许导出无副作用的只读常量，作为跨端唯一事实来源：
 
-### 安装关系
+- `SYSTEM_PERMISSION_DEFINITIONS`：权限名称、模块、动作、说明和允许范围。
+- `SYSTEM_PERMISSION_CODES`：用于输入校验和漂移检查的权限码数组。
+- `SYSTEM_PERMISSIONS`：按业务语义分组的权限码对象。
+- `SYSTEM_ROLE_DEFINITIONS`：四个系统角色与默认授权。
+- `API_SUCCESS_CODE`、`API_ERROR_CODES`：统一响应业务码。
 
-需要使用共享类型的 app，在自己的 `package.json` 中声明 workspace 依赖：
+这些常量不得读取环境变量、访问网络或数据库，也不得依赖任何 `apps/*` 代码。权限目录同步由服务端显式命令执行，应用启动只能执行只读漂移检查。
 
-```json
-{
-  "dependencies": {
-    "@workspace/contracts": "workspace:*"
-  }
-}
-```
+## 统一响应
 
-当前 `apps/web`、`apps/admin`、`apps/server` 已经这样配置。
-
-### 引入通用响应类型
+所有 JSON API 使用 `success` 可判别联合：
 
 ```ts
 import type { ApiResponse } from '@workspace/contracts/common';
 
-type UserListResponse = ApiResponse<User[]>;
-```
-
-`ApiResponse<T>` 的结构是：
-
-```ts
-export type ApiResponse<T> = {
-  code: number;
-  message?: string;
-  data: T;
-  timestamp?: number;
-};
-```
-
-### 引入认证契约
-
-```ts
-import type {
-  AuthSession,
-  LoginApiResponse,
-  LoginRequestPayload,
-  RegisterRequestPayload,
-} from '@workspace/contracts/auth';
-```
-
-常见用途：
-
-- `LoginRequestPayload`：登录接口请求体。
-- `RegisterRequestPayload`：注册接口请求体。
-- `AuthUser`：认证用户结构。
-- `AuthTokens`：访问令牌和刷新令牌结构。
-- `AuthSession`：登录成功后的用户与 token 会话结构。
-- `LoginApiResponse`：登录接口响应类型。
-- `PasswordPublicKeyApiResponse`：密码加密公钥接口响应类型。
-
-### 在 server 中使用
-
-DTO 用 class，契约用 type。DTO 实现契约即可：
-
-```ts
-import type { RegisterRequestPayload } from '@workspace/contracts/auth';
-
-export class RegisterDto implements RegisterRequestPayload {
-  email!: string;
-  name?: string;
-  passwordCiphertext!: string;
-  passwordKeyId!: string;
-  nonce!: string;
-}
-```
-
-如果 DTO 需要运行时校验，可以继续在字段上加 Nest/class-validator 装饰器；
-这些运行时逻辑不放进 `contracts`。
-
-### 在 web/admin 中使用
-
-服务层请求和响应应优先引用 contracts：
-
-```ts
-import type {
-  LoginApiResponse,
-  LoginRequestPayload,
-} from '@workspace/contracts/auth';
-
-async function login(payload: LoginRequestPayload): Promise<LoginApiResponse> {
-  return request.post('/auth/login', payload);
-}
-```
-
-页面表单、组件 props、局部状态等前端专用类型，不需要上升到 contracts：
-
-```ts
-type LoginFormValues = {
-  email: string;
-  password: string;
-};
-```
-
-## 新增共享类型的规则
-
-新增类型时，先判断它是否属于“跨端契约”：
-
-- 是接口请求体、响应体、跨端共享枚举或跨端共享数据结构：放进
-  `packages/contracts`。
-- 是页面表单、组件 props、后端实体、数据库模型、Nest guard 上下文、
-  Zustand store 状态：留在对应 app 内。
-
-推荐步骤：
-
-1. 在 `packages/contracts/src/<domain>/` 下新增或修改类型文件。
-2. 在该领域的 `index.ts` 中导出类型。
-3. 如需新的子路径导入，在 `packages/contracts/package.json` 的 `exports`
-   中增加入口。
-4. 在调用方用 `import type` 引入。
-5. 运行类型检查，确认 server 和 web/admin 都通过。
-
-示例：
-
-```ts
-// packages/contracts/src/profile/profile.types.ts
-export type UpdateProfileRequestPayload = {
-  name?: string;
-  avatarUrl?: string;
-};
-```
-
-```ts
-// packages/contracts/src/profile/index.ts
-export type * from './profile.types';
-```
-
-```json
-// packages/contracts/package.json
-{
-  "exports": {
-    "./profile": "./src/profile/index.ts"
+function readResponse<T>(response: ApiResponse<T>): T {
+  if (!response.success) {
+    throw new Error(`${response.code}: ${response.message}`);
   }
+
+  return response.data;
 }
 ```
 
-```ts
-import type { UpdateProfileRequestPayload } from '@workspace/contracts/profile';
-```
+成功响应固定使用 `COMMON.OK`。失败响应使用稳定字符串错误码，并携带 `requestId`、`path` 和可选字段错误 `details`；未知异常不得把堆栈、SQL 或内部错误原文暴露给浏览器。
 
-## 边界约定
+## 权限与数据范围
 
-`contracts` 应该保持以下边界：
+`AccessDataScope` 包含持久层可能存在的 `CUSTOM`，用于读取和迁移历史记录。所有新增授权 DTO 必须使用 `GrantableDataScope`，因此不能继续授予当前尚未实现的 `CUSTOM`。
 
-- 只定义数据形状，不写请求函数。
-- 只定义跨端契约，不放某个 app 私有类型。
-- 不依赖 `apps/server`、`apps/web` 或 `apps/admin`。
-- 不放 React、Nest、Prisma、数据库实体等具体框架类型。
-- 优先使用 `type` 和字面量联合类型，保持可移植。
-- 导入时优先使用 `import type`。
+角色权限以独立授权记录表达：同一个角色可以为同一权限保存多个不同数据范围。用户直接 `DENY` 只能使用 `ALL`，该约束由契约注释说明，并由服务端 DTO 与业务服务再次校验。
 
-一句话总结：`packages/contracts` 是前后端之间的“类型协议层”。它不决定业务怎么
-运行，只确保所有应用对 API 数据结构有同一份、可被 TypeScript 检查的理解。
+系统权限和系统角色只允许通过代码目录同步。业务接口只能创建和维护自定义角色或自定义权限，不能修改系统目录记录。
+
+## 新增共享契约的规则
+
+1. 仅放 API 请求体、响应业务数据、跨端枚举和纯只读代码目录。
+2. 每个导出类型和每个字段必须写中文 JSDoc，新文件必须写中文文件头。
+3. 后端 DTO 可以 `implements` 请求契约，但运行时校验仍由 Nest 与 `class-validator` 负责。
+4. 页面表单、组件 props、Prisma model、Nest 请求上下文和 store 状态留在对应 app 内。
+5. 新增领域入口后同步修改 `package.json` 的 `exports` 和根 `src/index.ts`。
+6. 完成修改后运行 `pnpm --filter @workspace/contracts check-types`。
