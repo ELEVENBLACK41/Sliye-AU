@@ -1,20 +1,16 @@
 /*
  * @Author: shaoliye
  * @Date: 2026-06-20
- * @Description: 用户管理页面，展示用户、角色和权限码基础管理视图
+ * @Description: 用户管理页面，负责权限判断并交给页面组件流式渲染管理数据
  * @Copyright: Copyright 1990 - 2026
  */
 import { notFound } from "next/navigation"
 import { ACCESS_MANAGEMENT_PERMISSIONS } from "@workspace/contracts/access"
 
+import { AccessManagementPage } from "@/features/access-management"
 import { getCurrentAuthUser } from "@/features/auth/services/auth-server.service"
-import {
-  AccessManagementErrorPage,
-  AccessManagementPage,
-  getAccessManagementDashboardData,
-} from "@/features/access-management"
 
-// 渲染用户管理页面。
+// 渲染用户管理页面入口，只等待当前用户权限，不阻塞业务数据区块流式渲染。
 export default async function UsersPage() {
   const currentUser = await getCurrentAuthUser()
 
@@ -22,36 +18,7 @@ export default async function UsersPage() {
     notFound()
   }
 
-  const result = await loadAccessManagementData()
-
-  if (!result.ok) {
-    return <AccessManagementErrorPage message={result.message} />
-  }
-
   return (
-    <AccessManagementPage
-      data={result.data}
-      currentUserPermissions={currentUser.permissions}
-    />
+    <AccessManagementPage currentUserPermissions={currentUser.permissions} />
   )
-}
-
-// 读取用户管理页面数据，并转换为页面可消费的成功/失败结果。
-async function loadAccessManagementData() {
-  try {
-    const data = await getAccessManagementDashboardData()
-
-    return {
-      ok: true as const,
-      data,
-    }
-  } catch (error) {
-    return {
-      ok: false as const,
-      message:
-        error instanceof Error
-          ? error.message
-          : "用户管理数据加载失败，请稍后再试",
-    }
-  }
 }
