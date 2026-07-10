@@ -23,6 +23,13 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 import { Label } from "@workspace/ui/components/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@workspace/ui/components/select"
 
 type AccessManagementActionsProps = {
   data: AccessManagementDashboardData
@@ -462,25 +469,27 @@ function SelectField({
   options: Array<{ value: string; label: string }>
   onChange: (value: string) => void
 }) {
+  const hasOptions = options.length > 0
+
   return (
     <div className="flex flex-col gap-2">
       <Label htmlFor={id}>{label}</Label>
-      <select
-        id={id}
+      <Select
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        onValueChange={onChange}
+        disabled={!hasOptions}
       >
-        {options.length > 0 ? (
-          options.map((option) => (
-            <option key={option.value} value={option.value}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue placeholder="暂无可选数据" />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
               {option.label}
-            </option>
-          ))
-        ) : (
-          <option value="">暂无可选数据</option>
-        )}
-      </select>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

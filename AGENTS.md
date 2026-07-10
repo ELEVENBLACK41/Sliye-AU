@@ -21,6 +21,7 @@
 - 页面都默认用中文。
 - 暂时冻结 admin端，以模块形式先写进web端，以后没我得允许就不写admin了 只在web端写，后续根据权限去展示数据和模块以及功能
 - 每次新增 package下的ui不要自己写 要安装shadcn ui
+- 对于 包括但不限于 Select、Dialog、Popover、Tabs、Switch、Checkbox、Radio、Textarea 等等这类高强度复用的简单基础组件，一律优先使用 shadcn/Radix 组件，不要在业务页面里手写原生控件和样式；如果 `packages/ui` 里没有，先补 shadcn 组件再在业务中复用。
 - 书写页面的时候要注意语义化。
 - 保持当前技术栈，不随便引入新框架或重型依赖，如果真实需要得话询问我
 - 改动要小而清楚，不顺手做大重构。
