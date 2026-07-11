@@ -664,6 +664,18 @@ export class AccessManagementService {
     dto: AssignDepartmentToUserDto,
     meta: RequestClientMeta,
   ): Promise<AccessUser> {
+    if (
+      actor.userId === userId &&
+      dto.departmentId === null &&
+      !actor.isSuperAdmin
+    ) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.ACCESS_PERMISSION_DENIED,
+        message: '非超级管理员不能解绑自己的主部门',
+        status: 403,
+      });
+    }
+
     const user = await this.getUserInScope(
       actor,
       'access:user:department:update',

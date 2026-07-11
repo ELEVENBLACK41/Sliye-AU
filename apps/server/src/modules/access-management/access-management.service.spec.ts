@@ -179,4 +179,20 @@ describe('AccessManagementService', () => {
       code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
     });
   });
+
+  it('non-super-admin cannot clear their own primary department', async () => {
+    const prisma = createPrismaMock();
+    const authorization = createAuthorizationMock();
+    const service = new AccessManagementService(
+      prisma as unknown as PrismaService,
+      authorization as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.updateUserDepartment(createActor(), 1, { departmentId: null }, {}),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.ACCESS_PERMISSION_DENIED,
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
 });
