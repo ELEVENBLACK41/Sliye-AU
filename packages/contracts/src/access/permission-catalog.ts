@@ -306,6 +306,7 @@ export const SYSTEM_ROLE_DEFINITIONS = [
       { code: SYSTEM_PERMISSIONS.decision.read, scopeType: 'DEPT_AND_CHILD' },
       { code: SYSTEM_PERMISSIONS.decision.read, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.decision.create, scopeType: 'DEPT_AND_CHILD' },
+      { code: SYSTEM_PERMISSIONS.ai.chatUse, scopeType: 'ALL' },
     ],
   },
   {
@@ -317,6 +318,7 @@ export const SYSTEM_ROLE_DEFINITIONS = [
       { code: SYSTEM_PERMISSIONS.access.department.read, scopeType: 'DEPT' },
       { code: SYSTEM_PERMISSIONS.decision.read, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.decision.create, scopeType: 'DEPT' },
+      { code: SYSTEM_PERMISSIONS.ai.chatUse, scopeType: 'ALL' },
     ],
   },
 ] as const satisfies readonly SystemRoleDefinition[];

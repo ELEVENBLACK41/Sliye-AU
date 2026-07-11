@@ -107,11 +107,40 @@ pnpm dev
 
 ---
 
+## 换电脑或拉取最新代码后的同步
+
+在另一台电脑拉取代码后，先配置 `apps/server/.env` 和 `apps/web/.env.local`。环境变量不会被 Git 同步；尤其要确认 `DATABASE_URL` 指向预期的 PostgreSQL 数据库。
+
+```bash
+# 项目根目录：安装与锁文件一致的依赖
+pnpm install --frozen-lockfile
+
+# apps/server 目录：依次同步数据库结构、生成 Prisma Client、同步并检查系统权限目录
+pnpm prisma migrate deploy #应用 Git 拉下来的已有数据库迁移
+pnpm prisma generate #根据当前 Prisma Schema 生成本机的 Prisma Client
+pnpm access-control:sync #将权限目录、系统角色和默认授权同步进数据库
+pnpm access-control:check #只检查数据库与权限代码是否一致，不写数据
+```
+
+Windows PowerShell 若提示禁止运行 `pnpm.ps1`，将上述命令中的 `pnpm` 替换为 `pnpm.cmd`。
+
+- `prisma migrate deploy` 只应用仓库已有迁移；拉取代码后不要使用 `prisma migrate dev` 或 `prisma db push`。
+- `access-control:sync` 会把代码中的系统权限、系统角色和默认授权同步到数据库；`access-control:check` 只读检查两者是否一致。
+- 若两台电脑连接同一个数据库，只会同步结构和权限配置，业务数据会保持一致；若连接不同数据库，则需要另行导入数据库备份或重新初始化业务数据。
+
+权限同步时还要确保存在一个有效用户可成为超级管理员；脚本无法自动判断时，需要在 apps/server/.env 配置：
+
+BOOTSTRAP_SUPER_ADMIN_EMAIL=你的已注册邮箱
+前提是这个邮箱对应的用户已经存在且状态为 ACTIVE。
+
+---
+
 ## 权限体系 V2
 
 当前项目已实现单组织部门树、四个系统角色、代码优先权限目录、角色/用户授权、数据范围、授权审计和统一错误响应。应用启动时只读检查权限目录漂移，不会自动写数据库；部署时应显式执行：
 
 ```bash
+pnpm --filter @nextnest/server access-control:sync
 pnpm --filter @nextnest/server access-control:check
 ```
 
