@@ -1,3 +1,11 @@
+/*
+ * @Author: shaoliye elevenblack41@gmail.com
+ * @Date: 2026-07-13 11:24:41
+ * @LastEditors: shaoliye elevenblack41@gmail.com
+ * @LastEditTime: 2026-07-13 14:50:52
+ * @FilePath: \NextNest\apps\server\src\common\exceptions\business.exception.ts
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 /**
  * 业务异常基类。
  *
@@ -40,9 +48,11 @@ export class BusinessException extends HttpException {
    * @param options 业务错误码、中文文案、HTTP 状态和可选详情。
    */
   constructor(options: BusinessExceptionOptions) {
-    const status = options.status ?? HttpStatus.BAD_REQUEST;
+    //构造函数 每次 new BusinessException 时会调用这里
+    const status = options.status ?? HttpStatus.BAD_REQUEST; //如果没有传递 status，则默认使用 400 Bad Request
     const details = options.details ? [...options.details] : undefined;
 
+    //调用父类得构造函数，因为BusinessException 继承自 HttpException，所以需要调用父类的构造函数来初始化 HttpException 的属性
     super(
       {
         code: options.code,
@@ -52,6 +62,12 @@ export class BusinessException extends HttpException {
       status,
       options.cause === undefined ? undefined : { cause: options.cause },
     );
+
+    //派生类,JavaScript 要求继承类的构造函数必须先调用父类构造函数,
+    /** 错误写法  constructor(options: BusinessExceptionOptions) {
+      this.code = options.code;
+      super(...);
+    } */
 
     this.code = options.code;
     this.details = details;
