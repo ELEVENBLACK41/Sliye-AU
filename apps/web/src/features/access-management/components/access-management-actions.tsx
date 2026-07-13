@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/componen
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 
 /** 权限管理操作区属性。 */
 type AccessManagementActionsProps = {
@@ -72,20 +73,67 @@ const userStatusOptions: Array<{ value: AccessUserStatus; label: string }> = [
   { value: 'LOCKED', label: '已锁定' },
 ];
 
+/** 操作按钮在移动端保持易点击宽度，桌面端按内容收紧并靠右对齐。 */
+const actionButtonClassName = 'w-full sm:w-auto sm:min-w-28 sm:justify-self-end';
+
 /** 渲染当前账号有权执行的全部权限管理操作。 */
 export function AccessManagementActions({ data, capabilities }: AccessManagementActionsProps) {
+  const actionTabs = [
+    {
+      value: 'departments',
+      label: '部门管理',
+      visible: capabilities.canCreateDepartment || capabilities.canUpdateDepartment || capabilities.canMoveDepartment,
+      content: <DepartmentActions data={data} capabilities={capabilities} />,
+    },
+    {
+      value: 'users',
+      label: '用户与角色',
+      visible:
+        capabilities.canUpdateUserDepartment || capabilities.canUpdateUserStatus || capabilities.canAssignUserRole,
+      content: <UserActions data={data} capabilities={capabilities} />,
+    },
+    {
+      value: 'roles',
+      label: '角色授权',
+      visible: capabilities.canCreateRole || capabilities.canUpdateRole || capabilities.canAssignRolePermission,
+      content: <RoleActions data={data} capabilities={capabilities} />,
+    },
+    {
+      value: 'direct-permissions',
+      label: '直接授权',
+      visible: capabilities.canAssignUserPermission,
+      content: <DirectPermissionActions data={data} />,
+    },
+  ].filter((item) => item.visible);
+
+  if (!actionTabs.length) {
+    return null;
+  }
+
   return (
-    <section className="grid items-start gap-4 xl:grid-cols-2">
-      {capabilities.canCreateDepartment || capabilities.canUpdateDepartment || capabilities.canMoveDepartment ? (
-        <DepartmentActions data={data} capabilities={capabilities} />
-      ) : null}
-      {capabilities.canUpdateUserDepartment || capabilities.canUpdateUserStatus || capabilities.canAssignUserRole ? (
-        <UserActions data={data} capabilities={capabilities} />
-      ) : null}
-      {capabilities.canCreateRole || capabilities.canUpdateRole || capabilities.canAssignRolePermission ? (
-        <RoleActions data={data} capabilities={capabilities} />
-      ) : null}
-      {capabilities.canAssignUserPermission ? <DirectPermissionActions data={data} /> : null}
+    <section className="rounded-md border bg-card p-3 sm:p-4" aria-labelledby="access-actions-title">
+      <div className="mb-4 flex flex-col gap-1">
+        <h2 id="access-actions-title" className="text-base font-semibold">
+          配置操作
+        </h2>
+        <p className="text-sm text-muted-foreground">按管理任务切换操作区，避免多组长表单同时占用页面空间。</p>
+      </div>
+      <Tabs defaultValue={actionTabs[0]?.value}>
+        <div className="overflow-x-auto pb-1">
+          <TabsList aria-label="权限配置操作分类">
+            {actionTabs.map((item) => (
+              <TabsTrigger key={item.value} value={item.value}>
+                {item.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+        {actionTabs.map((item) => (
+          <TabsContent key={item.value} value={item.value} className="mt-2">
+            {item.content}
+          </TabsContent>
+        ))}
+      </Tabs>
     </section>
   );
 }
@@ -194,7 +242,7 @@ function DepartmentActions({ data, capabilities }: AccessManagementActionsProps)
             options={parentOptions}
             onChange={setParentId}
           />
-          <Button disabled={!code.trim() || !name.trim() || Boolean(pendingAction)}>
+          <Button className={actionButtonClassName} disabled={!code.trim() || !name.trim() || Boolean(pendingAction)}>
             <PendingIcon active={pendingAction === 'create-department'} />
             创建部门
           </Button>
@@ -214,12 +262,17 @@ function DepartmentActions({ data, capabilities }: AccessManagementActionsProps)
           {capabilities.canUpdateDepartment ? (
             <>
               <TextField id="department-updated-name" label="部门名称" value={updatedName} onChange={setUpdatedName} />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button type="submit" disabled={!updatedName.trim() || Boolean(pendingAction)}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  className={actionButtonClassName}
+                  type="submit"
+                  disabled={!updatedName.trim() || Boolean(pendingAction)}
+                >
                   <PendingIcon active={pendingAction === 'update-department'} />
                   保存名称
                 </Button>
                 <Button
+                  className={actionButtonClassName}
                   type="button"
                   variant="outline"
                   disabled={Boolean(pendingAction)}
@@ -240,6 +293,7 @@ function DepartmentActions({ data, capabilities }: AccessManagementActionsProps)
                 onChange={setMoveParentId}
               />
               <Button
+                className={actionButtonClassName}
                 type="button"
                 variant="outline"
                 disabled={Boolean(pendingAction)}
@@ -344,7 +398,11 @@ function UserActions({ data, capabilities }: AccessManagementActionsProps) {
             options={departmentOptions}
             onChange={setDepartmentId}
           />
-          <Button disabled={!userId || Boolean(pendingAction)} onClick={() => void handleUpdateDepartment()}>
+          <Button
+            className={actionButtonClassName}
+            disabled={!userId || Boolean(pendingAction)}
+            onClick={() => void handleUpdateDepartment()}
+          >
             <PendingIcon active={pendingAction === 'user-department'} />
             保存部门归属
           </Button>
@@ -360,6 +418,7 @@ function UserActions({ data, capabilities }: AccessManagementActionsProps) {
             onChange={(value) => setStatus(value as AccessUserStatus)}
           />
           <Button
+            className={actionButtonClassName}
             variant="outline"
             disabled={!userId || Boolean(pendingAction)}
             onClick={() => void handleUpdateStatus()}
@@ -378,7 +437,11 @@ function UserActions({ data, capabilities }: AccessManagementActionsProps) {
             options={roleOptions}
             onChange={setRoleId}
           />
-          <Button disabled={!userId || !roleId || Boolean(pendingAction)} onClick={() => void handleAssignRole()}>
+          <Button
+            className={actionButtonClassName}
+            disabled={!userId || !roleId || Boolean(pendingAction)}
+            onClick={() => void handleAssignRole()}
+          >
             <PendingIcon active={pendingAction === 'assign-user-role'} />
             分配角色
           </Button>
@@ -390,6 +453,7 @@ function UserActions({ data, capabilities }: AccessManagementActionsProps) {
             onChange={setAssignedRoleId}
           />
           <Button
+            className={actionButtonClassName}
             variant="outline"
             disabled={!userId || !assignedRoleId || Boolean(pendingAction)}
             onClick={() => void handleRemoveRole()}
@@ -528,7 +592,10 @@ function RoleActions({ data, capabilities }: AccessManagementActionsProps) {
             onChange={setRoleDescription}
             placeholder="负责评审指定决策"
           />
-          <Button disabled={!roleCode.trim() || !roleName.trim() || Boolean(pendingAction)}>
+          <Button
+            className={actionButtonClassName}
+            disabled={!roleCode.trim() || !roleName.trim() || Boolean(pendingAction)}
+          >
             <PendingIcon active={pendingAction === 'create-role'} />
             创建角色
           </Button>
@@ -558,12 +625,13 @@ function RoleActions({ data, capabilities }: AccessManagementActionsProps) {
                 value={updatedRoleDescription}
                 onChange={setUpdatedRoleDescription}
               />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button disabled={!updatedRoleName.trim() || Boolean(pendingAction)}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button className={actionButtonClassName} disabled={!updatedRoleName.trim() || Boolean(pendingAction)}>
                   <PendingIcon active={pendingAction === 'update-role'} />
                   保存角色
                 </Button>
                 <Button
+                  className={actionButtonClassName}
                   type="button"
                   variant="outline"
                   disabled={!roleId || Boolean(pendingAction)}
@@ -592,6 +660,7 @@ function RoleActions({ data, capabilities }: AccessManagementActionsProps) {
                 onChange={(value) => setScopeType(value as GrantableDataScope)}
               />
               <Button
+                className={actionButtonClassName}
                 type="button"
                 disabled={!roleId || !permissionId || !allowedScopeOptions.length || Boolean(pendingAction)}
                 onClick={() => void handleAssignPermission()}
@@ -607,6 +676,7 @@ function RoleActions({ data, capabilities }: AccessManagementActionsProps) {
                 onChange={setGrantId}
               />
               <Button
+                className={actionButtonClassName}
                 type="button"
                 variant="outline"
                 disabled={!grantId || Boolean(pendingAction)}
@@ -741,6 +811,7 @@ function DirectPermissionActions({ data }: { data: AccessManagementDashboardData
         />
       </div>
       <Button
+        className={actionButtonClassName}
         disabled={!userId || !permissionId || !allowedScopeOptions.length || Boolean(pendingAction)}
         onClick={() => void handleAssignPermission()}
       >
@@ -755,6 +826,7 @@ function DirectPermissionActions({ data }: { data: AccessManagementDashboardData
         onChange={setGrantId}
       />
       <Button
+        className={actionButtonClassName}
         variant="outline"
         disabled={!grantId || Boolean(pendingAction)}
         onClick={() => void handleRemovePermission()}
@@ -823,7 +895,7 @@ function ActionCard({
   children: ReactNode;
 }) {
   return (
-    <Card className="rounded-md shadow-none">
+    <Card className="mx-auto w-full max-w-4xl rounded-md shadow-none">
       <CardHeader className="gap-2">
         <CardTitle className="text-base">{title}</CardTitle>
         {message ? (

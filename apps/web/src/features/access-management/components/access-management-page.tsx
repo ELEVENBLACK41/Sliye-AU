@@ -237,12 +237,12 @@ function SummaryCards({
   ].filter((item): item is { title: string; value: number } => item !== null);
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {summaries.map((summary) => (
         <Card key={summary.title} className="rounded-md shadow-none">
-          <CardHeader className="gap-1">
+          <CardHeader className="gap-0.5 py-4">
             <CardTitle className="text-sm text-muted-foreground">{summary.title}</CardTitle>
-            <p className="text-2xl font-semibold">{summary.value}</p>
+            <p className="text-xl font-semibold tabular-nums">{summary.value}</p>
           </CardHeader>
         </Card>
       ))}
