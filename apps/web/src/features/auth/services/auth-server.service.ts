@@ -8,7 +8,7 @@ import type { SystemPermissionCode } from '@workspace/contracts/access';
 import type { AuthUser } from '@workspace/contracts/auth';
 
 import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
-import { requestProfileFromNest } from './auth-bff.service';
+import { requestProfileFromNest } from './auth-nest-client';
 
 /**
  * 读取当前登录用户资料。

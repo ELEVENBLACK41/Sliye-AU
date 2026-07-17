@@ -7,10 +7,15 @@
 浏览器只请求 Next.js 自己的 `/api/*`，不直接请求 NestJS。
 
 ```text
-Client Component / Server Component
+Client Component
   -> apps/web/src/services/request.ts
   -> apps/web/src/app/api/**/route.ts
-  -> apps/web/src/features/**/services/*-bff.service.ts
+  -> apps/web/src/features/**/services/*-nest-client.ts
+  -> NestJS API
+
+Server Component
+  -> apps/web/src/features/**/services/*-server.service.ts
+  -> apps/web/src/features/**/services/*-nest-client.ts
   -> NestJS API
 ```
 
@@ -29,7 +34,7 @@ Client Component / Server Component
 | --- | --- | --- |
 | 字段必填、格式校验 | `route.ts` 可以做第一层 | 快速拒绝明显非法请求 |
 | Cookie、Header、Session 处理 | `route.ts` | 这是 Web/BFF 层职责 |
-| 请求 Nest、解析 Nest 响应 | `features/*/services/*-bff.service.ts` | 避免每个 API 文件重复 fetch |
+| 请求 Nest、解析 Nest 响应 | `features/*/services/*-nest-client.ts` | 避免每个 API 文件重复 fetch |
 | 权限、事务、数据库写入 | NestJS | 保证多端复用，避免 Web 端和后端规则分裂 |
 | React 页面状态 | `features/*/components` | API 层不关心 UI 状态 |
 
@@ -121,8 +126,8 @@ return upstreamError(res.status)
 | 大厂常见做法 | 本项目对应做法 |
 | --- | --- |
 | 浏览器请求同域 BFF，不直接请求后端服务 | 浏览器只请求 `/api/*` |
-| 服务端环境变量不加 `NEXT_PUBLIC_` | `NEST_BASE_URL` / `NEST_API_PREFIX` 只在 Route Handler/BFF service 读取 |
-| API 文件只做校验、鉴权、编排 | `route.ts` 保持薄，转发逻辑下沉到 `*-bff.service.ts` |
+| 服务端环境变量不加 `NEXT_PUBLIC_` | `NEST_BASE_URL` / `NEST_API_PREFIX` 只在服务端请求基础设施中读取 |
+| API 文件只做校验、鉴权、编排 | `route.ts` 保持薄，NestJS 请求封装到 `*-nest-client.ts` |
 | token 不放 localStorage | access/refresh token 写入 `httpOnly` Cookie |
 | 统一响应结构和错误处理 | Nest 返回 `{ code, message, data, timestamp }`，Web 用 `requestData()` 消费 |
 | 重要逻辑后端兜底 | 权限、事务、数据写入放 NestJS |
@@ -130,12 +135,27 @@ return upstreamError(res.status)
 ## 新增接口 checklist
 
 1. 在 `features/xxx/types` 里定义请求和响应类型。
-2. 在 `features/xxx/services/xxx-bff.service.ts` 里封装请求 Nest 的函数。
-3. 在 `app/api/xxx/**/route.ts` 里做轻量校验、调用 BFF service、返回 `NextResponse.json()`。
+2. 在 `features/xxx/services/xxx-nest-client.ts` 里封装请求 Nest 的函数。
+3. 在 `app/api/xxx/**/route.ts` 里做轻量校验、调用 Nest client、返回 `NextResponse.json()`。
 4. 如果浏览器页面要调用，在 `features/xxx/services/xxx-client.service.ts` 里用 `requestData()` 封装。
 5. 跑 `pnpm --filter @nextnest/web lint` 和 `pnpm --filter @nextnest/web build`。
 
 ## 当前链路示例
+
+公开接口
+  → 不需要 access token
+  → Route Handler 调用 nest-client
+  → 例如登录、注册、验证码
+
+普通受保护接口
+  → 需要 access token
+  → authenticated-nest-proxy
+  → 例如权限管理、普通决策增删改查
+
+特殊受保护接口
+  → 需要 access token 和权限
+  → Route Handler 自定义处理
+  → 例如 AI 流式对话、未来文件上传和音视频
 
 登录：
 
@@ -144,7 +164,7 @@ LoginForm
   -> auth-client.service.ts login()
   -> requestData("/api/auth/login")
   -> app/api/auth/login/route.ts
-  -> auth-bff.service.ts requestLoginFromNest()
+  -> auth-nest-client.ts requestLoginFromNest()
   -> NestJS POST {NEST_BASE_URL}/auth/login
   -> BFF 写入 httpOnly Cookie
   -> 页面只拿到 user

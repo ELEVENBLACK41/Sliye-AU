@@ -19,7 +19,7 @@ import {
   requestPermissionsFromNest,
   requestRolesFromNest,
   requestUsersFromNest,
-} from './access-management-bff.service';
+} from './access-management-nest-client';
 
 /** 权限管理完整看板的数据集合。 */
 export type AccessManagementDashboardData = {

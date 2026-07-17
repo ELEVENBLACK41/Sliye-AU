@@ -15,8 +15,8 @@ import { z } from 'zod';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 
 import { apiError, apiErrorFromUnknown } from '@/app/api/_utils/response';
-import { getAuthenticatedRouteUser } from '@/features/auth/services/authenticated-bff-proxy.service';
 import { hasSystemPermission } from '@/features/auth/services/auth-server.service';
+import { getAuthenticatedRouteUser } from '@/server/bff/authenticated-nest-proxy';
 
 /** AI 对话请求体运行时校验规则。 */
 const chatRequestSchema = z.object({

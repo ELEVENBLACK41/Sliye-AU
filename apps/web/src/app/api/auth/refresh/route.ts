@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 
 import { apiError, apiErrorFromUnknown } from '@/app/api/_utils/response';
 import { AUTH_ACCESS_COOKIE_NAME, AUTH_REFRESH_COOKIE_NAME } from '@/features/auth/constants';
-import { requestRefreshFromNest } from '@/features/auth/services/auth-bff.service';
+import { requestRefreshFromNest } from '@/features/auth/services/auth-nest-client';
 
 // 使用 httpOnly refresh token 换新会话 token，并避免把 token 暴露给浏览器 JS。
 export async function POST() {

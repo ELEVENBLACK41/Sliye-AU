@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { apiError, apiErrorFromUnknown } from "@/app/api/_utils/response"
-import { requestRegisterFromNest } from "@/features/auth/services/auth-bff.service"
+import { requestRegisterFromNest } from "@/features/auth/services/auth-nest-client"
 import type { RegisterRequestPayload } from "@/features/auth/types/auth.type"
 
 export async function POST(request: Request) {

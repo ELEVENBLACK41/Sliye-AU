@@ -8,7 +8,7 @@ import type { DecisionDetail, DecisionSummary } from '@workspace/contracts/decis
 
 import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
 import type { NestResponse } from '@/services/bff-request';
-import { requestDecisionDetailFromNest, requestDecisionsFromNest } from './decisions-bff.service';
+import { requestDecisionDetailFromNest, requestDecisionsFromNest } from './decisions-nest-client';
 
 /** Server Component 调用 NestJS 时抛出的结构化业务错误。 */
 export class DecisionServerError extends Error {

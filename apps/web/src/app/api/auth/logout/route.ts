@@ -6,7 +6,7 @@ import { cookies } from 'next/headers';
 
 import { apiSuccess } from '@/app/api/_utils/response';
 import { AUTH_ACCESS_COOKIE_NAME, AUTH_REFRESH_COOKIE_NAME } from '@/features/auth/constants';
-import { requestLogoutFromNest } from '@/features/auth/services/auth-bff.service';
+import { requestLogoutFromNest } from '@/features/auth/services/auth-nest-client';
 
 /** 撤销服务端会话并清理浏览器访问令牌与刷新令牌。 */
 export async function POST() {

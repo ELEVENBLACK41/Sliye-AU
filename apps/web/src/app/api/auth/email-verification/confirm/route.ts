@@ -5,7 +5,7 @@ import {
   AUTH_ACCESS_COOKIE_NAME,
   AUTH_REFRESH_COOKIE_NAME,
 } from "@/features/auth/constants"
-import { requestConfirmEmailFromNest } from "@/features/auth/services/auth-bff.service"
+import { requestConfirmEmailFromNest } from "@/features/auth/services/auth-nest-client"
 import type { ConfirmEmailFormValues } from "@/features/auth/types/auth.type"
 
 export async function POST(request: Request) {

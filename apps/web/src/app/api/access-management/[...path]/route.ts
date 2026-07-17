@@ -1,7 +1,7 @@
 /**
  * 本文件把权限管理浏览器请求安全转发到 NestJS，并复用统一认证刷新与错误响应逻辑。
  */
-import { proxyAuthenticatedNestRequest } from '@/features/auth/services/authenticated-bff-proxy.service';
+import { proxyAuthenticatedNestRequest } from '@/server/bff/authenticated-nest-proxy';
 
 /** 动态权限管理路由参数。 */
 type RouteContext = {

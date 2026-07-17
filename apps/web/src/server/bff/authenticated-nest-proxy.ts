@@ -1,13 +1,15 @@
 /**
- * 本文件封装受保护 BFF 接口的认证转发、服务端单次刷新和统一 Cookie 轮换逻辑。
+ * 本文件提供跨业务复用的 NestJS 认证代理、服务端单次刷新和统一 Cookie 轮换能力。
  */
+import 'server-only';
+
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import type { AuthSession, AuthUser } from '@workspace/contracts/auth';
 
 import { apiError, apiErrorFromUnknown } from '@/app/api/_utils/response';
 import { AUTH_ACCESS_COOKIE_NAME, AUTH_REFRESH_COOKIE_NAME } from '@/features/auth/constants';
-import { requestProfileFromNest, requestRefreshFromNest } from '@/features/auth/services/auth-bff.service';
+import { requestProfileFromNest, requestRefreshFromNest } from '@/features/auth/services/auth-nest-client';
 import { requestNest, type NestResponse } from '@/services/bff-request';
 
 /** 同一服务进程内按刷新令牌合并的进行中刷新请求。 */

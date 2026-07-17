@@ -1,5 +1,5 @@
 /*
- * @Description: Web BFF 与 Nest Auth 模块通信的服务封装。
+ * @Description: Next.js 服务端与 NestJS Auth 模块通信的类型化请求客户端。
  */
 import type {
   AuthUser,

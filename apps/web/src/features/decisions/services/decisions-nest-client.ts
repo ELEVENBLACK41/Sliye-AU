@@ -1,5 +1,5 @@
 /**
- * 本文件封装决策 Server Component 到 NestJS 的只读请求。
+ * 本文件封装决策模块在 Next.js 服务端调用 NestJS 的类型化只读请求。
  */
 import type { DecisionDetail, DecisionSummary } from '@workspace/contracts/decisions';
 

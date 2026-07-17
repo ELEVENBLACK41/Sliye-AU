@@ -1,7 +1,7 @@
 /**
  * 本文件代理单个决策详情请求，越权结果保持后端统一 404。
  */
-import { proxyAuthenticatedNestRequest } from '@/features/auth/services/authenticated-bff-proxy.service';
+import { proxyAuthenticatedNestRequest } from '@/server/bff/authenticated-nest-proxy';
 
 /** 决策详情 BFF 路由参数。 */
 type DecisionRouteContext = {
