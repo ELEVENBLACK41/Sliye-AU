@@ -114,13 +114,7 @@ export function DepartmentActions({ data, capabilities }: AccessManagementAction
             onChange={setCode}
             placeholder="PRODUCT"
           />
-          <AccessTextField
-            id="department-name"
-            label="部门名称"
-            value={name}
-            onChange={setName}
-            placeholder="产品部"
-          />
+          <AccessTextField id="department-name" label="部门名称" value={name} onChange={setName} placeholder="产品部" />
           <AccessSelectField
             id="department-parent"
             label="上级部门"

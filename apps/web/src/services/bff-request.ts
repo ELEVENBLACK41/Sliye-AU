@@ -1,5 +1,6 @@
 /**
- * Web BFF 到 NestJS 的服务端请求工具，负责保留统一响应与请求链路标识。
+ * Web BFF 到 NestJS 的服务端请求工具，也就是Next得服务端请求Nest，负责保留统一响应与请求链路标识。
+ * Next BFF to NestJS
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { ApiErrorResponse, ApiResponse } from '@workspace/contracts/common';

@@ -1,5 +1,6 @@
 /**
- * 浏览器请求服务：统一处理 BFF 响应、业务错误和登录会话续签。
+ * 浏览器请求服务，web请求Next服务端，统一处理 BFF 响应、业务错误和登录会话续签。
+ * Browser to Next BFF
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { ApiErrorCode, ApiErrorDetail, ApiErrorResponse, ApiResponse } from '@workspace/contracts/common';
