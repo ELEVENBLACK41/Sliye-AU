@@ -12,11 +12,11 @@ type LoginPageProps = {
 /** 渲染 Decision Hub 认证页标题与认证表单。 */
 export function LoginPage({ redirectTo }: LoginPageProps) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-zinc-100 px-4 py-8 text-foreground">
+    <main className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-8 text-foreground">
       <section className="flex w-full max-w-md flex-col gap-6">
         <div className="space-y-2 text-center">
           <p className="text-sm font-medium text-emerald-700">Decision Hub</p>
-          <h1 className="text-3xl font-semibold tracking-normal text-zinc-950">登录</h1>
+          <h1 className="text-3xl font-semibold tracking-normal text-foreground">登录</h1>
           <p className="text-sm leading-6 text-muted-foreground">进入决策协作系统</p>
         </div>
         <LoginForm redirectTo={redirectTo} />

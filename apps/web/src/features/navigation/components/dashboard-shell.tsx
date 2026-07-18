@@ -10,6 +10,7 @@ import { Bot, ClipboardList, Home, ShieldCheck } from 'lucide-react';
 import { SYSTEM_PERMISSIONS, type SystemPermissionCode } from '@workspace/contracts/access';
 import type { AuthUser } from '@workspace/contracts/auth';
 
+import { ThemeToggle } from '@/components/theme-toggle';
 import { LogoutButton } from '@/features/auth/components/logout-button';
 import {
   Sidebar,
@@ -128,9 +129,12 @@ export function DashboardShell({ children, currentUser }: DashboardShellProps) {
               <p className="truncate text-xs text-muted-foreground">{currentUser.department?.name ?? '尚未分配部门'}</p>
             </div>
           </div>
-          <LogoutButton />
+          <div className="flex shrink-0 items-center gap-2">
+            <ThemeToggle />
+            <LogoutButton />
+          </div>
         </header>
-        <div className="flex flex-1 flex-col bg-zinc-50 p-4 md:p-6">{children}</div>
+        <div className="flex flex-1 flex-col bg-muted/40 p-4 md:p-6">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );

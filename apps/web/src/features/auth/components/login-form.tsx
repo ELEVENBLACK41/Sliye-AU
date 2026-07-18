@@ -233,7 +233,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
 
   if (mode === 'register') {
     return (
-      <Card className="w-full rounded-md border-zinc-200 shadow-none">
+      <Card className="w-full rounded-md shadow-none">
         <CardHeader className="space-y-2">
           <CardTitle className="text-2xl">注册账号</CardTitle>
           <CardDescription>创建 Decision Hub 账号</CardDescription>
@@ -318,7 +318,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
 
   if (mode === 'confirm') {
     return (
-      <Card className="w-full rounded-md border-zinc-200 shadow-none">
+      <Card className="w-full rounded-md shadow-none">
         <CardHeader className="space-y-2">
           <CardTitle className="text-2xl">验证邮箱</CardTitle>
           <CardDescription>输入 Nest 日志中的 6 位验证码</CardDescription>
@@ -334,7 +334,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
             {errorMessage ? <ErrorAlert message={errorMessage} /> : null}
 
             {secondsUntilExpiry !== null ? (
-              <div className="rounded-md border bg-zinc-50 p-3 text-sm text-muted-foreground">
+              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
                 <p>发送邮箱：{emailVerification?.sentTo}</p>
                 <p>有效期剩余：{formatDuration(secondsUntilExpiry)}</p>
                 {secondsUntilExpiry === 0 ? <p className="text-destructive">验证码已过期，请重新发送。</p> : null}
@@ -400,7 +400,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
   }
 
   return (
-    <Card className="w-full rounded-md border-zinc-200 shadow-none">
+    <Card className="w-full rounded-md shadow-none">
       <CardHeader className="space-y-2">
         <CardTitle className="text-2xl">账号登录</CardTitle>
         <CardDescription>使用已注册邮箱和密码登录</CardDescription>
