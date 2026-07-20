@@ -67,7 +67,7 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-/** Next.js Proxy 只拦截登录页和 Dashboard 路由组。 */
+/** Next.js Proxy 只拦截登录页和 Dashboard 路由组。 填上后此文件机器子集会自动执行*/
 export const config = {
   matcher: ['/login', '/dashboard/:path*'],
 };
