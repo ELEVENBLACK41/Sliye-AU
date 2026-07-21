@@ -4,20 +4,9 @@
 import { notFound } from 'next/navigation';
 import { SYSTEM_PERMISSIONS, SYSTEM_ROLES } from '@workspace/contracts/access';
 
-import {
-  hasSystemPermission,
-  requireServerPermission,
-} from '@/features/auth/services/auth-server.service';
-import type {
-  DecisionDetail,
-  DecisionEventTimelineItem,
-} from '@workspace/contracts/decisions';
-import {
-  DecisionDetailPage,
-  DecisionServerError,
-  getDecisionDetail,
-  getDecisionEvents,
-} from '@/features/decisions';
+import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
+import type { DecisionDetail, DecisionEventTimelineItem } from '@workspace/contracts/decisions';
+import { DecisionDetailPage, DecisionServerError, getDecisionDetail, getDecisionEvents } from '@/features/decisions';
 
 /** 动态决策详情路由参数。 */
 type DecisionDetailRouteProps = {
@@ -39,10 +28,7 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
   let events: DecisionEventTimelineItem[];
 
   try {
-    [decision, events] = await Promise.all([
-      getDecisionDetail(decisionId),
-      getDecisionEvents(decisionId),
-    ]);
+    [decision, events] = await Promise.all([getDecisionDetail(decisionId), getDecisionEvents(decisionId)]);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
       notFound();
@@ -52,10 +38,13 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
   }
 
   const hasAllScopeSystemRole =
-    currentUser.isSuperAdmin ||
-    currentUser.roles.some((role) => role.code === SYSTEM_ROLES.admin);
+    currentUser.isSuperAdmin || currentUser.roles.some((role) => role.code === SYSTEM_ROLES.admin);
   const canStartDiscussion =
     decision.status === 'DRAFT' &&
+    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
+    (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
+  const canManageParticipants =
+    (decision.status === 'DRAFT' || decision.status === 'DISCUSSING') &&
     hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
     (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
 
@@ -64,6 +53,7 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
       decision={decision}
       events={events}
       canStartDiscussion={canStartDiscussion}
+      canManageParticipants={canManageParticipants}
     />
   );
 }

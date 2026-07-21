@@ -68,6 +68,20 @@ export class DecisionsController {
     return this.decisionsService.updateStatus(authorization, decisionId, body);
   }
 
+  /** 查询负责人可以添加且尚未参与当前决策的用户。 */
+  @Get(':decisionId/participant-candidates')
+  @RequirePermissions('decision:update')
+  @ApiOperation({ summary: '查询可以加入决策的参与者候选列表' })
+  listParticipantCandidates(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+  ) {
+    return this.decisionsService.listParticipantCandidates(
+      authorization,
+      decisionId,
+    );
+  }
+
   /** 向负责人管理的决策添加一名非负责人参与者。 */
   @Post(':decisionId/participants')
   @RequirePermissions('decision:update')

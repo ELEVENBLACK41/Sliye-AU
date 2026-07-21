@@ -15,6 +15,10 @@
     "build:admin": "pnpm --filter @nextnest/admin build",
     "build:server": "pnpm --filter @nextnest/server build",
     "lint": "pnpm -r lint",
+    "shadcn": "shadcn",
     "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "shadcn": "^4.13.1"
   }
 }

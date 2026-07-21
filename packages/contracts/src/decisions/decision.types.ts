@@ -96,6 +96,18 @@ export type DecisionParticipant = {
   createdAt: string;
 };
 
+/** 可以被添加到某个决策事项中的用户候选摘要。 */
+export type DecisionParticipantCandidate = {
+  /** 候选用户数据库主键，提交新增参与者请求时使用。 */
+  id: number;
+  /** 候选用户显示名称。 */
+  name: string | null;
+  /** 候选用户头像地址。 */
+  avatarUrl: string | null;
+  /** 候选用户所属部门；服务端只返回具备有效部门的可用用户。 */
+  department: DecisionDepartmentSummary | null;
+};
+
 /** 决策事件时间线中的一条记录。 */
 export type DecisionEventTimelineItem = {
   /** 决策事件数据库主键。 */
@@ -163,6 +175,9 @@ export type DecisionListResponse = DecisionSummary[];
 
 /** 决策事件时间线接口返回的业务数据。 */
 export type DecisionEventTimelineResponse = DecisionEventTimelineItem[];
+
+/** 可添加决策参与者候选接口返回的业务数据。 */
+export type DecisionParticipantCandidateListResponse = DecisionParticipantCandidate[];
 
 /** 决策列表接口支持的筛选条件。 */
 export type DecisionListQuery = {

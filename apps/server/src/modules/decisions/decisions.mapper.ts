@@ -5,6 +5,7 @@ import type {
   DecisionDetail,
   DecisionEventTimelineItem,
   DecisionParticipant as DecisionParticipantContract,
+  DecisionParticipantCandidate,
   DecisionSummary,
 } from '@workspace/contracts/decisions';
 import type {
@@ -42,6 +43,15 @@ type DecisionDetailRecord = DecisionSummaryRecord & {
 export type DecisionParticipantRecord = DecisionParticipant & {
   /** 参与用户摘要。 */
   user: Pick<User, 'id' | 'name' | 'avatarUrl'>;
+};
+
+/** 候选参与者映射需要的用户和部门摘要。 */
+export type DecisionParticipantCandidateRecord = Pick<
+  User,
+  'id' | 'name' | 'avatarUrl'
+> & {
+  /** 候选用户所属部门；不可用用户已在查询阶段被过滤。 */
+  department: Pick<Department, 'id' | 'code' | 'name'> | null;
 };
 
 /** 决策时间线映射需要的事件与操作者关联数据。 */
@@ -93,6 +103,24 @@ export function toDecisionParticipant(
     role: participant.role,
     user: toDecisionUser(participant.user),
     createdAt: participant.createdAt.toISOString(),
+  };
+}
+
+/** 将可用用户映射为不包含邮箱等账号信息的参与者候选摘要。 */
+export function toDecisionParticipantCandidate(
+  user: DecisionParticipantCandidateRecord,
+): DecisionParticipantCandidate {
+  return {
+    id: user.id,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+    department: user.department
+      ? {
+          id: user.department.id,
+          code: user.department.code,
+          name: user.department.name,
+        }
+      : null,
   };
 }
 

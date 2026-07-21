@@ -2,8 +2,11 @@
  * 本文件封装浏览器侧的决策 BFF 请求，并复用统一 ApiClientError。
  */
 import type {
+  AddDecisionParticipantRequestPayload,
   CreateDecisionRequestPayload,
   DecisionDetail,
+  DecisionParticipant,
+  DecisionParticipantCandidateListResponse,
   UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
 
@@ -23,12 +26,34 @@ export function updateDecisionStatus(
   decisionId: number,
   payload: UpdateDecisionStatusRequestPayload,
 ): Promise<DecisionDetail> {
-  return requestData<DecisionDetail, UpdateDecisionStatusRequestPayload>(
-    `/api/decisions/${decisionId}/status`,
+  return requestData<DecisionDetail, UpdateDecisionStatusRequestPayload>(`/api/decisions/${decisionId}/status`, {
+    method: 'PATCH',
+    body: payload,
+    errorMessage: '决策状态更新失败，请稍后重试',
+  });
+}
+
+/** 查询当前决策尚可添加的参与者候选列表。 */
+export function getDecisionParticipantCandidates(
+  decisionId: number,
+): Promise<DecisionParticipantCandidateListResponse> {
+  return requestData<DecisionParticipantCandidateListResponse>(`/api/decisions/${decisionId}/participant-candidates`, {
+    method: 'GET',
+    errorMessage: '参与者候选列表加载失败，请稍后重试',
+  });
+}
+
+/** 向当前决策添加一名非负责人参与者。 */
+export function addDecisionParticipant(
+  decisionId: number,
+  payload: AddDecisionParticipantRequestPayload,
+): Promise<DecisionParticipant> {
+  return requestData<DecisionParticipant, AddDecisionParticipantRequestPayload>(
+    `/api/decisions/${decisionId}/participants`,
     {
-      method: 'PATCH',
+      method: 'POST',
       body: payload,
-      errorMessage: '决策状态更新失败，请稍后重试',
+      errorMessage: '添加参与者失败，请稍后重试',
     },
   );
 }

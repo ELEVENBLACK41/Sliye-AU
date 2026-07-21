@@ -4,12 +4,10 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Building2, UserRound } from 'lucide-react';
-import type {
-  DecisionDetail,
-  DecisionEventTimelineItem,
-} from '@workspace/contracts/decisions';
+import type { DecisionDetail, DecisionEventTimelineItem } from '@workspace/contracts/decisions';
 
 import { DecisionEventTimeline } from './decision-event-timeline';
+import { DecisionParticipantActions } from './decision-participant-actions';
 import { DecisionStatusActions } from './decision-status-actions';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -23,6 +21,8 @@ type DecisionDetailPageProps = {
   events: DecisionEventTimelineItem[];
   /** 当前用户是否具备开始讨论的展示条件；最终权限仍由 NestJS 校验。 */
   canStartDiscussion: boolean;
+  /** 当前用户是否具备新增参与者的展示条件；最终权限仍由 NestJS 校验。 */
+  canManageParticipants: boolean;
 };
 
 /** 参与者身份对应的中文文案。 */
@@ -38,6 +38,7 @@ export function DecisionDetailPage({
   decision,
   events,
   canStartDiscussion,
+  canManageParticipants,
 }: DecisionDetailPageProps) {
   return (
     <main className="flex flex-col gap-4">
@@ -78,8 +79,9 @@ export function DecisionDetailPage({
       {canStartDiscussion ? <DecisionStatusActions decisionId={decision.id} /> : null}
 
       <Card className="rounded-md shadow-none">
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-3">
           <CardTitle className="text-base">参与者（{decision.participants.length}）</CardTitle>
+          {canManageParticipants ? <DecisionParticipantActions decisionId={decision.id} /> : null}
         </CardHeader>
         <CardContent>
           {decision.participants.length ? (

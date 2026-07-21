@@ -7,6 +7,7 @@ import type {
   DecisionDetail,
   DecisionEventTimelineItem,
   DecisionParticipant,
+  DecisionParticipantCandidate,
   DecisionSummary,
 } from '@workspace/contracts/decisions';
 import { BusinessException } from '../../common/exceptions/business.exception';
@@ -27,6 +28,7 @@ import {
   toDecisionDetail,
   toDecisionEvent,
   toDecisionParticipant,
+  toDecisionParticipantCandidate,
   toDecisionSummary,
 } from './decisions.mapper';
 
@@ -49,6 +51,14 @@ const participantMutableStatuses = new Set<DecisionStatus>([
   DecisionStatus.DRAFT,
   DecisionStatus.DISCUSSING,
 ]);
+
+/** 可被加入决策的用户必须已启用、验证邮箱、归属部门且至少拥有一个角色。 */
+const availableParticipantUserWhere = {
+  status: UserStatus.ACTIVE,
+  emailVerifiedAt: { not: null },
+  deptId: { not: null },
+  roles: { some: {} },
+} as const;
 
 @Injectable()
 export class DecisionsService {
@@ -299,10 +309,7 @@ export class DecisionsService {
     const targetUser = await this.prisma.user.findFirst({
       where: {
         id: dto.userId,
-        status: UserStatus.ACTIVE,
-        emailVerifiedAt: { not: null },
-        deptId: { not: null },
-        roles: { some: {} },
+        ...availableParticipantUserWhere,
       },
       select: { id: true },
     });
@@ -373,6 +380,71 @@ export class DecisionsService {
     });
 
     return toDecisionParticipant(participant);
+  }
+
+  /** 查询负责人可以加入当前决策的用户，并排除所有现有参与者。 */
+  async listParticipantCandidates(
+    authorization: AuthorizationContext,
+    decisionId: number,
+  ): Promise<DecisionParticipantCandidate[]> {
+    const scopeWhere = await this.authorizationService.buildDecisionWhere(
+      authorization,
+      'decision:update',
+    );
+    const decision = await this.prisma.decision.findFirst({
+      where: {
+        AND: [{ id: decisionId }, scopeWhere],
+      },
+      select: { id: true, ownerId: true, status: true },
+    });
+
+    if (!decision) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.DECISION_NOT_FOUND,
+        message: '决策不存在或当前账号无权访问',
+        status: 404,
+      });
+    }
+
+    const canManageAll = this.authorizationService
+      .getScopes(authorization, 'decision:update')
+      .has(DataScope.ALL);
+
+    if (!canManageAll && decision.ownerId !== authorization.userId) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
+        message: '只有决策负责人可以查看可添加参与者',
+        status: 403,
+      });
+    }
+
+    if (!participantMutableStatuses.has(decision.status)) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.DECISION_PARTICIPANT_CHANGE_NOT_ALLOWED,
+        message: '当前决策状态不允许调整参与者',
+        status: 409,
+      });
+    }
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        ...availableParticipantUserWhere,
+        decisionParticipants: {
+          none: { decisionId: decision.id },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        avatarUrl: true,
+        department: {
+          select: { id: true, code: true, name: true },
+        },
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+
+    return users.map(toDecisionParticipantCandidate);
   }
 
   /** 在授权部门内创建决策，并原子写入创建人和时间线事件。 */
