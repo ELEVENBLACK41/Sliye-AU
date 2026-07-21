@@ -65,6 +65,7 @@ export const SYSTEM_PERMISSIONS = {
   decision: {
     read: 'decision:read',
     create: 'decision:create',
+    update: 'decision:update',
   },
   ai: {
     chatUse: 'ai:chat:use',
@@ -232,6 +233,14 @@ export const SYSTEM_PERMISSION_DEFINITIONS = [
     allowedScopes: ['ALL', 'DEPT', 'DEPT_AND_CHILD'],
   },
   {
+    code: SYSTEM_PERMISSIONS.decision.update,
+    name: '更新决策',
+    module: 'decision',
+    action: 'update',
+    description: '允许在授权数据范围和决策参与身份内更新决策。',
+    allowedScopes: ['ALL', 'OWN', 'DEPT', 'DEPT_AND_CHILD', 'PARTICIPATED'],
+  },
+  {
     code: SYSTEM_PERMISSIONS.ai.chatUse,
     name: '使用 AI 对话',
     module: 'ai:chat',
@@ -306,6 +315,7 @@ export const SYSTEM_ROLE_DEFINITIONS = [
       { code: SYSTEM_PERMISSIONS.decision.read, scopeType: 'DEPT_AND_CHILD' },
       { code: SYSTEM_PERMISSIONS.decision.read, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.decision.create, scopeType: 'DEPT_AND_CHILD' },
+      { code: SYSTEM_PERMISSIONS.decision.update, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.ai.chatUse, scopeType: 'ALL' },
     ],
   },
@@ -318,6 +328,7 @@ export const SYSTEM_ROLE_DEFINITIONS = [
       { code: SYSTEM_PERMISSIONS.access.department.read, scopeType: 'DEPT' },
       { code: SYSTEM_PERMISSIONS.decision.read, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.decision.create, scopeType: 'DEPT' },
+      { code: SYSTEM_PERMISSIONS.decision.update, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.ai.chatUse, scopeType: 'ALL' },
     ],
   },

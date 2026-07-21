@@ -133,6 +133,12 @@ export type CreateDecisionRequestPayload = {
   ownerId?: number | null;
 };
 
+/** 将草稿决策推进到讨论阶段的请求体。 */
+export type UpdateDecisionStatusRequestPayload = {
+  /** 本阶段唯一允许进入的目标状态。 */
+  status: Extract<DecisionStatus, 'DISCUSSING'>;
+};
+
 /** 决策列表接口返回的业务数据。 */
 export type DecisionListResponse = DecisionSummary[];
 

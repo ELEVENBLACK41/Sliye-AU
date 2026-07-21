@@ -7,6 +7,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -14,6 +15,7 @@ import { CurrentAuthorization } from '../auth/decorators/current-authorization.d
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import { CreateDecisionDto } from './dto/create-decision.dto';
+import { UpdateDecisionStatusDto } from './dto/update-decision-status.dto';
 import { DecisionsService } from './decisions.service';
 
 @ApiTags('decisions')
@@ -51,6 +53,22 @@ export class DecisionsController {
     @Param('decisionId', ParseIntPipe) decisionId: number,
   ) {
     return this.decisionsService.listEvents(authorization, decisionId);
+  }
+
+  /** 将负责人管理的草稿决策推进到讨论阶段。 */
+  @Patch(':decisionId/status')
+  @RequirePermissions('decision:update')
+  @ApiOperation({ summary: '开始决策讨论并写入状态变更事件' })
+  updateStatus(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+    @Body() body: UpdateDecisionStatusDto,
+  ) {
+    return this.decisionsService.updateStatus(
+      authorization,
+      decisionId,
+      body,
+    );
   }
 
   /** 查询单个授权范围内的决策详情。 */
