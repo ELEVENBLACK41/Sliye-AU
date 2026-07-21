@@ -1,5 +1,5 @@
 /*
- * @Description: 最小决策服务的数据范围与创建事务单元测试。
+ * @Description: 决策服务的数据范围、状态流转和参与者事务单元测试。
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { PrismaService } from '../../database/prisma.service';
@@ -8,6 +8,7 @@ import {
   DecisionEventType,
   DecisionStatus,
   ParticipantRole,
+  UserStatus,
 } from '../../generated/prisma';
 import type { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
@@ -87,6 +88,21 @@ function createDecisionEventRecord() {
   };
 }
 
+/** 创建新增参与者接口返回的数据库参与关系记录。 */
+function createParticipantRecord() {
+  const now = new Date('2026-07-12T00:00:00.000Z');
+
+  return {
+    id: 31,
+    decisionId: 20,
+    userId: 8,
+    role: ParticipantRole.EDITOR,
+    createdAt: now,
+    updatedAt: now,
+    user: { id: 8, name: '成员乙', avatarUrl: null },
+  };
+}
+
 describe('DecisionsService', () => {
   it('决策列表必须使用授权服务生成的数据范围条件', async () => {
     const scopeWhere = { deptId: { in: [3, 4] } };
@@ -160,9 +176,10 @@ describe('DecisionsService', () => {
         createdAt: '2026-07-11T00:00:01.000Z',
       },
     ]);
-    expect(
-      authorizationService.buildDecisionWhere,
-    ).toHaveBeenCalledWith(createAuthorization(), 'decision:read');
+    expect(authorizationService.buildDecisionWhere).toHaveBeenCalledWith(
+      createAuthorization(),
+      'decision:read',
+    );
     expect(prisma.decision.findFirst).toHaveBeenCalledWith({
       where: {
         AND: [{ id: 20 }, scopeWhere],
@@ -250,9 +267,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({
         participants: { some: { userId: 7 } },
       }),
-      getScopes: jest
-        .fn()
-        .mockReturnValue(new Set([DataScope.PARTICIPATED])),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
     const service = new DecisionsService(
       prisma as unknown as PrismaService,
@@ -264,9 +279,10 @@ describe('DecisionsService', () => {
         status: 'DISCUSSING',
       }),
     ).resolves.toMatchObject({ id: 20, status: 'DISCUSSING' });
-    expect(
-      authorizationService.buildDecisionWhere,
-    ).toHaveBeenCalledWith(createAuthorization(), 'decision:update');
+    expect(authorizationService.buildDecisionWhere).toHaveBeenCalledWith(
+      createAuthorization(),
+      'decision:update',
+    );
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 20, status: 'DRAFT' },
       data: { status: 'DISCUSSING' },
@@ -296,9 +312,7 @@ describe('DecisionsService', () => {
     };
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
-      getScopes: jest
-        .fn()
-        .mockReturnValue(new Set([DataScope.PARTICIPATED])),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
     const service = new DecisionsService(
       prisma as unknown as PrismaService,
@@ -329,9 +343,7 @@ describe('DecisionsService', () => {
     };
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
-      getScopes: jest
-        .fn()
-        .mockReturnValue(new Set([DataScope.PARTICIPATED])),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
     const service = new DecisionsService(
       prisma as unknown as PrismaService,
@@ -373,9 +385,7 @@ describe('DecisionsService', () => {
     };
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
-      getScopes: jest
-        .fn()
-        .mockReturnValue(new Set([DataScope.PARTICIPATED])),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
     const service = new DecisionsService(
       prisma as unknown as PrismaService,
@@ -390,6 +400,252 @@ describe('DecisionsService', () => {
       code: API_ERROR_CODES.DECISION_INVALID_STATUS_TRANSITION,
       status: 409,
     });
+    expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  it('决策负责人添加可用参与者时应原子创建参与关系和事件', async () => {
+    const participant = createParticipantRecord();
+    const createMany = jest.fn().mockResolvedValue({ count: 1 });
+    const findUnique = jest.fn().mockResolvedValue(participant);
+    const createEvent = jest.fn().mockResolvedValue({ id: 42 });
+    const transaction = {
+      decisionParticipant: { createMany, findUnique },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+        }),
+      },
+      user: { findFirst: jest.fn().mockResolvedValue({ id: 8 }) },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.addParticipant(createAuthorization(), 20, {
+        userId: 8,
+        role: 'EDITOR',
+      }),
+    ).resolves.toEqual({
+      id: 31,
+      role: 'EDITOR',
+      user: { id: 8, name: '成员乙', avatarUrl: null },
+      createdAt: '2026-07-12T00:00:00.000Z',
+    });
+    expect(authorizationService.buildDecisionWhere).toHaveBeenCalledWith(
+      createAuthorization(),
+      'decision:update',
+    );
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 8,
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: { not: null },
+        deptId: { not: null },
+        roles: { some: {} },
+      },
+      select: { id: true },
+    });
+    expect(createMany).toHaveBeenCalledWith({
+      data: { decisionId: 20, userId: 8, role: 'EDITOR' },
+      skipDuplicates: true,
+    });
+    expect(createEvent).toHaveBeenCalledWith({
+      data: {
+        decisionId: 20,
+        actorId: 7,
+        type: 'PARTICIPANT_ADDED',
+        title: '添加参与者',
+        payload: { participantId: 31, userId: 8 },
+        after: { role: 'EDITOR' },
+      },
+    });
+  });
+
+  it('不存在或越权的决策不能通过新增参与者接口探测', async () => {
+    const prisma = {
+      decision: { findFirst: jest.fn().mockResolvedValue(null) },
+      user: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: -1 }),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.addParticipant(createAuthorization(), 99, {
+        userId: 8,
+        role: 'VIEWER',
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_NOT_FOUND,
+      status: 404,
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('非负责人且没有 ALL 范围时不能添加参与者', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 9,
+          status: DecisionStatus.DRAFT,
+        }),
+      },
+      user: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.addParticipant(createAuthorization(), 20, {
+        userId: 8,
+        role: 'VIEWER',
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
+      status: 403,
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('已结束决策不能继续添加参与者', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DECIDED,
+        }),
+      },
+      user: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.addParticipant(createAuthorization(), 20, {
+        userId: 8,
+        role: 'APPROVER',
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_PARTICIPANT_CHANGE_NOT_ALLOWED,
+      status: 409,
+    });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('不可用目标用户不能加入决策', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DRAFT,
+        }),
+      },
+      user: { findFirst: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.addParticipant(createAuthorization(), 20, {
+        userId: 8,
+        role: 'VIEWER',
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_PARTICIPANT_USER_NOT_FOUND,
+      status: 404,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('重复参与者应返回稳定冲突且不写入事件', async () => {
+    const createEvent = jest.fn();
+    const transaction = {
+      decisionParticipant: {
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn(),
+      },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+        }),
+      },
+      user: { findFirst: jest.fn().mockResolvedValue({ id: 8 }) },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.addParticipant(createAuthorization(), 20, {
+        userId: 8,
+        role: 'EDITOR',
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_PARTICIPANT_ALREADY_EXISTS,
+      status: 409,
+    });
+    expect(transaction.decisionParticipant.findUnique).not.toHaveBeenCalled();
     expect(createEvent).not.toHaveBeenCalled();
   });
 

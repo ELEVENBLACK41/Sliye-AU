@@ -8,6 +8,9 @@ export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'VOTING' | 'DECIDED' | 'AR
 /** 用户参与某个决策时承担的角色。 */
 export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER';
 
+/** 通过参与者新增接口可以分配的身份，负责人身份由决策负责人字段单独维护。 */
+export type AddableDecisionParticipantRole = Exclude<DecisionParticipantRole, 'OWNER'>;
+
 /** 决策时间线中允许出现的稳定事件类型。 */
 export type DecisionEventType =
   | 'DECISION_CREATED'
@@ -137,6 +140,14 @@ export type CreateDecisionRequestPayload = {
 export type UpdateDecisionStatusRequestPayload = {
   /** 本阶段唯一允许进入的目标状态。 */
   status: Extract<DecisionStatus, 'DISCUSSING'>;
+};
+
+/** 向现有决策添加一名参与者的请求体。 */
+export type AddDecisionParticipantRequestPayload = {
+  /** 需要加入决策的可用用户主键。 */
+  userId: number;
+  /** 新参与者在当前决策中承担的非负责人身份。 */
+  role: AddableDecisionParticipantRole;
 };
 
 /** 决策列表接口返回的业务数据。 */

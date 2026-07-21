@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuthorization } from '../auth/decorators/current-authorization.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import type { AuthorizationContext } from '../auth/types/auth.types';
+import { AddDecisionParticipantDto } from './dto/add-decision-participant.dto';
 import { CreateDecisionDto } from './dto/create-decision.dto';
 import { UpdateDecisionStatusDto } from './dto/update-decision-status.dto';
 import { DecisionsService } from './decisions.service';
@@ -64,7 +65,19 @@ export class DecisionsController {
     @Param('decisionId', ParseIntPipe) decisionId: number,
     @Body() body: UpdateDecisionStatusDto,
   ) {
-    return this.decisionsService.updateStatus(
+    return this.decisionsService.updateStatus(authorization, decisionId, body);
+  }
+
+  /** 向负责人管理的决策添加一名非负责人参与者。 */
+  @Post(':decisionId/participants')
+  @RequirePermissions('decision:update')
+  @ApiOperation({ summary: '添加决策参与者并写入参与者事件' })
+  addParticipant(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+    @Body() body: AddDecisionParticipantDto,
+  ) {
+    return this.decisionsService.addParticipant(
       authorization,
       decisionId,
       body,

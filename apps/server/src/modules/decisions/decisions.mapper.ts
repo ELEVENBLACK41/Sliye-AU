@@ -4,6 +4,7 @@
 import type {
   DecisionDetail,
   DecisionEventTimelineItem,
+  DecisionParticipant as DecisionParticipantContract,
   DecisionSummary,
 } from '@workspace/contracts/decisions';
 import type {
@@ -35,6 +36,12 @@ type DecisionDetailRecord = DecisionSummaryRecord & {
       user: Pick<User, 'id' | 'name' | 'avatarUrl'>;
     }
   >;
+};
+
+/** 单个决策参与者映射需要的用户关联数据。 */
+export type DecisionParticipantRecord = DecisionParticipant & {
+  /** 参与用户摘要。 */
+  user: Pick<User, 'id' | 'name' | 'avatarUrl'>;
 };
 
 /** 决策时间线映射需要的事件与操作者关联数据。 */
@@ -73,12 +80,19 @@ export function toDecisionDetail(
 ): DecisionDetail {
   return {
     ...toDecisionSummary(decision),
-    participants: decision.participants.map((participant) => ({
-      id: participant.id,
-      role: participant.role,
-      user: toDecisionUser(participant.user),
-      createdAt: participant.createdAt.toISOString(),
-    })),
+    participants: decision.participants.map(toDecisionParticipant),
+  };
+}
+
+/** 将数据库参与关系映射为共享的决策参与者契约。 */
+export function toDecisionParticipant(
+  participant: DecisionParticipantRecord,
+): DecisionParticipantContract {
+  return {
+    id: participant.id,
+    role: participant.role,
+    user: toDecisionUser(participant.user),
+    createdAt: participant.createdAt.toISOString(),
   };
 }
 
