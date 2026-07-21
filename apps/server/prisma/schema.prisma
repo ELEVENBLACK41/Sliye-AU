@@ -104,8 +104,7 @@ enum ParticipantRole {
 enum DecisionStatus {
   DRAFT
   DISCUSSING
-  VOTING
-  DECIDED
+  RESOLVED
   ARCHIVED
 }
 
@@ -131,6 +130,39 @@ enum VoteMethod {
   APPROVAL
 }
 
+/// 正式决议在决策过程中的用途类型。
+enum ResolutionKind {
+  INTERIM
+  FINAL
+  SUPPLEMENT
+}
+
+/// 正式决议创建后的有效状态。
+enum ResolutionStatus {
+  ACTIVE
+  SUPERSEDED
+  REVOKED
+}
+
+/// 讨论空间的生命周期状态。
+enum DiscussionSpaceStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+/// 用户在讨论空间中的长期成员角色。
+enum DiscussionSpaceMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+/// 讨论空间消息的内容类型。
+enum DiscussionMessageType {
+  TEXT
+  SYSTEM
+}
+
 enum TaskStatus {
   TODO
   DOING
@@ -145,6 +177,28 @@ enum MeetingStatus {
   CANCELLED
 }
 
+/// 会议使用的实时沟通模式。
+enum MeetingMode {
+  AUDIO
+  VIDEO
+}
+
+/// 用户在单次会议中的实际参会角色。
+enum MeetingParticipantRole {
+  HOST
+  CO_HOST
+  ATTENDEE
+}
+
+/// 会议录像从准备到可播放的处理状态。
+enum RecordingStatus {
+  PENDING
+  RECORDING
+  PROCESSING
+  READY
+  FAILED
+}
+
 enum DecisionEventType {
   DECISION_CREATED
   DECISION_UPDATED
@@ -153,12 +207,20 @@ enum DecisionEventType {
   PARTICIPANT_REMOVED
   PROPOSAL_CREATED
   PROPOSAL_UPDATED
+  VOTE_ROUND_CREATED
+  VOTE_ROUND_OPENED
+  VOTE_ROUND_CLOSED
   VOTE_CAST
-  VOTE_CLOSED
+  RESOLUTION_CREATED
+  RESOLUTION_SUPERSEDED
+  RESOLUTION_REVOKED
   TASK_CREATED
   TASK_UPDATED
+  SPACE_LINKED
+  MESSAGE_PINNED
   MEETING_STARTED
   MEETING_ENDED
+  RECORDING_READY
   AI_SUMMARY_CREATED
 }
 
@@ -195,16 +257,22 @@ model User {
 
   posts Post[]
 
-  createdDecisions     Decision[]            @relation("DecisionCreator")
-  ownedDecisions       Decision[]            @relation("DecisionOwner")
-  decisionParticipants DecisionParticipant[]
-  proposalsCreated     DecisionProposal[]    @relation("ProposalCreator")
-  voteRoundsCreated    DecisionVoteRound[]   @relation("DecisionVoteRoundCreator")
-  decisionBallots      DecisionBallot[]
-  assignedTasks        DecisionTask[]        @relation("TaskAssignee")
-  createdTasks         DecisionTask[]        @relation("TaskCreator")
-  decisionEvents       DecisionEvent[]       @relation("DecisionEventActor")
-  meetingParticipants  MeetingParticipant[]
+  createdDecisions           Decision[]              @relation("DecisionCreator")
+  ownedDecisions             Decision[]              @relation("DecisionOwner")
+  decisionParticipants       DecisionParticipant[]
+  proposalsCreated           DecisionProposal[]      @relation("ProposalCreator")
+  voteRoundsCreated          DecisionVoteRound[]     @relation("DecisionVoteRoundCreator")
+  decisionBallots            DecisionBallot[]
+  resolutionsDecided         DecisionResolution[]    @relation("DecisionResolutionDecider")
+  assignedTasks              DecisionTask[]          @relation("TaskAssignee")
+  createdTasks               DecisionTask[]          @relation("TaskCreator")
+  decisionEvents             DecisionEvent[]         @relation("DecisionEventActor")
+  discussionSpacesCreated    DiscussionSpace[]       @relation("DiscussionSpaceCreator")
+  discussionSpaceMemberships DiscussionSpaceMember[]
+  discussionMessagesAuthored DiscussionMessage[]     @relation("DiscussionMessageAuthor")
+  discussionMessagesPinned   DiscussionMessage[]     @relation("DiscussionMessagePinner")
+  meetingsCreated            MeetingSession[]        @relation("MeetingSessionCreator")
+  meetingParticipants        MeetingParticipant[]
 
   @@index([deptId])
   @@index([status])
@@ -586,6 +654,88 @@ model AccessControlAuditLog {
   @@index([createdAt])
 }
 
+/// 承载长期群成员、文字讨论、议题和音视频会议的协作空间。
+model DiscussionSpace {
+  id Int @id @default(autoincrement())
+
+  name        String
+  description String?
+  status      DiscussionSpaceStatus @default(ACTIVE)
+  createdById Int
+
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  createdBy User @relation("DiscussionSpaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  decisions Decision[]
+  members   DiscussionSpaceMember[]
+  messages  DiscussionMessage[]
+  meetings  MeetingSession[]
+
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// 用户与讨论空间之间的长期成员关系，不等同于具体议题参与者或会议出席记录。
+model DiscussionSpaceMember {
+  spaceId Int
+  userId  Int
+  role    DiscussionSpaceMemberRole @default(MEMBER)
+
+  joinedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  space DiscussionSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([spaceId, userId])
+  @@index([userId])
+  @@index([role])
+}
+
+/// 讨论空间中的持久化消息；普通消息不重复写入决策时间线，重要消息可被事件引用。
+model DiscussionMessage {
+  id Int @id @default(autoincrement())
+
+  spaceId    Int
+  authorId   Int?
+  decisionId Int?
+  meetingId  Int?
+  replyToId  Int?
+  pinnedById Int?
+
+  type    DiscussionMessageType @default(TEXT)
+  content String
+
+  pinnedAt  DateTime?
+  editedAt  DateTime?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  space    DiscussionSpace     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  author   User?               @relation("DiscussionMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  decision Decision?           @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  meeting  MeetingSession?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  replyTo  DiscussionMessage?  @relation("DiscussionMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies  DiscussionMessage[] @relation("DiscussionMessageReplies")
+  pinnedBy User?               @relation("DiscussionMessagePinner", fields: [pinnedById], references: [id], onDelete: SetNull)
+
+  events DecisionEvent[]
+
+  @@index([spaceId, createdAt])
+  @@index([authorId])
+  @@index([decisionId])
+  @@index([meetingId])
+  @@index([replyToId])
+  @@index([pinnedById])
+  @@index([type])
+}
+
 model Decision {
   id Int @id @default(autoincrement())
 
@@ -596,26 +746,31 @@ model Decision {
   creatorId Int
   ownerId   Int?
   deptId    Int
+  spaceId   Int?
 
   decidedAt  DateTime?
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  department Department @relation(fields: [deptId], references: [id], onDelete: Restrict)
-  creator    User       @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  owner      User?      @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  department Department       @relation(fields: [deptId], references: [id], onDelete: Restrict)
+  creator    User             @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  owner      User?            @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  space      DiscussionSpace? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
 
   participants DecisionParticipant[]
   proposals    DecisionProposal[]
   voteRounds   DecisionVoteRound[]
+  resolutions  DecisionResolution[]
   tasks        DecisionTask[]
   events       DecisionEvent[]
-  meetings     MeetingSession[]
+  messages     DiscussionMessage[]
+  meetingLinks MeetingDecision[]
 
   @@index([deptId])
   @@index([creatorId])
   @@index([ownerId])
+  @@index([spaceId])
   @@index([status])
   @@index([createdAt])
 }
@@ -674,6 +829,7 @@ model DecisionProposal {
   creator  User     @relation("ProposalCreator", fields: [creatorId], references: [id], onDelete: Restrict)
 
   voteOptions DecisionVoteOption[]
+  resolutions DecisionResolution[]
   events      DecisionEvent[]
 
   @@index([decisionId])
@@ -716,8 +872,10 @@ model DecisionVoteRound {
   decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   creator  User     @relation("DecisionVoteRoundCreator", fields: [creatorId], references: [id], onDelete: Restrict)
 
-  options DecisionVoteOption[]
-  ballots DecisionBallot[]
+  options     DecisionVoteOption[]
+  ballots     DecisionBallot[]
+  resolutions DecisionResolution[]
+  events      DecisionEvent[]
 
   @@index([decisionId])
   @@index([creatorId])
@@ -803,12 +961,64 @@ model DecisionBallotChoice {
   @@index([optionId, roundId])
 }
 
+/// 决策事项中被正式确认的结论；可以不经过投票，也可以记录方案、投票轮次和会议来源。
+model DecisionResolution {
+  id Int @id @default(autoincrement())
+
+  /// 所属决策事项。
+  decisionId        Int
+  /// 可选的来源候选方案。
+  sourceProposalId  Int?
+  /// 可选的依据投票轮次。
+  sourceVoteRoundId Int?
+  /// 可选的形成决议会议。
+  meetingId         Int?
+  /// 正式确认该决议的用户。
+  decidedById       Int
+  /// 当前决议直接替代的上一条决议；唯一约束保证替代关系是一对一链条。
+  supersedesId      Int? @unique
+
+  /// 决议标题。
+  title   String
+  /// 决议的正式正文或结论内容。
+  content String
+  /// 阶段性、最终或补充决议。
+  kind    ResolutionKind   @default(FINAL)
+  /// 当前是否有效、已被替代或已撤销。
+  status  ResolutionStatus @default(ACTIVE)
+
+  /// 决议在业务流程中被正式确认的时间。
+  decidedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  decision        Decision            @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  sourceProposal  DecisionProposal?   @relation(fields: [sourceProposalId], references: [id], onDelete: SetNull)
+  sourceVoteRound DecisionVoteRound?  @relation(fields: [sourceVoteRoundId], references: [id], onDelete: SetNull)
+  meeting         MeetingSession?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  decidedBy       User                @relation("DecisionResolutionDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  supersedes      DecisionResolution? @relation("DecisionResolutionSupersession", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy    DecisionResolution? @relation("DecisionResolutionSupersession")
+  tasks           DecisionTask[]
+  events          DecisionEvent[]
+
+  @@index([decisionId])
+  @@index([sourceProposalId])
+  @@index([sourceVoteRoundId])
+  @@index([meetingId])
+  @@index([decidedById])
+  @@index([kind])
+  @@index([status])
+  @@index([decidedAt])
+}
+
 model DecisionTask {
   id Int @id @default(autoincrement())
 
-  decisionId Int
-  creatorId  Int
-  assigneeId Int?
+  decisionId   Int
+  resolutionId Int?
+  creatorId    Int
+  assigneeId   Int?
 
   title       String
   description String?
@@ -819,13 +1029,16 @@ model DecisionTask {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  creator  User     @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  assignee User?    @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  decision   Decision            @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  /// 可选的正式决议来源；删除决议时保留任务并清空关联。
+  resolution DecisionResolution? @relation(fields: [resolutionId], references: [id], onDelete: SetNull)
+  creator    User                @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  assignee   User?               @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
   events DecisionEvent[]
 
   @@index([decisionId])
+  @@index([resolutionId])
   @@index([creatorId])
   @@index([assigneeId])
   @@index([status])
@@ -835,22 +1048,56 @@ model DecisionTask {
 model MeetingSession {
   id Int @id @default(autoincrement())
 
-  decisionId Int
-  title      String
-  status     MeetingStatus @default(SCHEDULED)
+  spaceId     Int
+  createdById Int
 
-  startedAt DateTime?
-  endedAt   DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now()) @updatedAt
+  title       String
+  description String?
+  mode        MeetingMode
+  status      MeetingStatus @default(SCHEDULED)
 
-  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  /// 项目内部稳定且不可重复的房间代码，不保存临时加入令牌。
+  roomKey        String  @unique @default(cuid())
+  /// 外部音视频服务商标识，例如 LiveKit；为空表示尚未分配服务商。
+  provider       String?
+  /// 外部音视频服务商侧的房间标识。
+  providerRoomId String?
+
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  space     DiscussionSpace @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  createdBy User            @relation("MeetingSessionCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
   participants MeetingParticipant[]
+  decisions    MeetingDecision[]
+  messages     DiscussionMessage[]
+  recordings   MeetingRecording[]
+  resolutions  DecisionResolution[]
   events       DecisionEvent[]
 
-  @@index([decisionId])
+  @@unique([provider, providerRoomId])
+  @@index([spaceId])
+  @@index([createdById])
   @@index([status])
+  @@index([scheduledAt])
+  @@index([createdAt])
+}
+
+/// 一场会议与多个决策事项之间的显式多对多关联。
+model MeetingDecision {
+  meetingId  Int
+  decisionId Int
+  addedAt    DateTime @default(now())
+
+  meeting  MeetingSession @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  decision Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  @@id([meetingId, decisionId])
+  @@index([decisionId])
 }
 
 model MeetingParticipant {
@@ -858,6 +1105,7 @@ model MeetingParticipant {
 
   meetingId Int
   userId    Int
+  role      MeetingParticipantRole @default(ATTENDEE)
 
   joinedAt  DateTime?
   leftAt    DateTime?
@@ -868,16 +1116,44 @@ model MeetingParticipant {
 
   @@unique([meetingId, userId])
   @@index([userId])
+  @@index([role])
+}
+
+/// 一场会议的一段录像及其外部资产、存储和处理状态。
+model MeetingRecording {
+  id Int @id @default(autoincrement())
+
+  meetingId       Int
+  providerAssetId String?
+  storageKey      String?
+  durationMs      Int?
+  status          RecordingStatus @default(PENDING)
+
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  meeting MeetingSession  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  events  DecisionEvent[]
+
+  @@unique([meetingId, providerAssetId])
+  @@index([meetingId, status])
+  @@index([createdAt])
 }
 
 model DecisionEvent {
   id Int @id @default(autoincrement())
 
-  decisionId Int
-  actorId    Int?
-  meetingId  Int?
-  proposalId Int?
-  taskId     Int?
+  decisionId   Int
+  actorId      Int?
+  meetingId    Int?
+  proposalId   Int?
+  voteRoundId  Int?
+  resolutionId Int?
+  recordingId  Int?
+  messageId    Int?
+  taskId       Int?
 
   type  DecisionEventType
   title String
@@ -890,16 +1166,24 @@ model DecisionEvent {
   recordingOffsetMs Int?
   createdAt         DateTime @default(now())
 
-  decision Decision          @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  actor    User?             @relation("DecisionEventActor", fields: [actorId], references: [id], onDelete: SetNull)
-  meeting  MeetingSession?   @relation(fields: [meetingId], references: [id], onDelete: SetNull)
-  proposal DecisionProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
-  task     DecisionTask?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  decision   Decision            @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  actor      User?               @relation("DecisionEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  meeting    MeetingSession?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  proposal   DecisionProposal?   @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  voteRound  DecisionVoteRound?  @relation(fields: [voteRoundId], references: [id], onDelete: SetNull)
+  resolution DecisionResolution? @relation(fields: [resolutionId], references: [id], onDelete: SetNull)
+  recording  MeetingRecording?   @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+  message    DiscussionMessage?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  task       DecisionTask?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([decisionId])
   @@index([actorId])
   @@index([meetingId])
   @@index([proposalId])
+  @@index([voteRoundId])
+  @@index([resolutionId])
+  @@index([recordingId])
+  @@index([messageId])
   @@index([taskId])
   @@index([type])
   @@index([occurredAt])

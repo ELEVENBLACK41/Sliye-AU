@@ -24,8 +24,7 @@ type DecisionsPageProps = {
 const statusText: Record<DecisionSummary['status'], string> = {
   DRAFT: '草稿',
   DISCUSSING: '讨论中',
-  VOTING: '投票中',
-  DECIDED: '已决策',
+  RESOLVED: '已形成决议',
   ARCHIVED: '已归档',
 };
 

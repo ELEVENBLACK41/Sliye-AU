@@ -2,8 +2,8 @@
  * 本文件定义最小决策列表、详情和创建流程使用的跨端数据契约。
  */
 
-/** 决策从草稿到归档的业务状态。 */
-export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'VOTING' | 'DECIDED' | 'ARCHIVED';
+/** 决策事项从草稿、讨论、形成正式决议到归档的全局业务状态；投票状态由具体轮次管理。 */
+export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'RESOLVED' | 'ARCHIVED';
 
 /** 用户参与某个决策时承担的角色。 */
 export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER';
@@ -20,12 +20,20 @@ export type DecisionEventType =
   | 'PARTICIPANT_REMOVED'
   | 'PROPOSAL_CREATED'
   | 'PROPOSAL_UPDATED'
+  | 'VOTE_ROUND_CREATED'
+  | 'VOTE_ROUND_OPENED'
+  | 'VOTE_ROUND_CLOSED'
   | 'VOTE_CAST'
-  | 'VOTE_CLOSED'
+  | 'RESOLUTION_CREATED'
+  | 'RESOLUTION_SUPERSEDED'
+  | 'RESOLUTION_REVOKED'
   | 'TASK_CREATED'
   | 'TASK_UPDATED'
+  | 'SPACE_LINKED'
+  | 'MESSAGE_PINNED'
   | 'MEETING_STARTED'
   | 'MEETING_ENDED'
+  | 'RECORDING_READY'
   | 'AI_SUMMARY_CREATED';
 
 /** 决策所属部门的轻量摘要。 */

@@ -543,7 +543,7 @@ describe('DecisionsService', () => {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
           ownerId: 7,
-          status: DecisionStatus.DECIDED,
+          status: DecisionStatus.RESOLVED,
         }),
       },
       user: { findFirst: jest.fn() },
