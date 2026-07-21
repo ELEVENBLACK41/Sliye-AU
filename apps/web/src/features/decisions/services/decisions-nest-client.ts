@@ -2,8 +2,11 @@
  * 本文件封装决策模块在 Next.js 服务端调用 NestJS 的类型化请求。
  */
 import type {
+  CreateDecisionProposalRequestPayload,
   DecisionDetail,
   DecisionEventTimelineResponse,
+  DecisionProposal,
+  DecisionProposalListResponse,
   DecisionSummary,
   UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
@@ -34,13 +37,34 @@ export function requestDecisionEventsFromNest(
   accessToken: string,
   decisionId: number,
 ): Promise<NestResponse<DecisionEventTimelineResponse>> {
-  return requestNest<DecisionEventTimelineResponse>(
-    `/decisions/${decisionId}/events`,
-    {
-      method: 'GET',
-      headers: createAuthHeaders(accessToken),
-    },
-  );
+  return requestNest<DecisionEventTimelineResponse>(`/decisions/${decisionId}/events`, {
+    method: 'GET',
+    headers: createAuthHeaders(accessToken),
+  });
+}
+
+/** 按资源 ID 查询授权范围内的决策提案列表。 */
+export function requestDecisionProposalsFromNest(
+  accessToken: string,
+  decisionId: number,
+): Promise<NestResponse<DecisionProposalListResponse>> {
+  return requestNest<DecisionProposalListResponse>(`/decisions/${decisionId}/proposals`, {
+    method: 'GET',
+    headers: createAuthHeaders(accessToken),
+  });
+}
+
+/** 在指定决策中创建开放提案，并保留 NestJS 的统一响应和业务错误。 */
+export function requestDecisionProposalCreateFromNest(
+  accessToken: string,
+  decisionId: number,
+  payload: CreateDecisionProposalRequestPayload,
+): Promise<NestResponse<DecisionProposal>> {
+  return requestNest<DecisionProposal, CreateDecisionProposalRequestPayload>(`/decisions/${decisionId}/proposals`, {
+    method: 'POST',
+    headers: createAuthHeaders(accessToken),
+    body: payload,
+  });
 }
 
 /** 按资源 ID 更新决策状态，并保留 NestJS 的统一响应和业务错误。 */
@@ -49,14 +73,11 @@ export function requestDecisionStatusUpdateFromNest(
   decisionId: number,
   payload: UpdateDecisionStatusRequestPayload,
 ): Promise<NestResponse<DecisionDetail>> {
-  return requestNest<DecisionDetail, UpdateDecisionStatusRequestPayload>(
-    `/decisions/${decisionId}/status`,
-    {
-      method: 'PATCH',
-      headers: createAuthHeaders(accessToken),
-      body: payload,
-    },
-  );
+  return requestNest<DecisionDetail, UpdateDecisionStatusRequestPayload>(`/decisions/${decisionId}/status`, {
+    method: 'PATCH',
+    headers: createAuthHeaders(accessToken),
+    body: payload,
+  });
 }
 
 /** 构造只在 Next.js 服务端使用的 Bearer 认证请求头。 */

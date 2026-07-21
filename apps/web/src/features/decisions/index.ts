@@ -7,6 +7,7 @@ export {
   DecisionServerError,
   getDecisionDetail,
   getDecisionEvents,
+  getDecisionProposals,
   getDecisionSummaries,
   updateDecisionStatus,
 } from './services/decisions-server.service';

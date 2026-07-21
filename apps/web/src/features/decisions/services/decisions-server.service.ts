@@ -7,6 +7,7 @@ import type { ApiErrorCode } from '@workspace/contracts/common';
 import type {
   DecisionDetail,
   DecisionEventTimelineResponse,
+  DecisionProposalListResponse,
   DecisionSummary,
   UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
@@ -16,6 +17,7 @@ import type { NestResponse } from '@/services/bff-request';
 import {
   requestDecisionDetailFromNest,
   requestDecisionEventsFromNest,
+  requestDecisionProposalsFromNest,
   requestDecisionStatusUpdateFromNest,
   requestDecisionsFromNest,
 } from './decisions-nest-client';
@@ -54,15 +56,18 @@ export const getDecisionDetail = cache(async (decisionId: number): Promise<Decis
 });
 
 /** 按资源 ID 读取决策事件时间线；越权与不存在均由后端返回相同 404。 */
-export const getDecisionEvents = cache(
-  async (decisionId: number): Promise<DecisionEventTimelineResponse> => {
-    const accessToken = await getAccessToken();
+export const getDecisionEvents = cache(async (decisionId: number): Promise<DecisionEventTimelineResponse> => {
+  const accessToken = await getAccessToken();
 
-    return unwrapResponse(
-      await requestDecisionEventsFromNest(accessToken, decisionId),
-    );
-  },
-);
+  return unwrapResponse(await requestDecisionEventsFromNest(accessToken, decisionId));
+});
+
+/** 按资源 ID 读取决策提案列表；越权与不存在均由后端返回相同 404。 */
+export const getDecisionProposals = cache(async (decisionId: number): Promise<DecisionProposalListResponse> => {
+  const accessToken = await getAccessToken();
+
+  return unwrapResponse(await requestDecisionProposalsFromNest(accessToken, decisionId));
+});
 
 /** 在 Next.js 服务端更新决策状态；写请求不使用 React cache。 */
 export async function updateDecisionStatus(
@@ -71,9 +76,7 @@ export async function updateDecisionStatus(
 ): Promise<DecisionDetail> {
   const accessToken = await getAccessToken();
 
-  return unwrapResponse(
-    await requestDecisionStatusUpdateFromNest(accessToken, decisionId, payload),
-  );
+  return unwrapResponse(await requestDecisionStatusUpdateFromNest(accessToken, decisionId, payload));
 }
 
 /** 从 httpOnly Cookie 读取访问令牌，令牌不会传入浏览器组件。 */

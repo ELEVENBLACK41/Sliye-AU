@@ -3,10 +3,12 @@
  */
 import type {
   AddDecisionParticipantRequestPayload,
+  CreateDecisionProposalRequestPayload,
   CreateDecisionRequestPayload,
   DecisionDetail,
   DecisionParticipant,
   DecisionParticipantCandidateListResponse,
+  DecisionProposal,
   UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
 
@@ -56,4 +58,16 @@ export function addDecisionParticipant(
       errorMessage: '添加参与者失败，请稍后重试',
     },
   );
+}
+
+/** 在当前决策中创建一条开放提案。 */
+export function createDecisionProposal(
+  decisionId: number,
+  payload: CreateDecisionProposalRequestPayload,
+): Promise<DecisionProposal> {
+  return requestData<DecisionProposal, CreateDecisionProposalRequestPayload>(`/api/decisions/${decisionId}/proposals`, {
+    method: 'POST',
+    body: payload,
+    errorMessage: '创建提案失败，请稍后重试',
+  });
 }

@@ -4,10 +4,11 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Building2, UserRound } from 'lucide-react';
-import type { DecisionDetail, DecisionEventTimelineItem } from '@workspace/contracts/decisions';
+import type { DecisionDetail, DecisionEventTimelineItem, DecisionProposal } from '@workspace/contracts/decisions';
 
 import { DecisionEventTimeline } from './decision-event-timeline';
 import { DecisionParticipantActions } from './decision-participant-actions';
+import { DecisionProposalSection } from './decision-proposal-section';
 import { DecisionStatusActions } from './decision-status-actions';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -19,10 +20,14 @@ type DecisionDetailPageProps = {
   decision: DecisionDetail;
   /** 已经过权限与数据范围校验的决策事件时间线。 */
   events: DecisionEventTimelineItem[];
+  /** 已经过权限与数据范围校验的决策提案列表。 */
+  proposals: DecisionProposal[];
   /** 当前用户是否具备开始讨论的展示条件；最终权限仍由 NestJS 校验。 */
   canStartDiscussion: boolean;
   /** 当前用户是否具备新增参与者的展示条件；最终权限仍由 NestJS 校验。 */
   canManageParticipants: boolean;
+  /** 当前用户是否具备创建提案的展示条件；最终权限仍由 NestJS 校验。 */
+  canCreateProposal: boolean;
 };
 
 /** 参与者身份对应的中文文案。 */
@@ -37,8 +42,10 @@ const participantRoleText: Record<DecisionDetail['participants'][number]['role']
 export function DecisionDetailPage({
   decision,
   events,
+  proposals,
   canStartDiscussion,
   canManageParticipants,
+  canCreateProposal,
 }: DecisionDetailPageProps) {
   return (
     <main className="flex flex-col gap-4">
@@ -103,6 +110,8 @@ export function DecisionDetailPage({
           )}
         </CardContent>
       </Card>
+
+      <DecisionProposalSection decisionId={decision.id} proposals={proposals} canCreateProposal={canCreateProposal} />
 
       <DecisionEventTimeline events={events} />
     </main>

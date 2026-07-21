@@ -5,8 +5,14 @@ import { notFound } from 'next/navigation';
 import { SYSTEM_PERMISSIONS, SYSTEM_ROLES } from '@workspace/contracts/access';
 
 import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
-import type { DecisionDetail, DecisionEventTimelineItem } from '@workspace/contracts/decisions';
-import { DecisionDetailPage, DecisionServerError, getDecisionDetail, getDecisionEvents } from '@/features/decisions';
+import type { DecisionDetail, DecisionEventTimelineItem, DecisionProposal } from '@workspace/contracts/decisions';
+import {
+  DecisionDetailPage,
+  DecisionServerError,
+  getDecisionDetail,
+  getDecisionEvents,
+  getDecisionProposals,
+} from '@/features/decisions';
 
 /** 动态决策详情路由参数。 */
 type DecisionDetailRouteProps = {
@@ -26,9 +32,14 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
 
   let decision: DecisionDetail;
   let events: DecisionEventTimelineItem[];
+  let proposals: DecisionProposal[];
 
   try {
-    [decision, events] = await Promise.all([getDecisionDetail(decisionId), getDecisionEvents(decisionId)]);
+    [decision, events, proposals] = await Promise.all([
+      getDecisionDetail(decisionId),
+      getDecisionEvents(decisionId),
+      getDecisionProposals(decisionId),
+    ]);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
       notFound();
@@ -47,13 +58,22 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
     (decision.status === 'DRAFT' || decision.status === 'DISCUSSING') &&
     hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
     (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
+  const currentParticipantRole = decision.participants.find(
+    (participant) => participant.user.id === currentUser.id,
+  )?.role;
+  const canCreateProposal =
+    (decision.status === 'DRAFT' || decision.status === 'DISCUSSING') &&
+    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
+    (hasAllScopeSystemRole || currentParticipantRole === 'OWNER' || currentParticipantRole === 'EDITOR');
 
   return (
     <DecisionDetailPage
       decision={decision}
       events={events}
+      proposals={proposals}
       canStartDiscussion={canStartDiscussion}
       canManageParticipants={canManageParticipants}
+      canCreateProposal={canCreateProposal}
     />
   );
 }
