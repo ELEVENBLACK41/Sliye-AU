@@ -2,9 +2,12 @@
  * 本文件是决策详情页面入口，使用“资源 ID + 授权范围”的后端联合查询防止 IDOR。
  */
 import { notFound } from 'next/navigation';
-import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
+import { SYSTEM_PERMISSIONS, SYSTEM_ROLES } from '@workspace/contracts/access';
 
-import { requireServerPermission } from '@/features/auth/services/auth-server.service';
+import {
+  hasSystemPermission,
+  requireServerPermission,
+} from '@/features/auth/services/auth-server.service';
 import type {
   DecisionDetail,
   DecisionEventTimelineItem,
@@ -24,7 +27,7 @@ type DecisionDetailRouteProps = {
 
 /** 渲染授权范围内的决策详情，越权和不存在统一显示 404。 */
 export default async function DecisionDetailRoutePage({ params }: DecisionDetailRouteProps) {
-  await requireServerPermission(SYSTEM_PERMISSIONS.decision.read);
+  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.decision.read);
   const { decisionId: rawDecisionId } = await params;
   const decisionId = Number(rawDecisionId);
 
@@ -48,5 +51,19 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
     throw error;
   }
 
-  return <DecisionDetailPage decision={decision} events={events} />;
+  const hasAllScopeSystemRole =
+    currentUser.isSuperAdmin ||
+    currentUser.roles.some((role) => role.code === SYSTEM_ROLES.admin);
+  const canStartDiscussion =
+    decision.status === 'DRAFT' &&
+    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
+    (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
+
+  return (
+    <DecisionDetailPage
+      decision={decision}
+      events={events}
+      canStartDiscussion={canStartDiscussion}
+    />
+  );
 }

@@ -10,6 +10,7 @@ import type {
 } from '@workspace/contracts/decisions';
 
 import { DecisionEventTimeline } from './decision-event-timeline';
+import { DecisionStatusActions } from './decision-status-actions';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -20,6 +21,8 @@ type DecisionDetailPageProps = {
   decision: DecisionDetail;
   /** 已经过权限与数据范围校验的决策事件时间线。 */
   events: DecisionEventTimelineItem[];
+  /** 当前用户是否具备开始讨论的展示条件；最终权限仍由 NestJS 校验。 */
+  canStartDiscussion: boolean;
 };
 
 /** 参与者身份对应的中文文案。 */
@@ -31,7 +34,11 @@ const participantRoleText: Record<DecisionDetail['participants'][number]['role']
 };
 
 /** 渲染决策基本资料、参与者列表和只读事件时间线。 */
-export function DecisionDetailPage({ decision, events }: DecisionDetailPageProps) {
+export function DecisionDetailPage({
+  decision,
+  events,
+  canStartDiscussion,
+}: DecisionDetailPageProps) {
   return (
     <main className="flex flex-col gap-4">
       <div>
@@ -67,6 +74,8 @@ export function DecisionDetailPage({ decision, events }: DecisionDetailPageProps
           <SummaryItem label="创建时间" value={formatDateTime(decision.createdAt)} />
         </CardContent>
       </Card>
+
+      {canStartDiscussion ? <DecisionStatusActions decisionId={decision.id} /> : null}
 
       <Card className="rounded-md shadow-none">
         <CardHeader>
