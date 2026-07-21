@@ -11,6 +11,15 @@ export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER'
 /** 提案从开放到被接受、拒绝或取消的业务状态。 */
 export type DecisionProposalStatus = 'OPEN' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
 
+/** 一轮投票从开放、关闭到取消的生命周期状态。 */
+export type DecisionVoteRoundStatus = 'DRAFT' | 'OPEN' | 'CLOSED' | 'CANCELLED';
+
+/** 一轮投票允许采用的选项规则。 */
+export type DecisionVoteMethod = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'APPROVAL';
+
+/** 关闭投票后根据法定人数及赞成、反对票生成的统计结论。 */
+export type DecisionVoteOutcome = 'APPROVED' | 'REJECTED' | 'TIED' | 'QUORUM_NOT_MET';
+
 /** 通过参与者新增接口可以分配的身份，负责人身份由决策负责人字段单独维护。 */
 export type AddableDecisionParticipantRole = Exclude<DecisionParticipantRole, 'OWNER'>;
 
@@ -135,6 +144,88 @@ export type DecisionProposal = {
   updatedAt: string;
 };
 
+/** 决策投票中的一个可选项及其公开统计。 */
+export type DecisionVoteOption = {
+  /** 投票选项数据库主键。 */
+  id: number;
+  /** 轮次内稳定的选项代码。 */
+  code: string;
+  /** 面向参与者展示的选项名称。 */
+  label: string;
+  /** 选项补充说明。 */
+  description: string | null;
+  /** 关联提案主键；普通反对或弃权选项为 `null`。 */
+  proposalId: number | null;
+  /** 稳定展示顺序。 */
+  sortOrder: number;
+  /** 关闭轮次后的得票数；投票开放期间为 `null`，避免实时票数影响后续参与者。 */
+  voteCount: number | null;
+};
+
+/** 关闭投票后保存并返回的统计结果摘要。 */
+export type DecisionVoteResult = {
+  /** 本轮成功提交的选票总数。 */
+  totalBallots: number;
+  /** 本轮要求的最少有效选票数；未设置时为 `null`。 */
+  quorumCount: number | null;
+  /** 实际选票数是否达到法定人数。 */
+  quorumMet: boolean;
+  /** 基于法定人数及赞成、反对票得出的统计结论，不等同于正式决议。 */
+  outcome: DecisionVoteOutcome;
+};
+
+/** 决策详情使用的一轮提案投票。 */
+export type DecisionVoteRound = {
+  /** 投票轮次数据库主键。 */
+  id: number;
+  /** 投票所属决策主键。 */
+  decisionId: number;
+  /** 本轮表决的提案主键；兼容不直接关联提案的通用投票时为 `null`。 */
+  proposalId: number | null;
+  /** 投票标题。 */
+  title: string;
+  /** 投票规则或补充说明。 */
+  description: string | null;
+  /** 本轮采用的选择规则。 */
+  method: DecisionVoteMethod;
+  /** 本轮生命周期状态。 */
+  status: DecisionVoteRoundStatus;
+  /** 是否隐藏投票人与选项的对应关系。 */
+  isAnonymous: boolean;
+  /** 达到有效投票所需的最少选票数。 */
+  quorumCount: number | null;
+  /** 单张选票允许选择的最多选项数。 */
+  maxChoices: number | null;
+  /** 创建并开启本轮投票的用户。 */
+  creator: DecisionUserSummary;
+  /** 本轮按稳定顺序排列的投票选项。 */
+  options: DecisionVoteOption[];
+  /** 当前用户是否已经提交选票。 */
+  hasVoted: boolean;
+  /** 关闭后的统计结果；轮次尚未关闭时为 `null`。 */
+  result: DecisionVoteResult | null;
+  /** 投票实际开放时间。 */
+  openedAt: string | null;
+  /** 投票关闭或取消时间。 */
+  closedAt: string | null;
+  /** 投票轮次创建时间。 */
+  createdAt: string;
+  /** 投票轮次最后更新时间。 */
+  updatedAt: string;
+};
+
+/** 当前用户成功提交的一张选票摘要。 */
+export type DecisionBallotReceipt = {
+  /** 选票数据库主键。 */
+  id: number;
+  /** 选票所属投票轮次主键。 */
+  roundId: number;
+  /** 当前用户选择的选项主键。 */
+  selectedOptionId: number;
+  /** 选票正式提交时间。 */
+  submittedAt: string;
+};
+
 /** 决策事件时间线中的一条记录。 */
 export type DecisionEventTimelineItem = {
   /** 决策事件数据库主键。 */
@@ -149,6 +240,8 @@ export type DecisionEventTimelineItem = {
   meetingId: number | null;
   /** 关联提案主键；事件不属于提案时为 `null`。 */
   proposalId: number | null;
+  /** 关联投票轮次主键；事件不属于投票时为 `null`。 */
+  voteRoundId: number | null;
   /** 关联任务主键；事件不属于任务时为 `null`。 */
   taskId: number | null;
   /** 事件携带的业务上下文；没有附加信息时为 `null`。 */
@@ -205,6 +298,28 @@ export type CreateDecisionProposalRequestPayload = {
   description?: string;
 };
 
+/** 为一个开放提案创建并立即开启投票的请求体。 */
+export type CreateDecisionVoteRoundRequestPayload = {
+  /** 本轮需要表决的开放提案主键。 */
+  proposalId: number;
+  /** 自定义投票标题；省略时由服务端根据提案标题生成。 */
+  title?: string;
+  /** 投票规则或补充说明。 */
+  description?: string;
+  /** 是否在展示层隐藏投票人与选项的对应关系。 */
+  isAnonymous?: boolean;
+  /** 达到有效投票所需的最少选票数；省略时不限制。 */
+  quorumCount?: number;
+};
+
+/** 当前参与者提交单选选票的请求体。 */
+export type SubmitDecisionBallotRequestPayload = {
+  /** 当前用户选择的投票选项主键。 */
+  optionId: number;
+  /** 当前用户对整张选票填写的可选理由。 */
+  reason?: string;
+};
+
 /** 决策列表接口返回的业务数据。 */
 export type DecisionListResponse = DecisionSummary[];
 
@@ -216,6 +331,9 @@ export type DecisionParticipantCandidateListResponse = DecisionParticipantCandid
 
 /** 决策提案列表接口返回的业务数据。 */
 export type DecisionProposalListResponse = DecisionProposal[];
+
+/** 决策投票轮次列表接口返回的业务数据。 */
+export type DecisionVoteRoundListResponse = DecisionVoteRound[];
 
 /** 决策列表接口支持的筛选条件。 */
 export type DecisionListQuery = {

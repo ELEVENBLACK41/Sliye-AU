@@ -8,12 +8,17 @@ import type {
   DecisionParticipantCandidate,
   DecisionProposal as DecisionProposalContract,
   DecisionSummary,
+  DecisionVoteOutcome,
+  DecisionVoteRound as DecisionVoteRoundContract,
 } from '@workspace/contracts/decisions';
 import type {
   Decision,
+  DecisionBallot,
   DecisionEvent,
   DecisionParticipant,
   DecisionProposal,
+  DecisionVoteOption,
+  DecisionVoteRound,
   Department,
   User,
 } from '../../generated/prisma';
@@ -66,6 +71,18 @@ export type DecisionProposalRecord = DecisionProposal & {
 export type DecisionEventRecord = DecisionEvent & {
   /** 触发事件的用户；系统事件或用户已删除时为空。 */
   actor: Pick<User, 'id' | 'name' | 'avatarUrl'> | null;
+};
+
+/** 投票轮次映射需要的选项统计和当前用户选票数据。 */
+export type DecisionVoteRoundRecord = DecisionVoteRound & {
+  /** 创建投票的用户摘要。 */
+  creator: Pick<User, 'id' | 'name' | 'avatarUrl'>;
+  /** 投票选项及各自选择数。 */
+  options: Array<DecisionVoteOption & { _count: { choices: number } }>;
+  /** 当前用户在本轮已经提交的选票，查询最多返回一条。 */
+  ballots: Array<Pick<DecisionBallot, 'id'>>;
+  /** 本轮全部选票聚合数。 */
+  _count: { ballots: number };
 };
 
 /** 将数据库决策映射为列表摘要。 */
@@ -150,6 +167,55 @@ export function toDecisionProposal(
   };
 }
 
+/** 将数据库投票轮次映射为不泄露匿名投票人的共享契约。 */
+export function toDecisionVoteRound(
+  round: DecisionVoteRoundRecord,
+): DecisionVoteRoundContract {
+  const isClosed = round.status === 'CLOSED';
+  const approveCount = getVoteCount(round, 'APPROVE');
+  const rejectCount = getVoteCount(round, 'REJECT');
+  const quorumMet =
+    round.quorumCount === null || round._count.ballots >= round.quorumCount;
+
+  return {
+    id: round.id,
+    decisionId: round.decisionId,
+    proposalId:
+      round.options.find((option) => option.code === 'APPROVE')?.proposalId ??
+      null,
+    title: round.title,
+    description: round.description,
+    method: round.method,
+    status: round.status,
+    isAnonymous: round.isAnonymous,
+    quorumCount: round.quorumCount,
+    maxChoices: round.maxChoices,
+    creator: toDecisionUser(round.creator),
+    options: round.options.map((option) => ({
+      id: option.id,
+      code: option.code,
+      label: option.label,
+      description: option.description,
+      proposalId: option.proposalId,
+      sortOrder: option.sortOrder,
+      voteCount: isClosed ? option._count.choices : null,
+    })),
+    hasVoted: round.ballots.length > 0,
+    result: isClosed
+      ? {
+          totalBallots: round._count.ballots,
+          quorumCount: round.quorumCount,
+          quorumMet,
+          outcome: getVoteOutcome(quorumMet, approveCount, rejectCount),
+        }
+      : null,
+    openedAt: round.openedAt?.toISOString() ?? null,
+    closedAt: round.closedAt?.toISOString() ?? null,
+    createdAt: round.createdAt.toISOString(),
+    updatedAt: round.updatedAt.toISOString(),
+  };
+}
+
 /** 将数据库决策事件映射为跨端时间线契约。 */
 export function toDecisionEvent(
   event: DecisionEventRecord,
@@ -161,6 +227,7 @@ export function toDecisionEvent(
     actor: event.actor ? toDecisionUser(event.actor) : null,
     meetingId: event.meetingId,
     proposalId: event.proposalId,
+    voteRoundId: event.voteRoundId,
     taskId: event.taskId,
     payload: toRecord(event.payload),
     before: toRecord(event.before),
@@ -169,6 +236,34 @@ export function toDecisionEvent(
     recordingOffsetMs: event.recordingOffsetMs,
     createdAt: event.createdAt.toISOString(),
   };
+}
+
+/** 读取指定稳定代码选项的得票数，不存在时按零票处理。 */
+function getVoteCount(round: DecisionVoteRoundRecord, code: string): number {
+  return (
+    round.options.find((option) => option.code === code)?._count.choices ?? 0
+  );
+}
+
+/** 根据法定人数与赞成、反对票生成统计结论。 */
+function getVoteOutcome(
+  quorumMet: boolean,
+  approveCount: number,
+  rejectCount: number,
+): DecisionVoteOutcome {
+  if (!quorumMet) {
+    return 'QUORUM_NOT_MET';
+  }
+
+  if (approveCount > rejectCount) {
+    return 'APPROVED';
+  }
+
+  if (rejectCount > approveCount) {
+    return 'REJECTED';
+  }
+
+  return 'TIED';
 }
 
 /** 映射决策创建人、负责人或参与人的公共摘要。 */

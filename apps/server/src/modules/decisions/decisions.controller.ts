@@ -17,6 +17,8 @@ import type { AuthorizationContext } from '../auth/types/auth.types';
 import { AddDecisionParticipantDto } from './dto/add-decision-participant.dto';
 import { CreateDecisionDto } from './dto/create-decision.dto';
 import { CreateDecisionProposalDto } from './dto/create-decision-proposal.dto';
+import { CreateDecisionVoteRoundDto } from './dto/create-decision-vote-round.dto';
+import { SubmitDecisionBallotDto } from './dto/submit-decision-ballot.dto';
 import { UpdateDecisionStatusDto } from './dto/update-decision-status.dto';
 import { DecisionsService } from './decisions.service';
 
@@ -123,6 +125,67 @@ export class DecisionsController {
       authorization,
       decisionId,
       body,
+    );
+  }
+
+  /** 查询单个授权范围内决策的投票轮次。 */
+  @Get(':decisionId/vote-rounds')
+  @RequirePermissions('decision:read')
+  @ApiOperation({ summary: '查询决策投票轮次及公开统计' })
+  listVoteRounds(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+  ) {
+    return this.decisionsService.listVoteRounds(authorization, decisionId);
+  }
+
+  /** 为开放提案创建并立即开启一轮单选投票。 */
+  @Post(':decisionId/vote-rounds')
+  @RequirePermissions('decision:update')
+  @ApiOperation({ summary: '创建并开启提案投票轮次' })
+  createVoteRound(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+    @Body() body: CreateDecisionVoteRoundDto,
+  ) {
+    return this.decisionsService.createVoteRound(
+      authorization,
+      decisionId,
+      body,
+    );
+  }
+
+  /** 由具备审批身份的参与者提交一张单选选票。 */
+  @Post(':decisionId/vote-rounds/:voteRoundId/ballots')
+  @RequirePermissions('decision:read')
+  @ApiOperation({ summary: '提交决策投票选票' })
+  submitBallot(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+    @Param('voteRoundId', ParseIntPipe) voteRoundId: number,
+    @Body() body: SubmitDecisionBallotDto,
+  ) {
+    return this.decisionsService.submitBallot(
+      authorization,
+      decisionId,
+      voteRoundId,
+      body,
+    );
+  }
+
+  /** 由决策负责人关闭投票并固化最终统计。 */
+  @Post(':decisionId/vote-rounds/:voteRoundId/close')
+  @RequirePermissions('decision:update')
+  @ApiOperation({ summary: '关闭决策投票并写入结果事件' })
+  closeVoteRound(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+    @Param('voteRoundId', ParseIntPipe) voteRoundId: number,
+  ) {
+    return this.decisionsService.closeVoteRound(
+      authorization,
+      decisionId,
+      voteRoundId,
     );
   }
 

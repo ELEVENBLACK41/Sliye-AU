@@ -1,5 +1,5 @@
 /*
- * @Description: 决策服务的数据范围、状态流转、参与者和提案事务单元测试。
+ * @Description: 决策服务的数据范围、状态流转、参与者、提案和投票闭环事务单元测试。
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { PrismaService } from '../../database/prisma.service';
@@ -10,6 +10,8 @@ import {
   ParticipantRole,
   ProposalStatus,
   UserStatus,
+  VoteMethod,
+  VoteRoundStatus,
 } from '../../generated/prisma';
 import type { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
@@ -120,6 +122,70 @@ function createProposalRecord() {
     createdAt: now,
     updatedAt: now,
     creator: { id: 7, name: '成员甲', avatarUrl: null },
+  };
+}
+
+/** 创建投票接口与映射测试使用的数据库轮次记录。 */
+function createVoteRoundRecord(status: VoteRoundStatus = VoteRoundStatus.OPEN) {
+  const now = new Date('2026-07-14T00:00:00.000Z');
+  const isClosed = status === VoteRoundStatus.CLOSED;
+
+  return {
+    id: 70,
+    decisionId: 20,
+    creatorId: 7,
+    title: '是否采纳「先抽离权限计算服务」',
+    description: null,
+    method: VoteMethod.SINGLE_CHOICE,
+    status,
+    isAnonymous: true,
+    quorumCount: 2,
+    maxChoices: 1,
+    openedAt: now,
+    closedAt: isClosed ? new Date('2026-07-14T01:00:00.000Z') : null,
+    createdAt: now,
+    updatedAt: now,
+    creator: { id: 7, name: '成员甲', avatarUrl: null },
+    options: [
+      {
+        id: 101,
+        roundId: 70,
+        proposalId: 50,
+        code: 'APPROVE',
+        label: '赞成',
+        description: null,
+        sortOrder: 1,
+        createdAt: now,
+        updatedAt: now,
+        _count: { choices: isClosed ? 2 : 0 },
+      },
+      {
+        id: 102,
+        roundId: 70,
+        proposalId: null,
+        code: 'REJECT',
+        label: '反对',
+        description: null,
+        sortOrder: 2,
+        createdAt: now,
+        updatedAt: now,
+        _count: { choices: isClosed ? 1 : 0 },
+      },
+      {
+        id: 103,
+        roundId: 70,
+        proposalId: null,
+        code: 'ABSTAIN',
+        label: '弃权',
+        description: null,
+        sortOrder: 3,
+        createdAt: now,
+        updatedAt: now,
+        _count: { choices: 0 },
+      },
+    ],
+    ballots: [] as Array<{ id: number }>,
+    _count: { ballots: isClosed ? 3 : 0 },
   };
 }
 
@@ -991,5 +1057,301 @@ describe('DecisionsService', () => {
       status: 409,
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('投票列表开放期间应隐藏实时票数并返回当前用户投票状态', async () => {
+    const round = createVoteRoundRecord();
+    round.options[0]._count.choices = 2;
+    round.ballots = [{ id: 80 }];
+    round._count.ballots = 2;
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({ voteRounds: [round] }),
+      },
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.listVoteRounds(createAuthorization(), 20),
+    ).resolves.toMatchObject([
+      {
+        id: 70,
+        proposalId: 50,
+        status: 'OPEN',
+        hasVoted: true,
+        result: null,
+        options: [
+          { code: 'APPROVE', voteCount: null },
+          { code: 'REJECT', voteCount: null },
+          { code: 'ABSTAIN', voteCount: null },
+        ],
+      },
+    ]);
+  });
+
+  it('负责人创建投票时应同时创建标准选项与创建、开启事件', async () => {
+    const round = createVoteRoundRecord();
+    const createRound = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve(round);
+    });
+    const createEvent = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ id: 90 });
+    });
+    const transaction = {
+      decisionVoteRound: { create: createRound },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+          proposals: [{ id: 50, title: '先抽离权限计算服务' }],
+          voteRounds: [],
+        }),
+      },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.createVoteRound(createAuthorization(), 20, {
+        proposalId: 50,
+        isAnonymous: true,
+        quorumCount: 2,
+      }),
+    ).resolves.toMatchObject({ id: 70, status: 'OPEN', proposalId: 50 });
+    expect(createRound.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        method: VoteMethod.SINGLE_CHOICE,
+        status: VoteRoundStatus.OPEN,
+        maxChoices: 1,
+        options: {
+          create: [
+            { code: 'APPROVE', proposalId: 50 },
+            { code: 'REJECT' },
+            { code: 'ABSTAIN' },
+          ],
+        },
+      },
+    });
+    expect(createEvent).toHaveBeenCalledTimes(2);
+    expect(createEvent.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        voteRoundId: 70,
+        type: DecisionEventType.VOTE_ROUND_CREATED,
+      },
+    });
+    expect(createEvent.mock.calls[1]?.[0]).toMatchObject({
+      data: {
+        voteRoundId: 70,
+        type: DecisionEventType.VOTE_ROUND_OPENED,
+      },
+    });
+  });
+
+  it('查看者不能提交选票', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          status: DecisionStatus.DISCUSSING,
+          participants: [{ role: ParticipantRole.VIEWER }],
+          voteRounds: [
+            {
+              id: 70,
+              status: VoteRoundStatus.OPEN,
+              isAnonymous: false,
+              options: [{ id: 101 }],
+            },
+          ],
+        }),
+      },
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.submitBallot(createAuthorization(), 20, 70, { optionId: 101 }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_VOTER_NOT_ELIGIBLE,
+      status: 403,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('审批者提交匿名选票时应写入选择关系且不记录事件操作者', async () => {
+    const createEvent = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ id: 91 });
+    });
+    const transaction = {
+      decisionVoteRound: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      decisionBallot: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 80,
+          roundId: 70,
+          submittedAt: new Date('2026-07-14T00:30:00.000Z'),
+        }),
+      },
+      decisionBallotChoice: { create: jest.fn().mockResolvedValue({}) },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          status: DecisionStatus.DISCUSSING,
+          participants: [{ role: ParticipantRole.APPROVER }],
+          voteRounds: [
+            {
+              id: 70,
+              status: VoteRoundStatus.OPEN,
+              isAnonymous: true,
+              options: [{ id: 101 }],
+            },
+          ],
+        }),
+      },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.submitBallot(createAuthorization(), 20, 70, {
+        optionId: 101,
+        reason: '支持该方案',
+      }),
+    ).resolves.toEqual({
+      id: 80,
+      roundId: 70,
+      selectedOptionId: 101,
+      submittedAt: '2026-07-14T00:30:00.000Z',
+    });
+    expect(transaction.decisionBallotChoice.create).toHaveBeenCalledWith({
+      data: { roundId: 70, ballotId: 80, optionId: 101 },
+    });
+    expect(createEvent).toHaveBeenCalledWith({
+      data: {
+        decisionId: 20,
+        actorId: null,
+        voteRoundId: 70,
+        type: DecisionEventType.VOTE_CAST,
+        title: '匿名参与者已投票',
+        payload: { anonymous: true },
+      },
+    });
+  });
+
+  it('负责人关闭投票时应固化得票、法定人数和统计结论', async () => {
+    const closedRound = createVoteRoundRecord(VoteRoundStatus.CLOSED);
+    const createEvent = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ id: 92 });
+    });
+    const transaction = {
+      decisionVoteRound: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue(closedRound),
+      },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+          voteRounds: [{ id: 70, status: VoteRoundStatus.OPEN }],
+        }),
+      },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.closeVoteRound(createAuthorization(), 20, 70),
+    ).resolves.toMatchObject({
+      id: 70,
+      status: 'CLOSED',
+      result: {
+        totalBallots: 3,
+        quorumCount: 2,
+        quorumMet: true,
+        outcome: 'APPROVED',
+      },
+      options: [
+        { code: 'APPROVE', voteCount: 2 },
+        { code: 'REJECT', voteCount: 1 },
+        { code: 'ABSTAIN', voteCount: 0 },
+      ],
+    });
+    expect(createEvent.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        proposalId: 50,
+        voteRoundId: 70,
+        type: DecisionEventType.VOTE_ROUND_CLOSED,
+        payload: {
+          result: {
+            totalBallots: 3,
+            quorumCount: 2,
+            quorumMet: true,
+            outcome: 'APPROVED',
+          },
+          options: [
+            { id: 101, code: 'APPROVE', label: '赞成', voteCount: 2 },
+            { id: 102, code: 'REJECT', label: '反对', voteCount: 1 },
+            { id: 103, code: 'ABSTAIN', label: '弃权', voteCount: 0 },
+          ],
+        },
+      },
+    });
   });
 });
