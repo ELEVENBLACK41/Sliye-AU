@@ -4,8 +4,12 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Building2, UserRound } from 'lucide-react';
-import type { DecisionDetail } from '@workspace/contracts/decisions';
+import type {
+  DecisionDetail,
+  DecisionEventTimelineItem,
+} from '@workspace/contracts/decisions';
 
+import { DecisionEventTimeline } from './decision-event-timeline';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -14,6 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/componen
 type DecisionDetailPageProps = {
   /** 已经过权限与数据范围校验的决策详情。 */
   decision: DecisionDetail;
+  /** 已经过权限与数据范围校验的决策事件时间线。 */
+  events: DecisionEventTimelineItem[];
 };
 
 /** 参与者身份对应的中文文案。 */
@@ -24,8 +30,8 @@ const participantRoleText: Record<DecisionDetail['participants'][number]['role']
   OWNER: '负责人',
 };
 
-/** 渲染决策基本资料和参与者列表。 */
-export function DecisionDetailPage({ decision }: DecisionDetailPageProps) {
+/** 渲染决策基本资料、参与者列表和只读事件时间线。 */
+export function DecisionDetailPage({ decision, events }: DecisionDetailPageProps) {
   return (
     <main className="flex flex-col gap-4">
       <div>
@@ -86,6 +92,8 @@ export function DecisionDetailPage({ decision }: DecisionDetailPageProps) {
           )}
         </CardContent>
       </Card>
+
+      <DecisionEventTimeline events={events} />
     </main>
   );
 }

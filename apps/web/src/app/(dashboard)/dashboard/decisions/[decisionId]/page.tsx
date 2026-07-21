@@ -5,8 +5,16 @@ import { notFound } from 'next/navigation';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 
 import { requireServerPermission } from '@/features/auth/services/auth-server.service';
-import { type DecisionDetail } from '@workspace/contracts/decisions';
-import { DecisionDetailPage, DecisionServerError, getDecisionDetail } from '@/features/decisions';
+import type {
+  DecisionDetail,
+  DecisionEventTimelineItem,
+} from '@workspace/contracts/decisions';
+import {
+  DecisionDetailPage,
+  DecisionServerError,
+  getDecisionDetail,
+  getDecisionEvents,
+} from '@/features/decisions';
 
 /** 动态决策详情路由参数。 */
 type DecisionDetailRouteProps = {
@@ -25,9 +33,13 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
   }
 
   let decision: DecisionDetail;
+  let events: DecisionEventTimelineItem[];
 
   try {
-    decision = await getDecisionDetail(decisionId);
+    [decision, events] = await Promise.all([
+      getDecisionDetail(decisionId),
+      getDecisionEvents(decisionId),
+    ]);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
       notFound();
@@ -36,5 +48,5 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
     throw error;
   }
 
-  return <DecisionDetailPage decision={decision} />;
+  return <DecisionDetailPage decision={decision} events={events} />;
 }
