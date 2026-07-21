@@ -116,10 +116,19 @@ enum ProposalStatus {
   CANCELLED
 }
 
-enum VoteOption {
-  APPROVE
-  REJECT
-  ABSTAIN
+/// 单轮投票从草稿到结束的独立状态，不再占用议题全局状态。
+enum VoteRoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+/// 一轮投票允许采用的选择规则。
+enum VoteMethod {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  APPROVAL
 }
 
 enum TaskStatus {
@@ -190,7 +199,8 @@ model User {
   ownedDecisions       Decision[]            @relation("DecisionOwner")
   decisionParticipants DecisionParticipant[]
   proposalsCreated     DecisionProposal[]    @relation("ProposalCreator")
-  votesCast            DecisionVote[]
+  voteRoundsCreated    DecisionVoteRound[]   @relation("DecisionVoteRoundCreator")
+  decisionBallots      DecisionBallot[]
   assignedTasks        DecisionTask[]        @relation("TaskAssignee")
   createdTasks         DecisionTask[]        @relation("TaskCreator")
   decisionEvents       DecisionEvent[]       @relation("DecisionEventActor")
@@ -598,6 +608,7 @@ model Decision {
 
   participants DecisionParticipant[]
   proposals    DecisionProposal[]
+  voteRounds   DecisionVoteRound[]
   tasks        DecisionTask[]
   events       DecisionEvent[]
   meetings     MeetingSession[]
@@ -662,32 +673,134 @@ model DecisionProposal {
   decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
   creator  User     @relation("ProposalCreator", fields: [creatorId], references: [id], onDelete: Restrict)
 
-  votes  DecisionVote[]
-  events DecisionEvent[]
+  voteOptions DecisionVoteOption[]
+  events      DecisionEvent[]
 
   @@index([decisionId])
   @@index([creatorId])
   @@index([status])
 }
 
-model DecisionVote {
+/// 一次独立投票轮次；同一决策事项可以没有投票，也可以拥有多轮投票。
+model DecisionVoteRound {
   id Int @id @default(autoincrement())
 
-  proposalId Int
-  voterId    Int
+  /// 本轮投票所属的决策事项。
+  decisionId Int
+  /// 创建本轮投票的用户。
+  creatorId  Int
 
-  option VoteOption
-  reason String?
+  /// 面向参与者展示的投票标题。
+  title       String
+  /// 投票背景、规则或补充说明。
+  description String?
+  /// 本轮采用的选择规则。
+  method      VoteMethod
+  /// 本轮自身的生命周期状态。
+  status      VoteRoundStatus @default(DRAFT)
+
+  /// 是否在业务展示层隐藏投票人与选项的对应关系；数据库仍保留 voterId 防止重复投票。
+  isAnonymous Boolean @default(false)
+  /// 达到有效投票所需的最少有效选票数；为空时不限制。
+  quorumCount Int?
+  /// 单张选票最多允许选择的选项数；单选通常为 1。
+  maxChoices  Int?
+
+  /// 实际开放投票的时间。
+  openedAt  DateTime?
+  /// 实际结束或取消投票的时间。
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  creator  User     @relation("DecisionVoteRoundCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+
+  options DecisionVoteOption[]
+  ballots DecisionBallot[]
+
+  @@index([decisionId])
+  @@index([creatorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// 一轮投票中的可选项；可以是普通文字，也可以关联一个候选方案。
+model DecisionVoteOption {
+  id Int @id @default(autoincrement())
+
+  /// 所属投票轮次。
+  roundId    Int
+  /// 可选的候选方案关联，用于同一轮比较多个方案。
+  proposalId Int?
+
+  /// 轮次内稳定且唯一的选项代码，例如 APPROVE、REJECT 或 PROPOSAL_12。
+  code        String
+  /// 面向用户展示的选项名称。
+  label       String
+  /// 选项的补充说明。
+  description String?
+  /// 控制选项的稳定展示顺序。
+  sortOrder   Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  proposal DecisionProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  voter    User             @relation(fields: [voterId], references: [id], onDelete: Cascade)
+  round    DecisionVoteRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  proposal DecisionProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
 
-  @@unique([proposalId, voterId])
+  choices DecisionBallotChoice[]
+
+  @@unique([roundId, code])
+  @@unique([id, roundId])
+  @@index([proposalId])
+  @@index([roundId, sortOrder])
+}
+
+/// 用户在某一轮投票中提交的一张选票；同一用户每轮最多一张。
+model DecisionBallot {
+  id Int @id @default(autoincrement())
+
+  /// 所属投票轮次。
+  roundId Int
+  /// 投票用户；匿名投票也保留该字段用于资格校验和防止重复。
+  voterId Int
+
+  /// 用户对整张选票填写的可选理由。
+  reason      String?
+  /// 选票正式提交的业务时间。
+  submittedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  round DecisionVoteRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  voter User              @relation(fields: [voterId], references: [id], onDelete: Restrict)
+
+  choices DecisionBallotChoice[]
+
+  @@unique([roundId, voterId])
+  @@unique([id, roundId])
   @@index([voterId])
-  @@index([option])
+  @@index([submittedAt])
+}
+
+/// 一张选票实际选择的选项；复合外键保证选票和选项属于同一投票轮次。
+model DecisionBallotChoice {
+  /// 用于同时约束选票和选项所属的轮次。
+  roundId  Int
+  /// 所属选票。
+  ballotId Int
+  /// 被选择的投票选项。
+  optionId Int
+
+  createdAt DateTime @default(now())
+
+  ballot DecisionBallot     @relation(fields: [ballotId, roundId], references: [id, roundId], onDelete: Cascade)
+  option DecisionVoteOption @relation(fields: [optionId, roundId], references: [id, roundId], onDelete: Cascade)
+
+  @@id([roundId, ballotId, optionId])
+  @@index([ballotId, roundId])
+  @@index([optionId, roundId])
 }
 
 model DecisionTask {
