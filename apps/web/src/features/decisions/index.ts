@@ -3,4 +3,9 @@
  */
 export { DecisionDetailPage } from './components/decision-detail-page';
 export { DecisionsPage } from './components/decisions-page';
-export { DecisionServerError, getDecisionDetail, getDecisionSummaries } from './services/decisions-server.service';
+export {
+  DecisionServerError,
+  getDecisionDetail,
+  getDecisionEvents,
+  getDecisionSummaries,
+} from './services/decisions-server.service';

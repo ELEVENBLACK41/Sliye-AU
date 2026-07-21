@@ -4,11 +4,19 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import type { ApiErrorCode } from '@workspace/contracts/common';
-import type { DecisionDetail, DecisionSummary } from '@workspace/contracts/decisions';
+import type {
+  DecisionDetail,
+  DecisionEventTimelineResponse,
+  DecisionSummary,
+} from '@workspace/contracts/decisions';
 
 import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
 import type { NestResponse } from '@/services/bff-request';
-import { requestDecisionDetailFromNest, requestDecisionsFromNest } from './decisions-nest-client';
+import {
+  requestDecisionDetailFromNest,
+  requestDecisionEventsFromNest,
+  requestDecisionsFromNest,
+} from './decisions-nest-client';
 
 /** Server Component 调用 NestJS 时抛出的结构化业务错误。 */
 export class DecisionServerError extends Error {
@@ -42,6 +50,17 @@ export const getDecisionDetail = cache(async (decisionId: number): Promise<Decis
 
   return unwrapResponse(await requestDecisionDetailFromNest(accessToken, decisionId));
 });
+
+/** 按资源 ID 读取决策事件时间线；越权与不存在均由后端返回相同 404。 */
+export const getDecisionEvents = cache(
+  async (decisionId: number): Promise<DecisionEventTimelineResponse> => {
+    const accessToken = await getAccessToken();
+
+    return unwrapResponse(
+      await requestDecisionEventsFromNest(accessToken, decisionId),
+    );
+  },
+);
 
 /** 从 httpOnly Cookie 读取访问令牌，令牌不会传入浏览器组件。 */
 async function getAccessToken(): Promise<string> {
