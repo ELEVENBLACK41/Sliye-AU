@@ -3,7 +3,11 @@
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { PrismaService } from '../../database/prisma.service';
-import { DecisionStatus, ParticipantRole } from '../../generated/prisma';
+import {
+  DecisionEventType,
+  DecisionStatus,
+  ParticipantRole,
+} from '../../generated/prisma';
 import type { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import { DecisionsService } from './decisions.service';
@@ -58,6 +62,30 @@ function createDecisionRecord() {
   };
 }
 
+/** 创建可被映射为决策时间线条目的数据库事件记录。 */
+function createDecisionEventRecord() {
+  const occurredAt = new Date('2026-07-11T00:00:00.000Z');
+  const createdAt = new Date('2026-07-11T00:00:01.000Z');
+
+  return {
+    id: 40,
+    decisionId: 20,
+    actorId: 7,
+    meetingId: null,
+    proposalId: null,
+    taskId: null,
+    type: DecisionEventType.DECISION_CREATED,
+    title: '创建决策',
+    payload: { departmentId: 3 },
+    before: null,
+    after: { status: DecisionStatus.DRAFT },
+    occurredAt,
+    recordingOffsetMs: null,
+    createdAt,
+    actor: { id: 7, name: '成员甲', avatarUrl: null },
+  };
+}
+
 describe('DecisionsService', () => {
   it('决策列表必须使用授权服务生成的数据范围条件', async () => {
     const scopeWhere = { deptId: { in: [3, 4] } };
@@ -91,6 +119,100 @@ describe('DecisionsService', () => {
     );
 
     await expect(service.get(createAuthorization(), 99)).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_NOT_FOUND,
+      status: 404,
+    });
+  });
+
+  it('决策事件时间线应使用读取范围并按发生时间和主键稳定排序', async () => {
+    const scopeWhere = { deptId: { in: [3, 4] } };
+    const event = createDecisionEventRecord();
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({ events: [event] }),
+      },
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue(scopeWhere),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.listEvents(createAuthorization(), 20),
+    ).resolves.toEqual([
+      {
+        id: 40,
+        type: 'DECISION_CREATED',
+        title: '创建决策',
+        actor: { id: 7, name: '成员甲', avatarUrl: null },
+        meetingId: null,
+        proposalId: null,
+        taskId: null,
+        payload: { departmentId: 3 },
+        before: null,
+        after: { status: 'DRAFT' },
+        occurredAt: '2026-07-11T00:00:00.000Z',
+        recordingOffsetMs: null,
+        createdAt: '2026-07-11T00:00:01.000Z',
+      },
+    ]);
+    expect(
+      authorizationService.buildDecisionWhere,
+    ).toHaveBeenCalledWith(createAuthorization(), 'decision:read');
+    expect(prisma.decision.findFirst).toHaveBeenCalledWith({
+      where: {
+        AND: [{ id: 20 }, scopeWhere],
+      },
+      select: {
+        events: {
+          include: {
+            actor: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+  });
+
+  it('可访问决策没有事件时应返回空数组', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({ events: [] }),
+      },
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.listEvents(createAuthorization(), 20),
+    ).resolves.toEqual([]);
+  });
+
+  it('查询不存在或越权决策的事件时间线时统一返回 404', async () => {
+    const prisma = {
+      decision: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: -1 }),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.listEvents(createAuthorization(), 99),
+    ).rejects.toMatchObject({
       code: API_ERROR_CODES.DECISION_NOT_FOUND,
       status: 404,
     });

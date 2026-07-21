@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type {
   DecisionDetail,
+  DecisionEventTimelineItem,
   DecisionSummary,
 } from '@workspace/contracts/decisions';
 import { BusinessException } from '../../common/exceptions/business.exception';
@@ -13,7 +14,11 @@ import { DecisionEventType, ParticipantRole } from '../../generated/prisma';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import { AuthorizationService } from '../auth/services/authorization.service';
 import { CreateDecisionDto } from './dto/create-decision.dto';
-import { toDecisionDetail, toDecisionSummary } from './decisions.mapper';
+import {
+  toDecisionDetail,
+  toDecisionEvent,
+  toDecisionSummary,
+} from './decisions.mapper';
 
 /** 决策查询统一加载的列表关系。 */
 const decisionSummaryInclude = {
@@ -87,6 +92,42 @@ export class DecisionsService {
     }
 
     return toDecisionDetail(decision);
+  }
+
+  /** 查询单个可访问决策的完整事件时间线。 */
+  async listEvents(
+    authorization: AuthorizationContext,
+    decisionId: number,
+  ): Promise<DecisionEventTimelineItem[]> {
+    const scopeWhere = await this.authorizationService.buildDecisionWhere(
+      authorization,
+      'decision:read',
+    );
+    const decision = await this.prisma.decision.findFirst({
+      where: {
+        AND: [{ id: decisionId }, scopeWhere],
+      },
+      select: {
+        events: {
+          include: {
+            actor: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+
+    if (!decision) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.DECISION_NOT_FOUND,
+        message: '决策不存在或当前账号无权访问',
+        status: 404,
+      });
+    }
+
+    return decision.events.map(toDecisionEvent);
   }
 
   /** 在授权部门内创建决策，并原子写入创建人和时间线事件。 */

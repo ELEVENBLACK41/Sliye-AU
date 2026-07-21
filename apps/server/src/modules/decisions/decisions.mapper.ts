@@ -3,10 +3,12 @@
  */
 import type {
   DecisionDetail,
+  DecisionEventTimelineItem,
   DecisionSummary,
 } from '@workspace/contracts/decisions';
 import type {
   Decision,
+  DecisionEvent,
   DecisionParticipant,
   Department,
   User,
@@ -33,6 +35,12 @@ type DecisionDetailRecord = DecisionSummaryRecord & {
       user: Pick<User, 'id' | 'name' | 'avatarUrl'>;
     }
   >;
+};
+
+/** 决策时间线映射需要的事件与操作者关联数据。 */
+export type DecisionEventRecord = DecisionEvent & {
+  /** 触发事件的用户；系统事件或用户已删除时为空。 */
+  actor: Pick<User, 'id' | 'name' | 'avatarUrl'> | null;
 };
 
 /** 将数据库决策映射为列表摘要。 */
@@ -74,6 +82,27 @@ export function toDecisionDetail(
   };
 }
 
+/** 将数据库决策事件映射为跨端时间线契约。 */
+export function toDecisionEvent(
+  event: DecisionEventRecord,
+): DecisionEventTimelineItem {
+  return {
+    id: event.id,
+    type: event.type,
+    title: event.title,
+    actor: event.actor ? toDecisionUser(event.actor) : null,
+    meetingId: event.meetingId,
+    proposalId: event.proposalId,
+    taskId: event.taskId,
+    payload: toRecord(event.payload),
+    before: toRecord(event.before),
+    after: toRecord(event.after),
+    occurredAt: event.occurredAt.toISOString(),
+    recordingOffsetMs: event.recordingOffsetMs,
+    createdAt: event.createdAt.toISOString(),
+  };
+}
+
 /** 映射决策创建人、负责人或参与人的公共摘要。 */
 function toDecisionUser(user: Pick<User, 'id' | 'name' | 'avatarUrl'>) {
   return {
@@ -81,4 +110,11 @@ function toDecisionUser(user: Pick<User, 'id' | 'name' | 'avatarUrl'>) {
     name: user.name,
     avatarUrl: user.avatarUrl,
   };
+}
+
+/** 将 Prisma JSON 值安全收窄为时间线契约允许的对象。 */
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }

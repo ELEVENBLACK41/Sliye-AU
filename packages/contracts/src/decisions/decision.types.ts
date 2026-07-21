@@ -8,6 +8,23 @@ export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'VOTING' | 'DECIDED' | 'AR
 /** 用户参与某个决策时承担的角色。 */
 export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER';
 
+/** 决策时间线中允许出现的稳定事件类型。 */
+export type DecisionEventType =
+  | 'DECISION_CREATED'
+  | 'DECISION_UPDATED'
+  | 'STATUS_CHANGED'
+  | 'PARTICIPANT_ADDED'
+  | 'PARTICIPANT_REMOVED'
+  | 'PROPOSAL_CREATED'
+  | 'PROPOSAL_UPDATED'
+  | 'VOTE_CAST'
+  | 'VOTE_CLOSED'
+  | 'TASK_CREATED'
+  | 'TASK_UPDATED'
+  | 'MEETING_STARTED'
+  | 'MEETING_ENDED'
+  | 'AI_SUMMARY_CREATED';
+
 /** 决策所属部门的轻量摘要。 */
 export type DecisionDepartmentSummary = {
   /** 部门数据库主键。 */
@@ -68,6 +85,36 @@ export type DecisionParticipant = {
   createdAt: string;
 };
 
+/** 决策事件时间线中的一条记录。 */
+export type DecisionEventTimelineItem = {
+  /** 决策事件数据库主键。 */
+  id: number;
+  /** 事件的稳定业务类型。 */
+  type: DecisionEventType;
+  /** 面向用户展示的事件标题。 */
+  title: string;
+  /** 触发事件的用户；系统事件或原用户已删除时为 `null`。 */
+  actor: DecisionUserSummary | null;
+  /** 关联会议主键；事件不属于会议时为 `null`。 */
+  meetingId: number | null;
+  /** 关联提案主键；事件不属于提案时为 `null`。 */
+  proposalId: number | null;
+  /** 关联任务主键；事件不属于任务时为 `null`。 */
+  taskId: number | null;
+  /** 事件携带的业务上下文；没有附加信息时为 `null`。 */
+  payload: Record<string, unknown> | null;
+  /** 业务变更前的安全快照；不涉及字段变更时为 `null`。 */
+  before: Record<string, unknown> | null;
+  /** 业务变更后的安全快照；不涉及字段变更时为 `null`。 */
+  after: Record<string, unknown> | null;
+  /** 事件在业务流程中发生的时间，使用 ISO 8601 字符串。 */
+  occurredAt: string;
+  /** 事件相对会议录像开始时间的毫秒偏移；未绑定录像时为 `null`。 */
+  recordingOffsetMs: number | null;
+  /** 事件记录写入数据库的时间，使用 ISO 8601 字符串。 */
+  createdAt: string;
+};
+
 /** 决策详情，包含摘要信息和完整参与者列表。 */
 export type DecisionDetail = DecisionSummary & {
   /** 当前决策的全部参与者。 */
@@ -88,6 +135,9 @@ export type CreateDecisionRequestPayload = {
 
 /** 决策列表接口返回的业务数据。 */
 export type DecisionListResponse = DecisionSummary[];
+
+/** 决策事件时间线接口返回的业务数据。 */
+export type DecisionEventTimelineResponse = DecisionEventTimelineItem[];
 
 /** 决策列表接口支持的筛选条件。 */
 export type DecisionListQuery = {

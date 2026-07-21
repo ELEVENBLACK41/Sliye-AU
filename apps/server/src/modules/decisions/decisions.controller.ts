@@ -42,6 +42,17 @@ export class DecisionsController {
     return this.decisionsService.create(authorization, body);
   }
 
+  /** 查询单个授权范围内决策的事件时间线。 */
+  @Get(':decisionId/events')
+  @RequirePermissions('decision:read')
+  @ApiOperation({ summary: '查询决策事件时间线' })
+  listEvents(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+  ) {
+    return this.decisionsService.listEvents(authorization, decisionId);
+  }
+
   /** 查询单个授权范围内的决策详情。 */
   @Get(':decisionId')
   @RequirePermissions('decision:read')
