@@ -1,5 +1,5 @@
 /**
- * 本文件封装决策 Server Component 数据读取，并保留上游 HTTP 状态、业务码和请求编号。
+ * 本文件封装决策的 Next.js 服务端请求，并保留上游 HTTP 状态、业务码和请求编号。
  */
 import { cache } from 'react';
 import { cookies } from 'next/headers';
@@ -8,6 +8,7 @@ import type {
   DecisionDetail,
   DecisionEventTimelineResponse,
   DecisionSummary,
+  UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
 
 import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
@@ -15,6 +16,7 @@ import type { NestResponse } from '@/services/bff-request';
 import {
   requestDecisionDetailFromNest,
   requestDecisionEventsFromNest,
+  requestDecisionStatusUpdateFromNest,
   requestDecisionsFromNest,
 } from './decisions-nest-client';
 
@@ -61,6 +63,18 @@ export const getDecisionEvents = cache(
     );
   },
 );
+
+/** 在 Next.js 服务端更新决策状态；写请求不使用 React cache。 */
+export async function updateDecisionStatus(
+  decisionId: number,
+  payload: UpdateDecisionStatusRequestPayload,
+): Promise<DecisionDetail> {
+  const accessToken = await getAccessToken();
+
+  return unwrapResponse(
+    await requestDecisionStatusUpdateFromNest(accessToken, decisionId, payload),
+  );
+}
 
 /** 从 httpOnly Cookie 读取访问令牌，令牌不会传入浏览器组件。 */
 async function getAccessToken(): Promise<string> {

@@ -8,4 +8,5 @@ export {
   getDecisionDetail,
   getDecisionEvents,
   getDecisionSummaries,
+  updateDecisionStatus,
 } from './services/decisions-server.service';

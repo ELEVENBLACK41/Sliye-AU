@@ -1,10 +1,11 @@
 /**
- * 本文件封装决策模块在 Next.js 服务端调用 NestJS 的类型化只读请求。
+ * 本文件封装决策模块在 Next.js 服务端调用 NestJS 的类型化请求。
  */
 import type {
   DecisionDetail,
   DecisionEventTimelineResponse,
   DecisionSummary,
+  UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
 
 import { requestNest, type NestResponse } from '@/services/bff-request';
@@ -42,7 +43,23 @@ export function requestDecisionEventsFromNest(
   );
 }
 
-/** 构造只在服务端使用的 Bearer 认证请求头。 */
+/** 按资源 ID 更新决策状态，并保留 NestJS 的统一响应和业务错误。 */
+export function requestDecisionStatusUpdateFromNest(
+  accessToken: string,
+  decisionId: number,
+  payload: UpdateDecisionStatusRequestPayload,
+): Promise<NestResponse<DecisionDetail>> {
+  return requestNest<DecisionDetail, UpdateDecisionStatusRequestPayload>(
+    `/decisions/${decisionId}/status`,
+    {
+      method: 'PATCH',
+      headers: createAuthHeaders(accessToken),
+      body: payload,
+    },
+  );
+}
+
+/** 构造只在 Next.js 服务端使用的 Bearer 认证请求头。 */
 function createAuthHeaders(accessToken: string): HeadersInit {
   return { Authorization: `Bearer ${accessToken}` };
 }
