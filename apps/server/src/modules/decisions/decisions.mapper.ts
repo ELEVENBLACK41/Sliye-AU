@@ -6,12 +6,14 @@ import type {
   DecisionEventTimelineItem,
   DecisionParticipant as DecisionParticipantContract,
   DecisionParticipantCandidate,
+  DecisionProposal as DecisionProposalContract,
   DecisionSummary,
 } from '@workspace/contracts/decisions';
 import type {
   Decision,
   DecisionEvent,
   DecisionParticipant,
+  DecisionProposal,
   Department,
   User,
 } from '../../generated/prisma';
@@ -52,6 +54,12 @@ export type DecisionParticipantCandidateRecord = Pick<
 > & {
   /** 候选用户所属部门；不可用用户已在查询阶段被过滤。 */
   department: Pick<Department, 'id' | 'code' | 'name'> | null;
+};
+
+/** 单个提案映射需要的创建人摘要。 */
+export type DecisionProposalRecord = DecisionProposal & {
+  /** 创建提案的用户摘要。 */
+  creator: Pick<User, 'id' | 'name' | 'avatarUrl'>;
 };
 
 /** 决策时间线映射需要的事件与操作者关联数据。 */
@@ -121,6 +129,24 @@ export function toDecisionParticipantCandidate(
           name: user.department.name,
         }
       : null,
+  };
+}
+
+/** 将数据库提案映射为共享的决策提案契约。 */
+export function toDecisionProposal(
+  proposal: DecisionProposalRecord,
+): DecisionProposalContract {
+  return {
+    id: proposal.id,
+    decisionId: proposal.decisionId,
+    title: proposal.title,
+    description: proposal.description,
+    status: proposal.status,
+    creator: toDecisionUser(proposal.creator),
+    acceptedAt: proposal.acceptedAt?.toISOString() ?? null,
+    closedAt: proposal.closedAt?.toISOString() ?? null,
+    createdAt: proposal.createdAt.toISOString(),
+    updatedAt: proposal.updatedAt.toISOString(),
   };
 }
 

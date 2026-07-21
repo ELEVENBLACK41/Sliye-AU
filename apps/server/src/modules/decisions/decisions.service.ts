@@ -8,6 +8,7 @@ import type {
   DecisionEventTimelineItem,
   DecisionParticipant,
   DecisionParticipantCandidate,
+  DecisionProposal,
   DecisionSummary,
 } from '@workspace/contracts/decisions';
 import { BusinessException } from '../../common/exceptions/business.exception';
@@ -23,12 +24,14 @@ import type { AuthorizationContext } from '../auth/types/auth.types';
 import { AuthorizationService } from '../auth/services/authorization.service';
 import { AddDecisionParticipantDto } from './dto/add-decision-participant.dto';
 import { CreateDecisionDto } from './dto/create-decision.dto';
+import { CreateDecisionProposalDto } from './dto/create-decision-proposal.dto';
 import { UpdateDecisionStatusDto } from './dto/update-decision-status.dto';
 import {
   toDecisionDetail,
   toDecisionEvent,
   toDecisionParticipant,
   toDecisionParticipantCandidate,
+  toDecisionProposal,
   toDecisionSummary,
 } from './decisions.mapper';
 
@@ -50,6 +53,18 @@ const decisionSummaryInclude = {
 const participantMutableStatuses = new Set<DecisionStatus>([
   DecisionStatus.DRAFT,
   DecisionStatus.DISCUSSING,
+]);
+
+/** 允许创建提案的决策状态。 */
+const proposalMutableStatuses = new Set<DecisionStatus>([
+  DecisionStatus.DRAFT,
+  DecisionStatus.DISCUSSING,
+]);
+
+/** 普通参与者中允许创建提案的身份。 */
+const proposalCreatorRoles = new Set<ParticipantRole>([
+  ParticipantRole.OWNER,
+  ParticipantRole.EDITOR,
 ]);
 
 /** 可被加入决策的用户必须已启用、验证邮箱、归属部门且至少拥有一个角色。 */
@@ -445,6 +460,136 @@ export class DecisionsService {
     });
 
     return users.map(toDecisionParticipantCandidate);
+  }
+
+  /** 查询单个可访问决策的全部提案。 */
+  async listProposals(
+    authorization: AuthorizationContext,
+    decisionId: number,
+  ): Promise<DecisionProposal[]> {
+    const scopeWhere = await this.authorizationService.buildDecisionWhere(
+      authorization,
+      'decision:read',
+    );
+    const decision = await this.prisma.decision.findFirst({
+      where: {
+        AND: [{ id: decisionId }, scopeWhere],
+      },
+      select: {
+        proposals: {
+          include: {
+            creator: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+
+    if (!decision) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.DECISION_NOT_FOUND,
+        message: '决策不存在或当前账号无权访问',
+        status: 404,
+      });
+    }
+
+    return decision.proposals.map(toDecisionProposal);
+  }
+
+  /** 在允许编辑的决策中创建开放提案，并原子写入提案创建事件。 */
+  async createProposal(
+    authorization: AuthorizationContext,
+    decisionId: number,
+    dto: CreateDecisionProposalDto,
+  ): Promise<DecisionProposal> {
+    const scopeWhere = await this.authorizationService.buildDecisionWhere(
+      authorization,
+      'decision:update',
+    );
+    const decision = await this.prisma.decision.findFirst({
+      where: {
+        AND: [{ id: decisionId }, scopeWhere],
+      },
+      select: {
+        id: true,
+        status: true,
+        participants: {
+          where: { userId: authorization.userId },
+          select: { role: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!decision) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.DECISION_NOT_FOUND,
+        message: '决策不存在或当前账号无权访问',
+        status: 404,
+      });
+    }
+
+    const canManageAll = this.authorizationService
+      .getScopes(authorization, 'decision:update')
+      .has(DataScope.ALL);
+    const participantRole = decision.participants[0]?.role;
+
+    if (
+      !canManageAll &&
+      (!participantRole || !proposalCreatorRoles.has(participantRole))
+    ) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
+        message: '只有决策负责人或编辑者可以创建提案',
+        status: 403,
+      });
+    }
+
+    if (!proposalMutableStatuses.has(decision.status)) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.DECISION_PROPOSAL_CHANGE_NOT_ALLOWED,
+        message: '当前决策状态不允许创建提案',
+        status: 409,
+      });
+    }
+
+    const proposal = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.decisionProposal.create({
+        data: {
+          decisionId: decision.id,
+          creatorId: authorization.userId,
+          title: dto.title,
+          description: dto.description,
+        },
+        include: {
+          creator: {
+            select: { id: true, name: true, avatarUrl: true },
+          },
+        },
+      });
+
+      await tx.decisionEvent.create({
+        data: {
+          decisionId: decision.id,
+          actorId: authorization.userId,
+          proposalId: result.id,
+          type: DecisionEventType.PROPOSAL_CREATED,
+          title: '创建提案',
+          payload: { proposalId: result.id },
+          after: {
+            title: result.title,
+            description: result.description,
+            status: result.status,
+          },
+        },
+      });
+
+      return result;
+    });
+
+    return toDecisionProposal(proposal);
   }
 
   /** 在授权部门内创建决策，并原子写入创建人和时间线事件。 */

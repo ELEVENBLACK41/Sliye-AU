@@ -8,6 +8,9 @@ export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'RESOLVED' | 'ARCHIVED';
 /** 用户参与某个决策时承担的角色。 */
 export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER';
 
+/** 提案从开放到被接受、拒绝或取消的业务状态。 */
+export type DecisionProposalStatus = 'OPEN' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+
 /** 通过参与者新增接口可以分配的身份，负责人身份由决策负责人字段单独维护。 */
 export type AddableDecisionParticipantRole = Exclude<DecisionParticipantRole, 'OWNER'>;
 
@@ -108,6 +111,30 @@ export type DecisionParticipantCandidate = {
   department: DecisionDepartmentSummary | null;
 };
 
+/** 决策详情中展示的一条提案。 */
+export type DecisionProposal = {
+  /** 提案数据库主键。 */
+  id: number;
+  /** 提案所属决策主键。 */
+  decisionId: number;
+  /** 提案标题。 */
+  title: string;
+  /** 提案的背景、方案或补充说明。 */
+  description: string | null;
+  /** 提案当前业务状态。 */
+  status: DecisionProposalStatus;
+  /** 创建提案的用户。 */
+  creator: DecisionUserSummary;
+  /** 提案被接受的时间；尚未接受时为 `null`。 */
+  acceptedAt: string | null;
+  /** 提案结束开放状态的时间；仍开放时为 `null`。 */
+  closedAt: string | null;
+  /** 提案创建时间，使用 ISO 8601 字符串。 */
+  createdAt: string;
+  /** 提案最后更新时间，使用 ISO 8601 字符串。 */
+  updatedAt: string;
+};
+
 /** 决策事件时间线中的一条记录。 */
 export type DecisionEventTimelineItem = {
   /** 决策事件数据库主键。 */
@@ -170,6 +197,14 @@ export type AddDecisionParticipantRequestPayload = {
   role: AddableDecisionParticipantRole;
 };
 
+/** 在现有决策中创建开放提案的请求体。 */
+export type CreateDecisionProposalRequestPayload = {
+  /** 提案标题。 */
+  title: string;
+  /** 提案的背景、方案或补充说明。 */
+  description?: string;
+};
+
 /** 决策列表接口返回的业务数据。 */
 export type DecisionListResponse = DecisionSummary[];
 
@@ -178,6 +213,9 @@ export type DecisionEventTimelineResponse = DecisionEventTimelineItem[];
 
 /** 可添加决策参与者候选接口返回的业务数据。 */
 export type DecisionParticipantCandidateListResponse = DecisionParticipantCandidate[];
+
+/** 决策提案列表接口返回的业务数据。 */
+export type DecisionProposalListResponse = DecisionProposal[];
 
 /** 决策列表接口支持的筛选条件。 */
 export type DecisionListQuery = {

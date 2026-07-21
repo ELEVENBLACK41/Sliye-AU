@@ -1,5 +1,5 @@
 /*
- * @Description: 决策服务的数据范围、状态流转和参与者事务单元测试。
+ * @Description: 决策服务的数据范围、状态流转、参与者和提案事务单元测试。
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { PrismaService } from '../../database/prisma.service';
@@ -8,6 +8,7 @@ import {
   DecisionEventType,
   DecisionStatus,
   ParticipantRole,
+  ProposalStatus,
   UserStatus,
 } from '../../generated/prisma';
 import type { AuthorizationService } from '../auth/services/authorization.service';
@@ -100,6 +101,25 @@ function createParticipantRecord() {
     createdAt: now,
     updatedAt: now,
     user: { id: 8, name: '成员乙', avatarUrl: null },
+  };
+}
+
+/** 创建提案接口返回的数据库提案记录。 */
+function createProposalRecord() {
+  const now = new Date('2026-07-13T00:00:00.000Z');
+
+  return {
+    id: 50,
+    decisionId: 20,
+    creatorId: 7,
+    title: '先抽离权限计算服务',
+    description: '稳定权限边界后再迁移调用方。',
+    status: ProposalStatus.OPEN,
+    acceptedAt: null,
+    closedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    creator: { id: 7, name: '成员甲', avatarUrl: null },
   };
 }
 
@@ -799,5 +819,177 @@ describe('DecisionsService', () => {
         participants: { create: { userId: 7, role: 'OWNER' } },
       },
     });
+  });
+
+  it('提案列表必须使用决策读取范围并按创建顺序返回', async () => {
+    const proposal = createProposalRecord();
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({ proposals: [proposal] }),
+      },
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.listProposals(createAuthorization(), 20),
+    ).resolves.toEqual([
+      {
+        id: 50,
+        decisionId: 20,
+        title: proposal.title,
+        description: proposal.description,
+        status: 'OPEN',
+        creator: { id: 7, name: '成员甲', avatarUrl: null },
+        acceptedAt: null,
+        closedAt: null,
+        createdAt: '2026-07-13T00:00:00.000Z',
+        updatedAt: '2026-07-13T00:00:00.000Z',
+      },
+    ]);
+    expect(authorizationService.buildDecisionWhere).toHaveBeenCalledWith(
+      createAuthorization(),
+      'decision:read',
+    );
+    expect(prisma.decision.findFirst).toHaveBeenCalledWith({
+      where: { AND: [{ id: 20 }, { id: 20 }] },
+      select: {
+        proposals: {
+          include: {
+            creator: {
+              select: { id: true, name: true, avatarUrl: true },
+            },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+  });
+
+  it('负责人创建提案时应原子写入提案和时间线事件', async () => {
+    const proposal = createProposalRecord();
+    const createProposal = jest.fn().mockResolvedValue(proposal);
+    const createEvent = jest.fn().mockResolvedValue({ id: 60 });
+    const transaction = {
+      decisionProposal: { create: createProposal },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          status: DecisionStatus.DISCUSSING,
+          participants: [{ role: ParticipantRole.OWNER }],
+        }),
+      },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.createProposal(createAuthorization(), 20, {
+        title: proposal.title,
+        description: proposal.description,
+      }),
+    ).resolves.toMatchObject({ id: 50, status: 'OPEN' });
+    expect(createProposal).toHaveBeenCalledWith({
+      data: {
+        decisionId: 20,
+        creatorId: 7,
+        title: proposal.title,
+        description: proposal.description,
+      },
+      include: {
+        creator: { select: { id: true, name: true, avatarUrl: true } },
+      },
+    });
+    expect(createEvent).toHaveBeenCalledWith({
+      data: {
+        decisionId: 20,
+        actorId: 7,
+        proposalId: 50,
+        type: 'PROPOSAL_CREATED',
+        title: '创建提案',
+        payload: { proposalId: 50 },
+        after: {
+          title: proposal.title,
+          description: proposal.description,
+          status: 'OPEN',
+        },
+      },
+    });
+  });
+
+  it('查看者不能创建提案', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          status: DecisionStatus.DISCUSSING,
+          participants: [{ role: ParticipantRole.VIEWER }],
+        }),
+      },
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.createProposal(createAuthorization(), 20, { title: '新增方案' }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
+      status: 403,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('已形成决议的决策不能继续创建提案', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          status: DecisionStatus.RESOLVED,
+          participants: [{ role: ParticipantRole.EDITOR }],
+        }),
+      },
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.createProposal(createAuthorization(), 20, { title: '新增方案' }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_PROPOSAL_CHANGE_NOT_ALLOWED,
+      status: 409,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

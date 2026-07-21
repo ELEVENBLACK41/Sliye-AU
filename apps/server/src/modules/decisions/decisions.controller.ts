@@ -16,6 +16,7 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import { AddDecisionParticipantDto } from './dto/add-decision-participant.dto';
 import { CreateDecisionDto } from './dto/create-decision.dto';
+import { CreateDecisionProposalDto } from './dto/create-decision-proposal.dto';
 import { UpdateDecisionStatusDto } from './dto/update-decision-status.dto';
 import { DecisionsService } from './decisions.service';
 
@@ -92,6 +93,33 @@ export class DecisionsController {
     @Body() body: AddDecisionParticipantDto,
   ) {
     return this.decisionsService.addParticipant(
+      authorization,
+      decisionId,
+      body,
+    );
+  }
+
+  /** 查询单个授权范围内决策的提案列表。 */
+  @Get(':decisionId/proposals')
+  @RequirePermissions('decision:read')
+  @ApiOperation({ summary: '查询决策提案列表' })
+  listProposals(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+  ) {
+    return this.decisionsService.listProposals(authorization, decisionId);
+  }
+
+  /** 在允许编辑的决策中创建开放提案。 */
+  @Post(':decisionId/proposals')
+  @RequirePermissions('decision:update')
+  @ApiOperation({ summary: '创建决策提案并写入提案事件' })
+  createProposal(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+    @Body() body: CreateDecisionProposalDto,
+  ) {
+    return this.decisionsService.createProposal(
       authorization,
       decisionId,
       body,
