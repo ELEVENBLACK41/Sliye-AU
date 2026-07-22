@@ -5,6 +5,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { DecisionsController } from './decisions.controller';
 import { DecisionsService } from './decisions.service';
+import { DecisionChatService } from './services/decision-chat.service';
 import { DecisionCoreService } from './services/decision-core.service';
 import { DecisionParticipantService } from './services/decision-participant.service';
 import { DecisionProposalService } from './services/decision-proposal.service';
@@ -16,6 +17,7 @@ import { DecisionVoteService } from './services/decision-vote.service';
   controllers: [DecisionsController],
   providers: [
     DecisionsService,
+    DecisionChatService,
     DecisionCoreService,
     DecisionParticipantService,
     DecisionProposalService,
