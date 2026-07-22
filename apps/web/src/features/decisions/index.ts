@@ -9,5 +9,6 @@ export {
   getDecisionEvents,
   getDecisionProposals,
   getDecisionSummaries,
+  getDecisionVoteRounds,
   updateDecisionStatus,
 } from './services/decisions-server.service';

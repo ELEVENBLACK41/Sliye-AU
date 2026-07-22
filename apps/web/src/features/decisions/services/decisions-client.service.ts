@@ -5,10 +5,14 @@ import type {
   AddDecisionParticipantRequestPayload,
   CreateDecisionProposalRequestPayload,
   CreateDecisionRequestPayload,
+  CreateDecisionVoteRoundRequestPayload,
+  DecisionBallotReceipt,
   DecisionDetail,
   DecisionParticipant,
   DecisionParticipantCandidateListResponse,
   DecisionProposal,
+  DecisionVoteRound,
+  SubmitDecisionBallotRequestPayload,
   UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
 
@@ -69,5 +73,44 @@ export function createDecisionProposal(
     method: 'POST',
     body: payload,
     errorMessage: '创建提案失败，请稍后重试',
+  });
+}
+
+/** 为当前决策中的开放提案创建并立即开启投票。 */
+export function createDecisionVoteRound(
+  decisionId: number,
+  payload: CreateDecisionVoteRoundRequestPayload,
+): Promise<DecisionVoteRound> {
+  return requestData<DecisionVoteRound, CreateDecisionVoteRoundRequestPayload>(
+    `/api/decisions/${decisionId}/vote-rounds`,
+    {
+      method: 'POST',
+      body: payload,
+      errorMessage: '创建投票失败，请稍后重试',
+    },
+  );
+}
+
+/** 为当前决策中的开放投票提交一张单选选票。 */
+export function submitDecisionBallot(
+  decisionId: number,
+  voteRoundId: number,
+  payload: SubmitDecisionBallotRequestPayload,
+): Promise<DecisionBallotReceipt> {
+  return requestData<DecisionBallotReceipt, SubmitDecisionBallotRequestPayload>(
+    `/api/decisions/${decisionId}/vote-rounds/${voteRoundId}/ballots`,
+    {
+      method: 'POST',
+      body: payload,
+      errorMessage: '提交选票失败，请稍后重试',
+    },
+  );
+}
+
+/** 关闭当前决策中的开放投票轮次并返回最终统计。 */
+export function closeDecisionVoteRound(decisionId: number, voteRoundId: number): Promise<DecisionVoteRound> {
+  return requestData<DecisionVoteRound>(`/api/decisions/${decisionId}/vote-rounds/${voteRoundId}/close`, {
+    method: 'POST',
+    errorMessage: '关闭投票失败，请稍后重试',
   });
 }

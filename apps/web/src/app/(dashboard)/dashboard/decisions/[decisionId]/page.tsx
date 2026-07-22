@@ -5,13 +5,19 @@ import { notFound } from 'next/navigation';
 import { SYSTEM_PERMISSIONS, SYSTEM_ROLES } from '@workspace/contracts/access';
 
 import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
-import type { DecisionDetail, DecisionEventTimelineItem, DecisionProposal } from '@workspace/contracts/decisions';
+import type {
+  DecisionDetail,
+  DecisionEventTimelineItem,
+  DecisionProposal,
+  DecisionVoteRound,
+} from '@workspace/contracts/decisions';
 import {
   DecisionDetailPage,
   DecisionServerError,
   getDecisionDetail,
   getDecisionEvents,
   getDecisionProposals,
+  getDecisionVoteRounds,
 } from '@/features/decisions';
 
 /** 动态决策详情路由参数。 */
@@ -33,12 +39,14 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
   let decision: DecisionDetail;
   let events: DecisionEventTimelineItem[];
   let proposals: DecisionProposal[];
+  let voteRounds: DecisionVoteRound[];
 
   try {
-    [decision, events, proposals] = await Promise.all([
+    [decision, events, proposals, voteRounds] = await Promise.all([
       getDecisionDetail(decisionId),
       getDecisionEvents(decisionId),
       getDecisionProposals(decisionId),
+      getDecisionVoteRounds(decisionId),
     ]);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
@@ -65,15 +73,24 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
     (decision.status === 'DRAFT' || decision.status === 'DISCUSSING') &&
     hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
     (hasAllScopeSystemRole || currentParticipantRole === 'OWNER' || currentParticipantRole === 'EDITOR');
+  const canManageVoteRounds =
+    decision.status === 'DISCUSSING' &&
+    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
+    (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
+  const canVote =
+    decision.status === 'DISCUSSING' && (currentParticipantRole === 'OWNER' || currentParticipantRole === 'APPROVER');
 
   return (
     <DecisionDetailPage
       decision={decision}
       events={events}
       proposals={proposals}
+      voteRounds={voteRounds}
       canStartDiscussion={canStartDiscussion}
       canManageParticipants={canManageParticipants}
       canCreateProposal={canCreateProposal}
+      canManageVoteRounds={canManageVoteRounds}
+      canVote={canVote}
     />
   );
 }

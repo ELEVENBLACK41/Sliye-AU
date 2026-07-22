@@ -3,11 +3,16 @@
  */
 import type {
   CreateDecisionProposalRequestPayload,
+  CreateDecisionVoteRoundRequestPayload,
+  DecisionBallotReceipt,
   DecisionDetail,
   DecisionEventTimelineResponse,
   DecisionProposal,
   DecisionProposalListResponse,
   DecisionSummary,
+  DecisionVoteRound,
+  DecisionVoteRoundListResponse,
+  SubmitDecisionBallotRequestPayload,
   UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
 
@@ -50,6 +55,59 @@ export function requestDecisionProposalsFromNest(
 ): Promise<NestResponse<DecisionProposalListResponse>> {
   return requestNest<DecisionProposalListResponse>(`/decisions/${decisionId}/proposals`, {
     method: 'GET',
+    headers: createAuthHeaders(accessToken),
+  });
+}
+
+/** 按资源 ID 查询授权范围内的决策投票轮次。 */
+export function requestDecisionVoteRoundsFromNest(
+  accessToken: string,
+  decisionId: number,
+): Promise<NestResponse<DecisionVoteRoundListResponse>> {
+  return requestNest<DecisionVoteRoundListResponse>(`/decisions/${decisionId}/vote-rounds`, {
+    method: 'GET',
+    headers: createAuthHeaders(accessToken),
+  });
+}
+
+/** 为指定决策中的开放提案创建并开启投票。 */
+export function requestDecisionVoteRoundCreateFromNest(
+  accessToken: string,
+  decisionId: number,
+  payload: CreateDecisionVoteRoundRequestPayload,
+): Promise<NestResponse<DecisionVoteRound>> {
+  return requestNest<DecisionVoteRound, CreateDecisionVoteRoundRequestPayload>(`/decisions/${decisionId}/vote-rounds`, {
+    method: 'POST',
+    headers: createAuthHeaders(accessToken),
+    body: payload,
+  });
+}
+
+/** 向指定决策投票轮次提交当前参与者的单选选票。 */
+export function requestDecisionBallotSubmitFromNest(
+  accessToken: string,
+  decisionId: number,
+  voteRoundId: number,
+  payload: SubmitDecisionBallotRequestPayload,
+): Promise<NestResponse<DecisionBallotReceipt>> {
+  return requestNest<DecisionBallotReceipt, SubmitDecisionBallotRequestPayload>(
+    `/decisions/${decisionId}/vote-rounds/${voteRoundId}/ballots`,
+    {
+      method: 'POST',
+      headers: createAuthHeaders(accessToken),
+      body: payload,
+    },
+  );
+}
+
+/** 关闭指定决策中的开放投票轮次并返回最终统计。 */
+export function requestDecisionVoteRoundCloseFromNest(
+  accessToken: string,
+  decisionId: number,
+  voteRoundId: number,
+): Promise<NestResponse<DecisionVoteRound>> {
+  return requestNest<DecisionVoteRound>(`/decisions/${decisionId}/vote-rounds/${voteRoundId}/close`, {
+    method: 'POST',
     headers: createAuthHeaders(accessToken),
   });
 }

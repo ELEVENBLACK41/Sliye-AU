@@ -4,12 +4,18 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Building2, UserRound } from 'lucide-react';
-import type { DecisionDetail, DecisionEventTimelineItem, DecisionProposal } from '@workspace/contracts/decisions';
+import type {
+  DecisionDetail,
+  DecisionEventTimelineItem,
+  DecisionProposal,
+  DecisionVoteRound,
+} from '@workspace/contracts/decisions';
 
 import { DecisionEventTimeline } from './decision-event-timeline';
 import { DecisionParticipantActions } from './decision-participant-actions';
 import { DecisionProposalSection } from './decision-proposal-section';
 import { DecisionStatusActions } from './decision-status-actions';
+import { DecisionVoteSection } from './decision-vote-section';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -22,12 +28,18 @@ type DecisionDetailPageProps = {
   events: DecisionEventTimelineItem[];
   /** 已经过权限与数据范围校验的决策提案列表。 */
   proposals: DecisionProposal[];
+  /** 已经过权限与数据范围校验的决策投票轮次。 */
+  voteRounds: DecisionVoteRound[];
   /** 当前用户是否具备开始讨论的展示条件；最终权限仍由 NestJS 校验。 */
   canStartDiscussion: boolean;
   /** 当前用户是否具备新增参与者的展示条件；最终权限仍由 NestJS 校验。 */
   canManageParticipants: boolean;
   /** 当前用户是否具备创建提案的展示条件；最终权限仍由 NestJS 校验。 */
   canCreateProposal: boolean;
+  /** 当前用户是否具备创建和关闭投票轮次的展示条件；最终权限仍由 NestJS 校验。 */
+  canManageVoteRounds: boolean;
+  /** 当前用户是否具备提交选票的参与身份；最终资格仍由 NestJS 校验。 */
+  canVote: boolean;
 };
 
 /** 参与者身份对应的中文文案。 */
@@ -43,9 +55,12 @@ export function DecisionDetailPage({
   decision,
   events,
   proposals,
+  voteRounds,
   canStartDiscussion,
   canManageParticipants,
   canCreateProposal,
+  canManageVoteRounds,
+  canVote,
 }: DecisionDetailPageProps) {
   return (
     <main className="flex flex-col gap-4">
@@ -112,6 +127,14 @@ export function DecisionDetailPage({
       </Card>
 
       <DecisionProposalSection decisionId={decision.id} proposals={proposals} canCreateProposal={canCreateProposal} />
+
+      <DecisionVoteSection
+        decisionId={decision.id}
+        proposals={proposals}
+        voteRounds={voteRounds}
+        canManageVoteRounds={canManageVoteRounds}
+        canVote={canVote}
+      />
 
       <DecisionEventTimeline events={events} />
     </main>

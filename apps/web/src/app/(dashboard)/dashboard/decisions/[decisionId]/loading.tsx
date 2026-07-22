@@ -1,5 +1,5 @@
 /**
- * 本文件为决策详情和只读事件时间线提供路由级加载骨架。
+ * 本文件为决策详情、提案、投票和事件时间线提供路由级加载骨架。
  */
 import { Card, CardContent, CardHeader } from '@workspace/ui/components/card';
 import { Skeleton } from '@workspace/ui/components/skeleton';
@@ -21,7 +21,7 @@ export default function DecisionDetailLoading() {
           ))}
         </CardContent>
       </Card>
-      {[0, 1].map((item) => (
+      {[0, 1, 2, 3].map((item) => (
         <Card key={item} className="rounded-md shadow-none">
           <CardHeader>
             <Skeleton className="h-5 w-32" />

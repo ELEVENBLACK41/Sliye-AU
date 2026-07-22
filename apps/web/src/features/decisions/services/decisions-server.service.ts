@@ -9,6 +9,7 @@ import type {
   DecisionEventTimelineResponse,
   DecisionProposalListResponse,
   DecisionSummary,
+  DecisionVoteRoundListResponse,
   UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
 
@@ -19,6 +20,7 @@ import {
   requestDecisionEventsFromNest,
   requestDecisionProposalsFromNest,
   requestDecisionStatusUpdateFromNest,
+  requestDecisionVoteRoundsFromNest,
   requestDecisionsFromNest,
 } from './decisions-nest-client';
 
@@ -67,6 +69,13 @@ export const getDecisionProposals = cache(async (decisionId: number): Promise<De
   const accessToken = await getAccessToken();
 
   return unwrapResponse(await requestDecisionProposalsFromNest(accessToken, decisionId));
+});
+
+/** 按资源 ID 读取决策投票轮次；开放轮次的实时票数由 NestJS 隐藏。 */
+export const getDecisionVoteRounds = cache(async (decisionId: number): Promise<DecisionVoteRoundListResponse> => {
+  const accessToken = await getAccessToken();
+
+  return unwrapResponse(await requestDecisionVoteRoundsFromNest(accessToken, decisionId));
 });
 
 /** 在 Next.js 服务端更新决策状态；写请求不使用 React cache。 */
