@@ -1,5 +1,5 @@
 /*
- * @Description: 决策服务的数据范围、状态流转、参与者、提案和投票闭环事务单元测试。
+ * @Description: 决策服务的数据范围、状态流转、参与者、提案、投票和正式决议闭环事务单元测试。
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { PrismaService } from '../../database/prisma.service';
@@ -9,6 +9,8 @@ import {
   DecisionStatus,
   ParticipantRole,
   ProposalStatus,
+  ResolutionKind,
+  ResolutionStatus,
   UserStatus,
   VoteMethod,
   VoteRoundStatus,
@@ -186,6 +188,29 @@ function createVoteRoundRecord(status: VoteRoundStatus = VoteRoundStatus.OPEN) {
     ],
     ballots: [] as Array<{ id: number }>,
     _count: { ballots: isClosed ? 3 : 0 },
+  };
+}
+
+/** 创建正式决议查询和收口事务测试使用的数据库记录。 */
+function createResolutionRecord() {
+  const now = new Date('2026-07-15T00:00:00.000Z');
+
+  return {
+    id: 90,
+    decisionId: 20,
+    sourceProposalId: 50,
+    sourceVoteRoundId: 70,
+    meetingId: null,
+    decidedById: 7,
+    supersedesId: null,
+    title: '正式采用权限服务拆分方案',
+    content: '先抽离权限计算服务，再逐步迁移现有调用方。',
+    kind: ResolutionKind.FINAL,
+    status: ResolutionStatus.ACTIVE,
+    decidedAt: now,
+    createdAt: now,
+    updatedAt: now,
+    decidedBy: { id: 7, name: '成员甲', avatarUrl: null },
   };
 }
 
@@ -601,6 +626,7 @@ describe('DecisionsService', () => {
     const findUnique = jest.fn().mockResolvedValue(participant);
     const createEvent = jest.fn().mockResolvedValue({ id: 42 });
     const transaction = {
+      decision: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       decisionParticipant: { createMany, findUnique },
       decisionEvent: { create: createEvent },
     };
@@ -799,6 +825,7 @@ describe('DecisionsService', () => {
   it('重复参与者应返回稳定冲突且不写入事件', async () => {
     const createEvent = jest.fn();
     const transaction = {
+      decision: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       decisionParticipant: {
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
         findUnique: jest.fn(),
@@ -942,6 +969,7 @@ describe('DecisionsService', () => {
     const createProposal = jest.fn().mockResolvedValue(proposal);
     const createEvent = jest.fn().mockResolvedValue({ id: 60 });
     const transaction = {
+      decision: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       decisionProposal: { create: createProposal },
       decisionEvent: { create: createEvent },
     };
@@ -1106,6 +1134,7 @@ describe('DecisionsService', () => {
       return Promise.resolve({ id: 90 });
     });
     const transaction = {
+      decision: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       decisionVoteRound: { create: createRound },
       decisionEvent: { create: createEvent },
     };
@@ -1353,5 +1382,310 @@ describe('DecisionsService', () => {
         },
       },
     });
+  });
+
+  it('正式决议列表应使用读取范围并返回确认人和来源信息', async () => {
+    const resolution = createResolutionRecord();
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({ resolutions: [resolution] }),
+      },
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.listResolutions(createAuthorization(), 20),
+    ).resolves.toEqual([
+      {
+        id: 90,
+        decisionId: 20,
+        sourceProposalId: 50,
+        sourceVoteRoundId: 70,
+        title: resolution.title,
+        content: resolution.content,
+        kind: 'FINAL',
+        status: 'ACTIVE',
+        decidedBy: { id: 7, name: '成员甲', avatarUrl: null },
+        decidedAt: '2026-07-15T00:00:00.000Z',
+        createdAt: '2026-07-15T00:00:00.000Z',
+        updatedAt: '2026-07-15T00:00:00.000Z',
+      },
+    ]);
+    expect(authorizationService.buildDecisionWhere).toHaveBeenCalledWith(
+      createAuthorization(),
+      'decision:read',
+    );
+  });
+
+  it('负责人拒绝开放提案时应同步取消该提案仍开放的投票', async () => {
+    const closedProposal = {
+      ...createProposalRecord(),
+      status: ProposalStatus.REJECTED,
+      closedAt: new Date('2026-07-15T00:00:00.000Z'),
+    };
+    const createEvent = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ id: 93 });
+    });
+    const cancelVoteRounds = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ count: 1 });
+    });
+    const transaction = {
+      decision: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      decisionVoteRound: {
+        findMany: jest.fn().mockResolvedValue([{ id: 70 }]),
+        updateMany: cancelVoteRounds,
+      },
+      decisionProposal: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue(closedProposal),
+      },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+          proposals: [{ id: 50, status: ProposalStatus.OPEN }],
+        }),
+      },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.closeProposal(createAuthorization(), 20, 50, {
+        status: 'REJECTED',
+      }),
+    ).resolves.toMatchObject({ id: 50, status: 'REJECTED' });
+    const cancelledVoteInput = transaction.decisionVoteRound.updateMany.mock
+      .calls[0]?.[0] as {
+      data: { closedAt: unknown };
+    };
+    expect(cancelledVoteInput).toMatchObject({
+      where: { id: 70, status: VoteRoundStatus.OPEN },
+      data: {
+        status: VoteRoundStatus.CANCELLED,
+      },
+    });
+    expect(cancelledVoteInput.data.closedAt).toBeInstanceOf(Date);
+    expect(createEvent).toHaveBeenCalledTimes(2);
+    expect(createEvent.mock.calls[1]?.[0]).toMatchObject({
+      data: {
+        proposalId: 50,
+        voteRoundId: 70,
+        type: DecisionEventType.VOTE_ROUND_CLOSED,
+        after: { status: VoteRoundStatus.CANCELLED },
+      },
+    });
+  });
+
+  it('负责人形成正式决议时应原子采纳来源提案并收口其他开放项', async () => {
+    const resolution = createResolutionRecord();
+    const createEvent = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ id: 94 });
+    });
+    const resolveDecision = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ count: 1 });
+    });
+    const cancelOtherVoteRounds = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ count: 1 });
+    });
+    const transaction = {
+      decision: { updateMany: resolveDecision },
+      decisionProposal: {
+        findMany: jest.fn().mockResolvedValue([{ id: 51 }]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      decisionVoteRound: {
+        findMany: jest.fn().mockResolvedValue([{ id: 71 }]),
+        updateMany: cancelOtherVoteRounds,
+      },
+      decisionResolution: { create: jest.fn().mockResolvedValue(resolution) },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+          proposals: [{ id: 50, status: ProposalStatus.OPEN }],
+        }),
+      },
+      decisionVoteRound: {
+        findFirst: jest.fn().mockResolvedValue({ id: 70 }),
+      },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.createResolution(createAuthorization(), 20, {
+        sourceProposalId: 50,
+        sourceVoteRoundId: 70,
+        title: resolution.title,
+        content: resolution.content,
+      }),
+    ).resolves.toMatchObject({
+      id: 90,
+      sourceProposalId: 50,
+      sourceVoteRoundId: 70,
+      kind: 'FINAL',
+      status: 'ACTIVE',
+    });
+    const resolvedDecisionInput = transaction.decision.updateMany.mock
+      .calls[0]?.[0] as {
+      data: { decidedAt: unknown };
+    };
+    expect(resolvedDecisionInput).toMatchObject({
+      where: { id: 20, status: DecisionStatus.DISCUSSING },
+      data: {
+        status: DecisionStatus.RESOLVED,
+      },
+    });
+    expect(resolvedDecisionInput.data.decidedAt).toBeInstanceOf(Date);
+    expect(transaction.decisionProposal.updateMany).toHaveBeenCalledTimes(2);
+    const cancelledRoundInput = transaction.decisionVoteRound.updateMany.mock
+      .calls[0]?.[0] as {
+      data: { closedAt: unknown };
+    };
+    expect(cancelledRoundInput).toMatchObject({
+      where: { id: 71, status: VoteRoundStatus.OPEN },
+      data: {
+        status: VoteRoundStatus.CANCELLED,
+      },
+    });
+    expect(cancelledRoundInput.data.closedAt).toBeInstanceOf(Date);
+    expect(createEvent).toHaveBeenCalledTimes(5);
+    expect(createEvent.mock.calls[3]?.[0]).toMatchObject({
+      data: {
+        proposalId: 50,
+        voteRoundId: 70,
+        resolutionId: 90,
+        type: DecisionEventType.RESOLUTION_CREATED,
+      },
+    });
+    expect(createEvent.mock.calls[4]?.[0]).toMatchObject({
+      data: {
+        resolutionId: 90,
+        type: DecisionEventType.STATUS_CHANGED,
+        after: { status: DecisionStatus.RESOLVED },
+      },
+    });
+  });
+
+  it('来源投票未关闭或未关联来源提案时不得创建正式决议', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+          proposals: [{ id: 50, status: ProposalStatus.OPEN }],
+        }),
+      },
+      decisionVoteRound: { findFirst: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.createResolution(createAuthorization(), 20, {
+        sourceProposalId: 50,
+        sourceVoteRoundId: 70,
+        title: '正式结论',
+        content: '采用当前提案。',
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_RESOLUTION_SOURCE_INVALID,
+      status: 400,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('并发请求抢先收口决策时不得继续创建正式决议和事件', async () => {
+    const createEvent = jest.fn();
+    const transaction = {
+      decision: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      decisionProposal: { findMany: jest.fn(), updateMany: jest.fn() },
+      decisionVoteRound: { findMany: jest.fn(), updateMany: jest.fn() },
+      decisionResolution: { create: jest.fn() },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+          proposals: [{ id: 50, status: ProposalStatus.OPEN }],
+        }),
+      },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = new DecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.createResolution(createAuthorization(), 20, {
+        sourceProposalId: 50,
+        title: '正式结论',
+        content: '采用当前提案。',
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_RESOLUTION_CHANGE_NOT_ALLOWED,
+      status: 409,
+    });
+    expect(transaction.decisionResolution.create).not.toHaveBeenCalled();
+    expect(createEvent).not.toHaveBeenCalled();
   });
 });

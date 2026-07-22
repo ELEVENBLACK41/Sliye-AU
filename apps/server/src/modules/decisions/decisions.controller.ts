@@ -17,6 +17,8 @@ import type { AuthorizationContext } from '../auth/types/auth.types';
 import { AddDecisionParticipantDto } from './dto/add-decision-participant.dto';
 import { CreateDecisionDto } from './dto/create-decision.dto';
 import { CreateDecisionProposalDto } from './dto/create-decision-proposal.dto';
+import { CloseDecisionProposalDto } from './dto/close-decision-proposal.dto';
+import { CreateDecisionResolutionDto } from './dto/create-decision-resolution.dto';
 import { CreateDecisionVoteRoundDto } from './dto/create-decision-vote-round.dto';
 import { SubmitDecisionBallotDto } from './dto/submit-decision-ballot.dto';
 import { UpdateDecisionStatusDto } from './dto/update-decision-status.dto';
@@ -128,6 +130,24 @@ export class DecisionsController {
     );
   }
 
+  /** 由负责人拒绝或取消开放提案，并终止该提案仍开放的投票。 */
+  @Patch(':decisionId/proposals/:proposalId/status')
+  @RequirePermissions('decision:update')
+  @ApiOperation({ summary: '拒绝或取消开放提案' })
+  closeProposal(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+    @Param('proposalId', ParseIntPipe) proposalId: number,
+    @Body() body: CloseDecisionProposalDto,
+  ) {
+    return this.decisionsService.closeProposal(
+      authorization,
+      decisionId,
+      proposalId,
+      body,
+    );
+  }
+
   /** 查询单个授权范围内决策的投票轮次。 */
   @Get(':decisionId/vote-rounds')
   @RequirePermissions('decision:read')
@@ -186,6 +206,33 @@ export class DecisionsController {
       authorization,
       decisionId,
       voteRoundId,
+    );
+  }
+
+  /** 查询单个授权范围内决策的正式决议列表。 */
+  @Get(':decisionId/resolutions')
+  @RequirePermissions('decision:read')
+  @ApiOperation({ summary: '查询决策正式决议列表' })
+  listResolutions(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+  ) {
+    return this.decisionsService.listResolutions(authorization, decisionId);
+  }
+
+  /** 由负责人采纳开放提案、创建最终决议并收口整个决策。 */
+  @Post(':decisionId/resolutions')
+  @RequirePermissions('decision:update')
+  @ApiOperation({ summary: '采纳提案并创建最终决议' })
+  createResolution(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+    @Body() body: CreateDecisionResolutionDto,
+  ) {
+    return this.decisionsService.createResolution(
+      authorization,
+      decisionId,
+      body,
     );
   }
 

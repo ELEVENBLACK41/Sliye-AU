@@ -20,6 +20,12 @@ export type DecisionVoteMethod = 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'APPROVAL
 /** 关闭投票后根据法定人数及赞成、反对票生成的统计结论。 */
 export type DecisionVoteOutcome = 'APPROVED' | 'REJECTED' | 'TIED' | 'QUORUM_NOT_MET';
 
+/** 正式决议在决策过程中的用途类型。 */
+export type DecisionResolutionKind = 'INTERIM' | 'FINAL' | 'SUPPLEMENT';
+
+/** 正式决议创建后的有效状态。 */
+export type DecisionResolutionStatus = 'ACTIVE' | 'SUPERSEDED' | 'REVOKED';
+
 /** 通过参与者新增接口可以分配的身份，负责人身份由决策负责人字段单独维护。 */
 export type AddableDecisionParticipantRole = Exclude<DecisionParticipantRole, 'OWNER'>;
 
@@ -226,6 +232,34 @@ export type DecisionBallotReceipt = {
   submittedAt: string;
 };
 
+/** 决策已经正式确认的一条结论。 */
+export type DecisionResolution = {
+  /** 正式决议数据库主键。 */
+  id: number;
+  /** 决议所属决策主键。 */
+  decisionId: number;
+  /** 被正式采纳的来源提案主键。 */
+  sourceProposalId: number | null;
+  /** 作为决议依据的已关闭投票轮次主键。 */
+  sourceVoteRoundId: number | null;
+  /** 决议标题。 */
+  title: string;
+  /** 决议正式正文和确认理由。 */
+  content: string;
+  /** 决议用途类型。 */
+  kind: DecisionResolutionKind;
+  /** 决议当前有效状态。 */
+  status: DecisionResolutionStatus;
+  /** 正式确认该决议的用户。 */
+  decidedBy: DecisionUserSummary;
+  /** 决议正式确认时间。 */
+  decidedAt: string;
+  /** 决议记录创建时间。 */
+  createdAt: string;
+  /** 决议记录最后更新时间。 */
+  updatedAt: string;
+};
+
 /** 决策事件时间线中的一条记录。 */
 export type DecisionEventTimelineItem = {
   /** 决策事件数据库主键。 */
@@ -242,6 +276,8 @@ export type DecisionEventTimelineItem = {
   proposalId: number | null;
   /** 关联投票轮次主键；事件不属于投票时为 `null`。 */
   voteRoundId: number | null;
+  /** 关联正式决议主键；事件不属于正式决议时为 `null`。 */
+  resolutionId: number | null;
   /** 关联任务主键；事件不属于任务时为 `null`。 */
   taskId: number | null;
   /** 事件携带的业务上下文；没有附加信息时为 `null`。 */
@@ -320,6 +356,24 @@ export type SubmitDecisionBallotRequestPayload = {
   reason?: string;
 };
 
+/** 负责人拒绝或取消开放提案的请求体。 */
+export type CloseDecisionProposalRequestPayload = {
+  /** 允许从开放状态进入的非采纳终态；采纳必须通过创建正式决议完成。 */
+  status: Extract<DecisionProposalStatus, 'REJECTED' | 'CANCELLED'>;
+};
+
+/** 采纳开放提案并形成最终决议的请求体。 */
+export type CreateDecisionResolutionRequestPayload = {
+  /** 被正式采纳的开放提案主键。 */
+  sourceProposalId: number;
+  /** 可选的已关闭来源投票轮次主键。 */
+  sourceVoteRoundId?: number;
+  /** 正式决议标题。 */
+  title: string;
+  /** 正式决议正文和确认理由。 */
+  content: string;
+};
+
 /** 决策列表接口返回的业务数据。 */
 export type DecisionListResponse = DecisionSummary[];
 
@@ -334,6 +388,9 @@ export type DecisionProposalListResponse = DecisionProposal[];
 
 /** 决策投票轮次列表接口返回的业务数据。 */
 export type DecisionVoteRoundListResponse = DecisionVoteRound[];
+
+/** 决策正式决议列表接口返回的业务数据。 */
+export type DecisionResolutionListResponse = DecisionResolution[];
 
 /** 决策列表接口支持的筛选条件。 */
 export type DecisionListQuery = {

@@ -7,6 +7,7 @@ import type {
   DecisionParticipant as DecisionParticipantContract,
   DecisionParticipantCandidate,
   DecisionProposal as DecisionProposalContract,
+  DecisionResolution as DecisionResolutionContract,
   DecisionSummary,
   DecisionVoteOutcome,
   DecisionVoteRound as DecisionVoteRoundContract,
@@ -17,6 +18,7 @@ import type {
   DecisionEvent,
   DecisionParticipant,
   DecisionProposal,
+  DecisionResolution,
   DecisionVoteOption,
   DecisionVoteRound,
   Department,
@@ -83,6 +85,12 @@ export type DecisionVoteRoundRecord = DecisionVoteRound & {
   ballots: Array<Pick<DecisionBallot, 'id'>>;
   /** 本轮全部选票聚合数。 */
   _count: { ballots: number };
+};
+
+/** 正式决议映射需要的确认人摘要。 */
+export type DecisionResolutionRecord = DecisionResolution & {
+  /** 正式确认决议的用户摘要。 */
+  decidedBy: Pick<User, 'id' | 'name' | 'avatarUrl'>;
 };
 
 /** 将数据库决策映射为列表摘要。 */
@@ -216,6 +224,26 @@ export function toDecisionVoteRound(
   };
 }
 
+/** 将数据库正式决议映射为共享响应契约。 */
+export function toDecisionResolution(
+  resolution: DecisionResolutionRecord,
+): DecisionResolutionContract {
+  return {
+    id: resolution.id,
+    decisionId: resolution.decisionId,
+    sourceProposalId: resolution.sourceProposalId,
+    sourceVoteRoundId: resolution.sourceVoteRoundId,
+    title: resolution.title,
+    content: resolution.content,
+    kind: resolution.kind,
+    status: resolution.status,
+    decidedBy: toDecisionUser(resolution.decidedBy),
+    decidedAt: resolution.decidedAt.toISOString(),
+    createdAt: resolution.createdAt.toISOString(),
+    updatedAt: resolution.updatedAt.toISOString(),
+  };
+}
+
 /** 将数据库决策事件映射为跨端时间线契约。 */
 export function toDecisionEvent(
   event: DecisionEventRecord,
@@ -228,6 +256,7 @@ export function toDecisionEvent(
     meetingId: event.meetingId,
     proposalId: event.proposalId,
     voteRoundId: event.voteRoundId,
+    resolutionId: event.resolutionId,
     taskId: event.taskId,
     payload: toRecord(event.payload),
     before: toRecord(event.before),
