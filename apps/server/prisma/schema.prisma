@@ -679,11 +679,13 @@ model DiscussionSpace {
 model DiscussionMessage {
   id Int @id @default(autoincrement())
 
-  spaceId    Int
-  authorId   Int?
-  meetingId  Int?
-  replyToId  Int?
-  pinnedById Int?
+  spaceId  Int
+  authorId Int?
+  /// 浏览器生成的消息幂等标识；系统消息不经过浏览器发送时允许为空。
+  clientMessageId String? @db.Uuid
+  meetingId       Int?
+  replyToId       Int?
+  pinnedById      Int?
 
   type    DiscussionMessageType @default(TEXT)
   content String
@@ -704,11 +706,13 @@ model DiscussionMessage {
   events DecisionEvent[]
 
   @@index([spaceId, createdAt])
+  @@index([spaceId, id])
   @@index([authorId])
   @@index([meetingId])
   @@index([replyToId])
   @@index([pinnedById])
   @@index([type])
+  @@unique([authorId, clientMessageId])
 }
 
 model Decision {
