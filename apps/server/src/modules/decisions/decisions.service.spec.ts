@@ -18,6 +18,25 @@ import {
 import type { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import { DecisionsService } from './decisions.service';
+import { DecisionCoreService } from './services/decision-core.service';
+import { DecisionParticipantService } from './services/decision-participant.service';
+import { DecisionProposalService } from './services/decision-proposal.service';
+import { DecisionResolutionService } from './services/decision-resolution.service';
+import { DecisionVoteService } from './services/decision-vote.service';
+
+/** 使用同一组 Prisma 与授权替身组装决策服务及其职责服务。 */
+function createDecisionsService(
+  prisma: PrismaService,
+  authorizationService: AuthorizationService,
+): DecisionsService {
+  return new DecisionsService(
+    new DecisionCoreService(prisma, authorizationService),
+    new DecisionParticipantService(prisma, authorizationService),
+    new DecisionProposalService(prisma, authorizationService),
+    new DecisionResolutionService(prisma, authorizationService),
+    new DecisionVoteService(prisma, authorizationService),
+  );
+}
 
 /** 创建决策测试使用的授权上下文。 */
 function createAuthorization(): AuthorizationContext {
@@ -223,7 +242,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue(scopeWhere),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -241,7 +260,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: -1 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -263,7 +282,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue(scopeWhere),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -317,7 +336,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -334,7 +353,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: -1 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -380,7 +399,7 @@ describe('DecisionsService', () => {
       }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -425,7 +444,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -456,7 +475,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -498,7 +517,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -537,7 +556,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -577,7 +596,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: -1 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -606,7 +625,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -648,7 +667,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -703,7 +722,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: -1 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -737,7 +756,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -771,7 +790,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -805,7 +824,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -850,7 +869,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -887,7 +906,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       assertDepartmentInScope: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -924,7 +943,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -990,7 +1009,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1044,7 +1063,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1073,7 +1092,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1100,7 +1119,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1157,7 +1176,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1220,7 +1239,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1278,7 +1297,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1340,7 +1359,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1394,7 +1413,7 @@ describe('DecisionsService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1467,7 +1486,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1547,7 +1566,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1624,7 +1643,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
@@ -1670,7 +1689,7 @@ describe('DecisionsService', () => {
       buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
       getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
     };
-    const service = new DecisionsService(
+    const service = createDecisionsService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
     );
