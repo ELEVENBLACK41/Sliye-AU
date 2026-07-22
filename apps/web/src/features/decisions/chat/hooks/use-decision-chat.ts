@@ -1,5 +1,5 @@
 /**
- * 本文件集中管理决策群聊的历史分页、一级回复、乐观发送和失败重试状态。
+ * 本文件集中管理决策群聊的历史分页、乐观发送、实时合并与断线补偿状态。
  */
 'use client';
 
@@ -12,6 +12,7 @@ import type {
 } from '@workspace/contracts/decisions';
 
 import { createDecisionChatMessage, getDecisionChatMessages } from '../services/decision-chat-client.service';
+import { useDecisionChatRealtime } from './use-decision-chat-realtime';
 
 /** 页面展示的一条消息当前所处的本地投递状态。 */
 export type DecisionChatDeliveryStatus = 'sent' | 'sending' | 'failed';
@@ -36,7 +37,7 @@ type UseDecisionChatOptions = {
   canSend: boolean;
 };
 
-/** 管理纯 HTTP 群聊交互并向展示组件提供稳定操作入口。 */
+/** 管理 HTTP 真源和 Socket 实时推送协同的群聊状态。 */
 export function useDecisionChat({ decisionId, initialPage, currentUser, canSend }: UseDecisionChatOptions) {
   const [messages, setMessages] = useState<DecisionChatViewMessage[]>(() => initialPage.items.map(toSentViewMessage));
   const [historyCursor, setHistoryCursor] = useState(initialPage.nextCursor);
@@ -44,7 +45,10 @@ export function useDecisionChat({ decisionId, initialPage, currentUser, canSend 
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<DecisionChatMessage | null>(null);
+  const [lastRealtimeMessageId, setLastRealtimeMessageId] = useState<number | null>(null);
   const isLoadingHistoryRef = useRef(false);
+  const isRecoveringMessagesRef = useRef(false);
+  const maxPersistedMessageIdRef = useRef(getMaxPersistedMessageId(initialPage.items));
   const nextOptimisticIdRef = useRef(-1);
 
   /** 向前加载一页更早消息，并返回本次是否实际追加了数据。 */
@@ -64,6 +68,7 @@ export function useDecisionChat({ decisionId, initialPage, currentUser, canSend 
         limit: 30,
       });
 
+      recordPersistedMessages(page.items);
       setMessages((current) => mergeHistoryMessages(current, page.items));
       setHistoryCursor(page.nextCursor);
       setHasMoreHistory(page.hasMore);
@@ -146,6 +151,7 @@ export function useDecisionChat({ decisionId, initialPage, currentUser, canSend 
     try {
       const savedMessage = await createDecisionChatMessage(decisionId, payload);
 
+      recordPersistedMessages([savedMessage]);
       setMessages((current) => replaceOptimisticMessage(current, savedMessage));
     } catch (error) {
       setMessages((current) =>
@@ -154,18 +160,82 @@ export function useDecisionChat({ decisionId, initialPage, currentUser, canSend 
     }
   }
 
+  /** 合并 Socket 推送的持久化消息，并只对真正的新消息更新实时提示游标。 */
+  function mergeRealtimeMessage(message: DecisionChatMessage): void {
+    const isNewMessage = message.id > maxPersistedMessageIdRef.current;
+
+    recordPersistedMessages([message]);
+    setMessages((current) => replaceOptimisticMessage(current, message));
+
+    if (isNewMessage) {
+      setLastRealtimeMessageId(message.id);
+    }
+  }
+
+  /** 每次 Socket 连接成功后从当前最大消息 ID 开始循环补齐断线期间的数据。 */
+  async function recoverMissedMessages(): Promise<void> {
+    if (isRecoveringMessagesRef.current) {
+      return;
+    }
+
+    isRecoveringMessagesRef.current = true;
+
+    try {
+      let cursor = maxPersistedMessageIdRef.current || undefined;
+
+      while (true) {
+        const page = await getDecisionChatMessages(decisionId, {
+          direction: 'after',
+          ...(cursor ? { cursor } : {}),
+          limit: 50,
+        });
+
+        recordPersistedMessages(page.items);
+        setMessages((current) => mergeNewMessages(current, page.items));
+
+        if (!page.hasMore || page.nextCursor === null) {
+          break;
+        }
+
+        cursor = page.nextCursor;
+      }
+    } catch (error) {
+      setHistoryError(getErrorMessage(error, '断线消息补齐失败，将在下次重连时继续补齐'));
+    } finally {
+      isRecoveringMessagesRef.current = false;
+    }
+  }
+
+  /** 记录当前浏览器已经见过的最大持久化消息 ID，作为 `after` 补偿游标。 */
+  function recordPersistedMessages(incoming: DecisionChatMessage[]): void {
+    maxPersistedMessageIdRef.current = Math.max(maxPersistedMessageIdRef.current, getMaxPersistedMessageId(incoming));
+  }
+
+  const connectionStatus = useDecisionChatRealtime({
+    decisionId,
+    onMessage: mergeRealtimeMessage,
+    onConnected: recoverMissedMessages,
+  });
+
   return {
     messages,
     hasMoreHistory,
     isLoadingHistory,
     historyError,
     replyTo,
+    connectionStatus,
+    lastRealtimeMessageId,
     loadOlderMessages,
     selectReply,
     clearReply,
     sendMessage,
     retryMessage,
   };
+}
+
+/** 读取一组服务端消息中的最大持久化主键，空数组返回零。 */
+function getMaxPersistedMessageId(messages: DecisionChatMessage[]): number {
+  return messages.reduce((maximum, message) => Math.max(maximum, message.id), 0);
 }
 
 /** 把服务端消息转换为已经成功投递的页面消息。 */
@@ -235,6 +305,14 @@ function mergeHistoryMessages(
   return [...olderMessages, ...current];
 }
 
+/** 把断线补偿得到的新消息合并到列表尾部，并按消息 ID 与幂等键统一去重。 */
+function mergeNewMessages(
+  current: DecisionChatViewMessage[],
+  incoming: DecisionChatMessage[],
+): DecisionChatViewMessage[] {
+  return incoming.reduce((messages, message) => replaceOptimisticMessage(messages, message), current);
+}
+
 /** 用数据库真消息替换对应乐观消息，同时移除可能存在的重复记录。 */
 function replaceOptimisticMessage(
   current: DecisionChatViewMessage[],
@@ -263,7 +341,15 @@ function replaceOptimisticMessage(
     result.push(toSentViewMessage(savedMessage));
   }
 
-  return result;
+  return sortViewMessages(result);
+}
+
+/** 持久化消息按数据库主键排序，本地乐观消息保持原有发送顺序并位于尾部。 */
+function sortViewMessages(messages: DecisionChatViewMessage[]): DecisionChatViewMessage[] {
+  const persistedMessages = messages.filter((message) => message.id > 0).sort((left, right) => left.id - right.id);
+  const optimisticMessages = messages.filter((message) => message.id < 1);
+
+  return [...persistedMessages, ...optimisticMessages];
 }
 
 /** 更新指定乐观消息的投递状态和可选失败原因。 */

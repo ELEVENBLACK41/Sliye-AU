@@ -6,6 +6,7 @@ import type {
   DecisionChatMessage,
   DecisionChatMessageListQuery,
   DecisionChatMessagePage,
+  DecisionChatTicket,
 } from '@workspace/contracts/decisions';
 
 import { requestData } from '@/services/request';
@@ -33,6 +34,14 @@ export function createDecisionChatMessage(
     method: 'POST',
     body: payload,
     errorMessage: '消息发送失败，请稍后重试',
+  });
+}
+
+/** 通过 BFF 获取只绑定当前决策的短期 Socket Ticket。 */
+export function getDecisionChatTicket(decisionId: number): Promise<DecisionChatTicket> {
+  return requestData<DecisionChatTicket>(`/api/decisions/${decisionId}/chat-ticket`, {
+    method: 'POST',
+    errorMessage: '实时连接凭证获取失败，请稍后重试',
   });
 }
 

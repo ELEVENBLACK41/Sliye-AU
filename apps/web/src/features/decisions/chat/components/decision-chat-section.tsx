@@ -3,14 +3,34 @@
  */
 'use client';
 
-import { useEffect, useRef, type UIEvent } from 'react';
+import { useEffect, useRef, useState, type UIEvent } from 'react';
 import { MessageCircleMore } from 'lucide-react';
 import type { DecisionChatMessagePage, DecisionUserSummary } from '@workspace/contracts/decisions';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
+import { Badge } from '@workspace/ui/components/badge';
+import { Button } from '@workspace/ui/components/button';
 import { DecisionChatComposer } from './decision-chat-composer';
 import { DecisionChatMessageList } from './decision-chat-message-list';
 import { useDecisionChat } from '../hooks/use-decision-chat';
+import type { DecisionChatConnectionStatus } from '../hooks/use-decision-chat-realtime';
+
+/** 实时连接状态对应的中文名称和徽标样式。 */
+const connectionStatusView: Record<
+  DecisionChatConnectionStatus,
+  {
+    /** 面向用户展示的连接状态。 */
+    label: string;
+    /** shadcn Badge 使用的视觉变体。 */
+    variant: 'default' | 'secondary' | 'destructive' | 'outline';
+  }
+> = {
+  unavailable: { label: '实时服务未配置', variant: 'outline' },
+  connecting: { label: '实时连接中', variant: 'secondary' },
+  connected: { label: '实时已连接', variant: 'default' },
+  reconnecting: { label: '实时重连中', variant: 'secondary' },
+  disconnected: { label: '实时暂不可用', variant: 'destructive' },
+};
 
 /** 决策群聊区域属性。 */
 type DecisionChatSectionProps = {
@@ -26,7 +46,7 @@ type DecisionChatSectionProps = {
   readOnlyReason?: string;
 };
 
-/** 渲染嵌入决策详情页的纯 HTTP 群聊区域。 */
+/** 渲染嵌入决策详情页并带实时状态的群聊区域。 */
 export function DecisionChatSection({
   decisionId,
   initialPage,
@@ -36,18 +56,23 @@ export function DecisionChatSection({
 }: DecisionChatSectionProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const hasInitialScrollRef = useRef(false);
+  const isAtBottomRef = useRef(true);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const {
     messages,
     hasMoreHistory,
     isLoadingHistory,
     historyError,
     replyTo,
+    connectionStatus,
+    lastRealtimeMessageId,
     loadOlderMessages,
     selectReply,
     clearReply,
     sendMessage,
     retryMessage,
   } = useDecisionChat({ decisionId, initialPage, currentUser, canSend });
+  const connectionView = connectionStatusView[connectionStatus];
 
   /** 首次进入滚动到底部；当前用户新建乐观消息时保持查看最新消息。 */
   useEffect(() => {
@@ -70,6 +95,22 @@ export function DecisionChatSection({
     }
   }, [currentUser.id, messages]);
 
+  /** 收到实时新消息时，位于底部则跟随滚动，否则只显示“有新消息”提示。 */
+  useEffect(() => {
+    const viewport = viewportRef.current;
+
+    if (!viewport || lastRealtimeMessageId === null) {
+      return;
+    }
+
+    if (isAtBottomRef.current) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+      return;
+    }
+
+    setHasNewMessages(true);
+  }, [lastRealtimeMessageId]);
+
   /** 在保持当前可视消息位置的前提下加载更早历史。 */
   async function loadOlderAndPreservePosition(viewport: HTMLDivElement): Promise<void> {
     const previousScrollHeight = viewport.scrollHeight;
@@ -91,11 +132,20 @@ export function DecisionChatSection({
 
   /** 滚动接近顶部时自动触发更早消息分页。 */
   function handleScroll(event: UIEvent<HTMLDivElement>): void {
-    if (event.currentTarget.scrollTop > 48) {
+    const viewport = event.currentTarget;
+    const distanceToBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+
+    isAtBottomRef.current = distanceToBottom <= 64;
+
+    if (isAtBottomRef.current) {
+      setHasNewMessages(false);
+    }
+
+    if (viewport.scrollTop > 48) {
       return;
     }
 
-    void loadOlderAndPreservePosition(event.currentTarget);
+    void loadOlderAndPreservePosition(viewport);
   }
 
   /** 处理消息列表顶部按钮触发的历史加载。 */
@@ -107,38 +157,69 @@ export function DecisionChatSection({
     }
   }
 
+  /** 点击新消息提示后滚动到底部并恢复实时跟随。 */
+  function scrollToLatestMessage(): void {
+    const viewport = viewportRef.current;
+
+    if (!viewport) {
+      return;
+    }
+
+    isAtBottomRef.current = true;
+    setHasNewMessages(false);
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+  }
+
   return (
     <Card className="overflow-hidden rounded-md py-0 shadow-none">
       <CardHeader className="border-b py-4">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
-            <MessageCircleMore className="size-4" aria-hidden />
-          </span>
-          <div>
-            <CardTitle className="text-base">决策群聊</CardTitle>
-            <CardDescription className="mt-1">普通讨论会完整保留；决策结束后群聊转为只读。</CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
+              <MessageCircleMore className="size-4" aria-hidden />
+            </span>
+            <div>
+              <CardTitle className="text-base">决策群聊</CardTitle>
+              <CardDescription className="mt-1">普通讨论会完整保留；决策结束后群聊转为只读。</CardDescription>
+            </div>
           </div>
+          <Badge variant={connectionView.variant}>{connectionView.label}</Badge>
         </div>
       </CardHeader>
 
       <CardContent className="p-0">
-        <div
-          ref={viewportRef}
-          className="h-[32rem] overflow-y-auto overscroll-contain"
-          aria-label="决策群聊消息"
-          onScroll={handleScroll}
-        >
-          <DecisionChatMessageList
-            messages={messages}
-            currentUserId={currentUser.id}
-            canSend={canSend}
-            hasMoreHistory={hasMoreHistory}
-            isLoadingHistory={isLoadingHistory}
-            historyError={historyError}
-            onLoadOlder={handleLoadOlder}
-            onReply={selectReply}
-            onRetry={retryMessage}
-          />
+        <div className="relative">
+          <div
+            ref={viewportRef}
+            className="h-[32rem] overflow-y-auto overscroll-contain"
+            aria-label="决策群聊消息"
+            onScroll={handleScroll}
+          >
+            <DecisionChatMessageList
+              messages={messages}
+              currentUserId={currentUser.id}
+              canSend={canSend}
+              hasMoreHistory={hasMoreHistory}
+              isLoadingHistory={isLoadingHistory}
+              historyError={historyError}
+              onLoadOlder={handleLoadOlder}
+              onReply={selectReply}
+              onRetry={retryMessage}
+            />
+          </div>
+
+          {hasNewMessages ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+              <Button
+                type="button"
+                size="sm"
+                className="pointer-events-auto rounded-full shadow-lg"
+                onClick={scrollToLatestMessage}
+              >
+                有新消息
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <DecisionChatComposer

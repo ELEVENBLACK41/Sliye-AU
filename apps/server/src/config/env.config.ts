@@ -18,6 +18,9 @@ export interface ServerEnvConfig {
   AUTH_EMAIL_CODE_TTL_SECONDS: number;
   AUTH_EMAIL_CODE_COOLDOWN_SECONDS: number;
   AUTH_EMAIL_CODE_MAX_ATTEMPTS: number;
+  CHAT_SOCKET_TICKET_SECRET?: string;
+  CHAT_SOCKET_TICKET_TTL_SECONDS: number;
+  WEB_ORIGINS: string[];
 }
 
 const DEFAULT_PORT = 3001;
@@ -27,6 +30,8 @@ const DEFAULT_REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DEFAULT_EMAIL_CODE_TTL_SECONDS = 10 * 60;
 const DEFAULT_EMAIL_CODE_COOLDOWN_SECONDS = 60;
 const DEFAULT_EMAIL_CODE_MAX_ATTEMPTS = 5;
+const DEFAULT_CHAT_SOCKET_TICKET_TTL_SECONDS = 5 * 60;
+const DEFAULT_WEB_ORIGINS = ['http://localhost:3000'];
 
 // 校验 ConfigModule 读取到的环境变量，并返回带默认值的强类型配置对象。
 export function validateEnvConfig(
@@ -43,6 +48,12 @@ export function validateEnvConfig(
   const emailCodeSecret = readOptionalSecret(
     config.AUTH_EMAIL_CODE_SECRET,
     'AUTH_EMAIL_CODE_SECRET',
+    nodeEnv,
+    errors,
+  );
+  const chatSocketTicketSecret = readOptionalSecret(
+    config.CHAT_SOCKET_TICKET_SECRET,
+    'CHAT_SOCKET_TICKET_SECRET',
     nodeEnv,
     errors,
   );
@@ -95,6 +106,14 @@ export function validateEnvConfig(
       DEFAULT_EMAIL_CODE_MAX_ATTEMPTS,
       errors,
     ),
+    CHAT_SOCKET_TICKET_SECRET: chatSocketTicketSecret,
+    CHAT_SOCKET_TICKET_TTL_SECONDS: readPositiveInteger(
+      config.CHAT_SOCKET_TICKET_TTL_SECONDS,
+      'CHAT_SOCKET_TICKET_TTL_SECONDS',
+      DEFAULT_CHAT_SOCKET_TICKET_TTL_SECONDS,
+      errors,
+    ),
+    WEB_ORIGINS: readWebOrigins(config.WEB_ORIGINS, errors),
   };
 
   if (errors.length > 0) {
@@ -102,6 +121,56 @@ export function validateEnvConfig(
   }
 
   return envConfig;
+}
+
+// 读取逗号分隔的 Web Origin 白名单，并标准化为不带路径的 HTTP(S) Origin。
+function readWebOrigins(value: unknown, errors: string[]): string[] {
+  if (value === undefined || value === null || value === '') {
+    return DEFAULT_WEB_ORIGINS;
+  }
+
+  if (typeof value !== 'string') {
+    errors.push('WEB_ORIGINS must be a comma-separated string');
+    return DEFAULT_WEB_ORIGINS;
+  }
+
+  const origins = value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => normalizeWebOrigin(origin, errors));
+  const validOrigins = origins.filter(
+    (origin): origin is string => origin !== null,
+  );
+
+  if (validOrigins.length === 0) {
+    errors.push('WEB_ORIGINS must contain at least one valid origin');
+    return DEFAULT_WEB_ORIGINS;
+  }
+
+  return [...new Set(validOrigins)];
+}
+
+// 校验并标准化单个浏览器 Origin，禁止通配符和附带业务路径的地址。
+function normalizeWebOrigin(value: string, errors: string[]): string | null {
+  try {
+    const url = new URL(value);
+
+    if (
+      (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+      url.origin === 'null' ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      throw new Error('Invalid web origin');
+    }
+
+    return url.origin;
+  } catch {
+    errors.push(`WEB_ORIGINS contains invalid origin: ${value}`);
+    return null;
+  }
 }
 
 // 读取必填字符串配置。

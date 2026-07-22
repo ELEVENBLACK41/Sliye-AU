@@ -16,6 +16,7 @@ import type { ValidationError } from 'class-validator';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { ConfiguredSocketIoAdapter } from './common/websocket/configured-socket-io.adapter';
 
 // 启动 Nest 应用并注册全局中间能力。
 async function bootstrap() {
@@ -24,8 +25,12 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const apiPrefix = configService.get<string>('SERVER_API_PREFIX', 'api/v1');
   const port = configService.get<number>('PORT', 3001);
+  const webOrigins = configService.get<string[]>('WEB_ORIGINS', [
+    'http://localhost:3000',
+  ]);
 
-  app.enableCors(); // 跨域
+  app.enableCors({ origin: webOrigins, credentials: true });
+  app.useWebSocketAdapter(new ConfiguredSocketIoAdapter(app, webOrigins));
   app.setGlobalPrefix(apiPrefix);
 
   // 全局异常过滤器（在拦截器之前注册，保证异常时也能统一格式）

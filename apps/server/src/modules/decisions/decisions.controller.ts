@@ -10,11 +10,15 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuthorization } from '../auth/decorators/current-authorization.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import type { AuthorizationContext } from '../auth/types/auth.types';
+import type {
+  AuthenticatedRequest,
+  AuthorizationContext,
+} from '../auth/types/auth.types';
 import { AddDecisionParticipantDto } from './dto/add-decision-participant.dto';
 import { CreateDecisionChatMessageDto } from './dto/create-decision-chat-message.dto';
 import { CreateDecisionDto } from './dto/create-decision.dto';
@@ -79,6 +83,22 @@ export class DecisionsController {
     @Body() body: CreateDecisionChatMessageDto,
   ) {
     return this.decisionChatService.create(authorization, decisionId, body);
+  }
+
+  /** 为当前登录会话签发只绑定指定决策的短期 Socket 连接凭证。 */
+  @Post(':decisionId/chat-ticket')
+  @RequirePermissions('decision:read')
+  @ApiOperation({ summary: '签发决策群聊 Socket Ticket' })
+  createChatTicket(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Req() request: AuthenticatedRequest,
+    @Param('decisionId', ParseIntPipe) decisionId: number,
+  ) {
+    return this.decisionChatService.issueTicket(
+      authorization,
+      request.auth!.sessionId,
+      decisionId,
+    );
   }
 
   /** 查询单个授权范围内决策的事件时间线。 */

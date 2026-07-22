@@ -1,12 +1,13 @@
 /**
  * 本文件负责决策群聊消息的可见范围、游标分页、幂等发送和回复目标校验。
  */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type {
   DecisionChatMessage,
   DecisionChatMessagePage,
+  DecisionChatTicket,
 } from '@workspace/contracts/decisions';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
@@ -20,6 +21,8 @@ import { toDecisionChatMessage } from '../decisions.mapper';
 import { CreateDecisionChatMessageDto } from '../dto/create-decision-chat-message.dto';
 import { ListDecisionChatMessagesDto } from '../dto/list-decision-chat-messages.dto';
 import type { DecisionChatMessageRecord } from '../types/decision-mapper.types';
+import { DecisionChatGateway } from '../gateways/decision-chat.gateway';
+import { DecisionChatTicketService } from './decision-chat-ticket.service';
 
 /** 未指定分页数量时使用的默认消息条数。 */
 const DEFAULT_PAGE_LIMIT = 30;
@@ -54,11 +57,30 @@ type DecisionChatContext = {
 
 @Injectable()
 export class DecisionChatService {
-  /** 注入数据库与统一授权服务。 */
+  private readonly logger = new Logger(DecisionChatService.name);
+
+  /** 注入数据库、统一授权、Ticket 与实时广播服务。 */
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
+    private readonly ticketService: DecisionChatTicketService,
+    private readonly gateway: DecisionChatGateway,
   ) {}
+
+  /** 为有权查看当前决策的登录会话签发短期 Socket Ticket。 */
+  async issueTicket(
+    authorization: AuthorizationContext,
+    sessionId: string,
+    decisionId: number,
+  ): Promise<DecisionChatTicket> {
+    await this.findVisibleDecision(authorization, decisionId);
+
+    return this.ticketService.issue({
+      userId: authorization.userId,
+      sessionId,
+      decisionId,
+    });
+  }
 
   /** 查询可见决策的消息，并始终按消息主键正序返回。 */
   async list(
@@ -143,7 +165,10 @@ export class DecisionChatService {
         include: decisionChatMessageInclude,
       });
 
-      return toDecisionChatMessage(message);
+      const result = toDecisionChatMessage(message);
+
+      this.broadcastCreatedMessage(decision.id, result);
+      return result;
     } catch (error) {
       if (
         !(error instanceof PrismaClientKnownRequestError) ||
@@ -165,6 +190,23 @@ export class DecisionChatService {
         concurrentMessage,
         decision.spaceId,
         dto,
+      );
+    }
+  }
+
+  /** 广播失败只记录日志，消息已经落库时不能让 HTTP 请求伪装为发送失败。 */
+  private broadcastCreatedMessage(
+    decisionId: number,
+    message: DecisionChatMessage,
+  ): void {
+    try {
+      this.gateway.broadcastMessageCreated(decisionId, message);
+    } catch (error) {
+      const reason = error instanceof Error ? error.stack : String(error);
+
+      this.logger.error(
+        `Failed to broadcast decision chat message ${message.id}`,
+        reason,
       );
     }
   }

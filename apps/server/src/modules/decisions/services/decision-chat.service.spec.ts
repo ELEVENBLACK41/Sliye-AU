@@ -10,7 +10,9 @@ import {
 } from '../../../generated/prisma';
 import type { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
+import type { DecisionChatGateway } from '../gateways/decision-chat.gateway';
 import { DecisionChatService } from './decision-chat.service';
+import type { DecisionChatTicketService } from './decision-chat-ticket.service';
 
 /** 创建群聊测试使用的授权上下文。 */
 function createAuthorization(): AuthorizationContext {
@@ -82,8 +84,19 @@ function createMessageRecord(
 function createService(
   prisma: PrismaService,
   authorizationService: AuthorizationService,
+  ticketService: DecisionChatTicketService = {
+    issue: jest.fn(),
+  } as unknown as DecisionChatTicketService,
+  gateway: DecisionChatGateway = {
+    broadcastMessageCreated: jest.fn(),
+  } as unknown as DecisionChatGateway,
 ): DecisionChatService {
-  return new DecisionChatService(prisma, authorizationService);
+  return new DecisionChatService(
+    prisma,
+    authorizationService,
+    ticketService,
+    gateway,
+  );
 }
 
 describe('DecisionChatService', () => {
@@ -212,9 +225,12 @@ describe('DecisionChatService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ deptId: 3 }),
     };
+    const gateway = { broadcastMessageCreated: jest.fn() };
     const service = createService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
+      undefined,
+      gateway as unknown as DecisionChatGateway,
     );
 
     await expect(
@@ -224,6 +240,7 @@ describe('DecisionChatService', () => {
       }),
     ).resolves.toMatchObject({ id: 41, content: '需要保留的消息' });
     expect(prisma.discussionMessage.create).not.toHaveBeenCalled();
+    expect(gateway.broadcastMessageCreated).not.toHaveBeenCalled();
   });
 
   it('相同幂等键用于不同内容时应返回 409', async () => {
@@ -329,9 +346,12 @@ describe('DecisionChatService', () => {
     const authorizationService = {
       buildDecisionWhere: jest.fn().mockResolvedValue({ deptId: 3 }),
     };
+    const gateway = { broadcastMessageCreated: jest.fn() };
     const service = createService(
       prisma as unknown as PrismaService,
       authorizationService as unknown as AuthorizationService,
+      undefined,
+      gateway as unknown as DecisionChatGateway,
     );
 
     await expect(
@@ -351,5 +371,43 @@ describe('DecisionChatService', () => {
         },
       }),
     );
+    expect(gateway.broadcastMessageCreated).toHaveBeenCalledWith(
+      20,
+      expect.objectContaining({ id: 42, content: '新消息' }),
+    );
+  });
+
+  it('消息落库后广播失败仍应返回已保存消息', async () => {
+    const createdMessage = createMessageRecord(43, { content: '已经落库' });
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue(createDecisionContext()),
+      },
+      discussionMessage: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue(createdMessage),
+      },
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ deptId: 3 }),
+    };
+    const gateway = {
+      broadcastMessageCreated: jest.fn(() => {
+        throw new Error('socket unavailable');
+      }),
+    };
+    const service = createService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+      undefined,
+      gateway as unknown as DecisionChatGateway,
+    );
+
+    await expect(
+      service.create(createAuthorization(), 20, {
+        clientMessageId: createdMessage.clientMessageId,
+        content: '已经落库',
+      }),
+    ).resolves.toMatchObject({ id: 43, content: '已经落库' });
   });
 });
