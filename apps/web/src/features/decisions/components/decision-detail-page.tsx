@@ -8,12 +8,14 @@ import type {
   DecisionDetail,
   DecisionEventTimelineItem,
   DecisionProposal,
+  DecisionResolution,
   DecisionVoteRound,
 } from '@workspace/contracts/decisions';
 
 import { DecisionEventTimeline } from './decision-event-timeline';
 import { DecisionParticipantActions } from './decision-participant-actions';
 import { DecisionProposalSection } from './decision-proposal-section';
+import { DecisionResolutionSection } from './decision-resolution-section';
 import { DecisionStatusActions } from './decision-status-actions';
 import { DecisionVoteSection } from './decision-vote-section';
 import { Badge } from '@workspace/ui/components/badge';
@@ -30,6 +32,8 @@ type DecisionDetailPageProps = {
   proposals: DecisionProposal[];
   /** 已经过权限与数据范围校验的决策投票轮次。 */
   voteRounds: DecisionVoteRound[];
+  /** 已经形成的正式决议列表。 */
+  resolutions: DecisionResolution[];
   /** 当前用户是否具备开始讨论的展示条件；最终权限仍由 NestJS 校验。 */
   canStartDiscussion: boolean;
   /** 当前用户是否具备新增参与者的展示条件；最终权限仍由 NestJS 校验。 */
@@ -38,6 +42,8 @@ type DecisionDetailPageProps = {
   canCreateProposal: boolean;
   /** 当前用户是否具备创建和关闭投票轮次的展示条件；最终权限仍由 NestJS 校验。 */
   canManageVoteRounds: boolean;
+  /** 当前用户是否具备关闭提案和形成正式决议的展示条件；最终权限仍由 NestJS 校验。 */
+  canManageConclusion: boolean;
   /** 当前用户是否具备提交选票的参与身份；最终资格仍由 NestJS 校验。 */
   canVote: boolean;
 };
@@ -56,10 +62,12 @@ export function DecisionDetailPage({
   events,
   proposals,
   voteRounds,
+  resolutions,
   canStartDiscussion,
   canManageParticipants,
   canCreateProposal,
   canManageVoteRounds,
+  canManageConclusion,
   canVote,
 }: DecisionDetailPageProps) {
   return (
@@ -126,7 +134,12 @@ export function DecisionDetailPage({
         </CardContent>
       </Card>
 
-      <DecisionProposalSection decisionId={decision.id} proposals={proposals} canCreateProposal={canCreateProposal} />
+      <DecisionProposalSection
+        decisionId={decision.id}
+        proposals={proposals}
+        canCreateProposal={canCreateProposal}
+        canManageConclusion={canManageConclusion}
+      />
 
       <DecisionVoteSection
         decisionId={decision.id}
@@ -134,6 +147,14 @@ export function DecisionDetailPage({
         voteRounds={voteRounds}
         canManageVoteRounds={canManageVoteRounds}
         canVote={canVote}
+      />
+
+      <DecisionResolutionSection
+        decisionId={decision.id}
+        proposals={proposals}
+        voteRounds={voteRounds}
+        resolutions={resolutions}
+        canManageConclusion={canManageConclusion}
       />
 
       <DecisionEventTimeline events={events} />

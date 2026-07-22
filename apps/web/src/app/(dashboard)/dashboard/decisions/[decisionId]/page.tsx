@@ -9,6 +9,7 @@ import type {
   DecisionDetail,
   DecisionEventTimelineItem,
   DecisionProposal,
+  DecisionResolution,
   DecisionVoteRound,
 } from '@workspace/contracts/decisions';
 import {
@@ -17,6 +18,7 @@ import {
   getDecisionDetail,
   getDecisionEvents,
   getDecisionProposals,
+  getDecisionResolutions,
   getDecisionVoteRounds,
 } from '@/features/decisions';
 
@@ -40,13 +42,15 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
   let events: DecisionEventTimelineItem[];
   let proposals: DecisionProposal[];
   let voteRounds: DecisionVoteRound[];
+  let resolutions: DecisionResolution[];
 
   try {
-    [decision, events, proposals, voteRounds] = await Promise.all([
+    [decision, events, proposals, voteRounds, resolutions] = await Promise.all([
       getDecisionDetail(decisionId),
       getDecisionEvents(decisionId),
       getDecisionProposals(decisionId),
       getDecisionVoteRounds(decisionId),
+      getDecisionResolutions(decisionId),
     ]);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
@@ -77,6 +81,7 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
     decision.status === 'DISCUSSING' &&
     hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
     (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
+  const canManageConclusion = canManageVoteRounds;
   const canVote =
     decision.status === 'DISCUSSING' && (currentParticipantRole === 'OWNER' || currentParticipantRole === 'APPROVER');
 
@@ -86,10 +91,12 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
       events={events}
       proposals={proposals}
       voteRounds={voteRounds}
+      resolutions={resolutions}
       canStartDiscussion={canStartDiscussion}
       canManageParticipants={canManageParticipants}
       canCreateProposal={canCreateProposal}
       canManageVoteRounds={canManageVoteRounds}
+      canManageConclusion={canManageConclusion}
       canVote={canVote}
     />
   );

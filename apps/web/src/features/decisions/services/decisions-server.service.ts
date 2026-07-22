@@ -8,6 +8,7 @@ import type {
   DecisionDetail,
   DecisionEventTimelineResponse,
   DecisionProposalListResponse,
+  DecisionResolutionListResponse,
   DecisionSummary,
   DecisionVoteRoundListResponse,
   UpdateDecisionStatusRequestPayload,
@@ -19,6 +20,7 @@ import {
   requestDecisionDetailFromNest,
   requestDecisionEventsFromNest,
   requestDecisionProposalsFromNest,
+  requestDecisionResolutionsFromNest,
   requestDecisionStatusUpdateFromNest,
   requestDecisionVoteRoundsFromNest,
   requestDecisionsFromNest,
@@ -69,6 +71,13 @@ export const getDecisionProposals = cache(async (decisionId: number): Promise<De
   const accessToken = await getAccessToken();
 
   return unwrapResponse(await requestDecisionProposalsFromNest(accessToken, decisionId));
+});
+
+/** 按资源 ID 读取决策正式决议列表；越权与不存在均由后端返回相同 404。 */
+export const getDecisionResolutions = cache(async (decisionId: number): Promise<DecisionResolutionListResponse> => {
+  const accessToken = await getAccessToken();
+
+  return unwrapResponse(await requestDecisionResolutionsFromNest(accessToken, decisionId));
 });
 
 /** 按资源 ID 读取决策投票轮次；开放轮次的实时票数由 NestJS 隐藏。 */

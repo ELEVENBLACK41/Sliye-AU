@@ -5,6 +5,7 @@ import { FileText } from 'lucide-react';
 import type { DecisionProposal } from '@workspace/contracts/decisions';
 
 import { DecisionProposalActions } from './decision-proposal-actions';
+import { DecisionProposalCloseActions } from './decision-proposal-close-actions';
 import { Badge } from '@workspace/ui/components/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
 
@@ -16,6 +17,8 @@ type DecisionProposalSectionProps = {
   proposals: DecisionProposal[];
   /** 当前用户是否具备创建提案的展示条件；最终权限仍由 NestJS 校验。 */
   canCreateProposal: boolean;
+  /** 当前用户是否具备拒绝或取消开放提案的管理权限。 */
+  canManageConclusion: boolean;
 };
 
 /** 提案状态对应的中文名称和徽标样式。 */
@@ -35,7 +38,12 @@ const proposalStatusView: Record<
 };
 
 /** 渲染决策提案列表，并在没有数据时展示明确空状态。 */
-export function DecisionProposalSection({ decisionId, proposals, canCreateProposal }: DecisionProposalSectionProps) {
+export function DecisionProposalSection({
+  decisionId,
+  proposals,
+  canCreateProposal,
+  canManageConclusion,
+}: DecisionProposalSectionProps) {
   return (
     <Card className="rounded-md shadow-none">
       <CardHeader className="flex-row items-center justify-between gap-3">
@@ -63,6 +71,13 @@ export function DecisionProposalSection({ decisionId, proposals, canCreatePropos
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                     {proposal.description || '暂无提案说明'}
                   </p>
+                  {canManageConclusion && proposal.status === 'OPEN' ? (
+                    <DecisionProposalCloseActions
+                      decisionId={decisionId}
+                      proposalId={proposal.id}
+                      proposalTitle={proposal.title}
+                    />
+                  ) : null}
                 </li>
               );
             })}

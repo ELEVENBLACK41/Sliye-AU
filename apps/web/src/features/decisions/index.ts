@@ -8,6 +8,7 @@ export {
   getDecisionDetail,
   getDecisionEvents,
   getDecisionProposals,
+  getDecisionResolutions,
   getDecisionSummaries,
   getDecisionVoteRounds,
   updateDecisionStatus,

@@ -2,13 +2,17 @@
  * 本文件封装决策模块在 Next.js 服务端调用 NestJS 的类型化请求。
  */
 import type {
+  CloseDecisionProposalRequestPayload,
   CreateDecisionProposalRequestPayload,
+  CreateDecisionResolutionRequestPayload,
   CreateDecisionVoteRoundRequestPayload,
   DecisionBallotReceipt,
   DecisionDetail,
   DecisionEventTimelineResponse,
   DecisionProposal,
   DecisionProposalListResponse,
+  DecisionResolution,
+  DecisionResolutionListResponse,
   DecisionSummary,
   DecisionVoteRound,
   DecisionVoteRoundListResponse,
@@ -54,6 +58,17 @@ export function requestDecisionProposalsFromNest(
   decisionId: number,
 ): Promise<NestResponse<DecisionProposalListResponse>> {
   return requestNest<DecisionProposalListResponse>(`/decisions/${decisionId}/proposals`, {
+    method: 'GET',
+    headers: createAuthHeaders(accessToken),
+  });
+}
+
+/** 按资源 ID 查询授权范围内的正式决议列表。 */
+export function requestDecisionResolutionsFromNest(
+  accessToken: string,
+  decisionId: number,
+): Promise<NestResponse<DecisionResolutionListResponse>> {
+  return requestNest<DecisionResolutionListResponse>(`/decisions/${decisionId}/resolutions`, {
     method: 'GET',
     headers: createAuthHeaders(accessToken),
   });
@@ -123,6 +138,39 @@ export function requestDecisionProposalCreateFromNest(
     headers: createAuthHeaders(accessToken),
     body: payload,
   });
+}
+
+/** 拒绝或取消指定决策中的开放提案。 */
+export function requestDecisionProposalCloseFromNest(
+  accessToken: string,
+  decisionId: number,
+  proposalId: number,
+  payload: CloseDecisionProposalRequestPayload,
+): Promise<NestResponse<DecisionProposal>> {
+  return requestNest<DecisionProposal, CloseDecisionProposalRequestPayload>(
+    `/decisions/${decisionId}/proposals/${proposalId}/status`,
+    {
+      method: 'PATCH',
+      headers: createAuthHeaders(accessToken),
+      body: payload,
+    },
+  );
+}
+
+/** 采纳开放提案并创建最终正式决议。 */
+export function requestDecisionResolutionCreateFromNest(
+  accessToken: string,
+  decisionId: number,
+  payload: CreateDecisionResolutionRequestPayload,
+): Promise<NestResponse<DecisionResolution>> {
+  return requestNest<DecisionResolution, CreateDecisionResolutionRequestPayload>(
+    `/decisions/${decisionId}/resolutions`,
+    {
+      method: 'POST',
+      headers: createAuthHeaders(accessToken),
+      body: payload,
+    },
+  );
 }
 
 /** 按资源 ID 更新决策状态，并保留 NestJS 的统一响应和业务错误。 */

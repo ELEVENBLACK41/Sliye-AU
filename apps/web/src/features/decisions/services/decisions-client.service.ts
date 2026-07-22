@@ -3,14 +3,17 @@
  */
 import type {
   AddDecisionParticipantRequestPayload,
+  CloseDecisionProposalRequestPayload,
   CreateDecisionProposalRequestPayload,
   CreateDecisionRequestPayload,
+  CreateDecisionResolutionRequestPayload,
   CreateDecisionVoteRoundRequestPayload,
   DecisionBallotReceipt,
   DecisionDetail,
   DecisionParticipant,
   DecisionParticipantCandidateListResponse,
   DecisionProposal,
+  DecisionResolution,
   DecisionVoteRound,
   SubmitDecisionBallotRequestPayload,
   UpdateDecisionStatusRequestPayload,
@@ -74,6 +77,37 @@ export function createDecisionProposal(
     body: payload,
     errorMessage: '创建提案失败，请稍后重试',
   });
+}
+
+/** 拒绝或取消当前决策中的开放提案。 */
+export function closeDecisionProposal(
+  decisionId: number,
+  proposalId: number,
+  payload: CloseDecisionProposalRequestPayload,
+): Promise<DecisionProposal> {
+  return requestData<DecisionProposal, CloseDecisionProposalRequestPayload>(
+    `/api/decisions/${decisionId}/proposals/${proposalId}/status`,
+    {
+      method: 'PATCH',
+      body: payload,
+      errorMessage: '提案关闭失败，请稍后重试',
+    },
+  );
+}
+
+/** 采纳开放提案并形成当前决策的最终正式决议。 */
+export function createDecisionResolution(
+  decisionId: number,
+  payload: CreateDecisionResolutionRequestPayload,
+): Promise<DecisionResolution> {
+  return requestData<DecisionResolution, CreateDecisionResolutionRequestPayload>(
+    `/api/decisions/${decisionId}/resolutions`,
+    {
+      method: 'POST',
+      body: payload,
+      errorMessage: '正式决议创建失败，请稍后重试',
+    },
+  );
 }
 
 /** 为当前决策中的开放提案创建并立即开启投票。 */
