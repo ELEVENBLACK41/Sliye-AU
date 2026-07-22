@@ -5,6 +5,7 @@ export { DecisionDetailPage } from './components/decision-detail-page';
 export { DecisionsPage } from './components/decisions-page';
 export {
   DecisionServerError,
+  getDecisionChatMessagePage,
   getDecisionDetail,
   getDecisionEvents,
   getDecisionProposals,

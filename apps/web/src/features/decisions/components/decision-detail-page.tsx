@@ -6,12 +6,15 @@ import Link from 'next/link';
 import { ArrowLeft, Building2, UserRound } from 'lucide-react';
 import type {
   DecisionDetail,
+  DecisionChatMessagePage,
   DecisionEventTimelineItem,
   DecisionProposal,
   DecisionResolution,
   DecisionVoteRound,
+  DecisionUserSummary,
 } from '@workspace/contracts/decisions';
 
+import { DecisionChatSection } from '../chat/components/decision-chat-section';
 import { DecisionEventTimeline } from './decision-event-timeline';
 import { DecisionParticipantActions } from './decision-participant-actions';
 import { DecisionProposalSection } from './decision-proposal-section';
@@ -26,6 +29,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/componen
 type DecisionDetailPageProps = {
   /** 已经过权限与数据范围校验的决策详情。 */
   decision: DecisionDetail;
+  /** 服务端预取的决策群聊最新消息页。 */
+  initialChatPage: DecisionChatMessagePage;
+  /** 当前登录用户的群聊公开摘要。 */
+  currentChatUser: DecisionUserSummary;
   /** 已经过权限与数据范围校验的决策事件时间线。 */
   events: DecisionEventTimelineItem[];
   /** 已经过权限与数据范围校验的决策提案列表。 */
@@ -46,6 +53,10 @@ type DecisionDetailPageProps = {
   canManageConclusion: boolean;
   /** 当前用户是否具备提交选票的参与身份；最终资格仍由 NestJS 校验。 */
   canVote: boolean;
+  /** 当前用户是否具备发送群聊消息的页面条件。 */
+  canSendChat: boolean;
+  /** 群聊不可发送时展示的具体原因。 */
+  chatReadOnlyReason?: string;
 };
 
 /** 参与者身份对应的中文文案。 */
@@ -59,6 +70,8 @@ const participantRoleText: Record<DecisionDetail['participants'][number]['role']
 /** 渲染决策基本资料、参与者列表和只读事件时间线。 */
 export function DecisionDetailPage({
   decision,
+  initialChatPage,
+  currentChatUser,
   events,
   proposals,
   voteRounds,
@@ -69,6 +82,8 @@ export function DecisionDetailPage({
   canManageVoteRounds,
   canManageConclusion,
   canVote,
+  canSendChat,
+  chatReadOnlyReason,
 }: DecisionDetailPageProps) {
   return (
     <main className="flex flex-col gap-4">
@@ -107,6 +122,14 @@ export function DecisionDetailPage({
       </Card>
 
       {canStartDiscussion ? <DecisionStatusActions decisionId={decision.id} /> : null}
+
+      <DecisionChatSection
+        decisionId={decision.id}
+        initialPage={initialChatPage}
+        currentUser={currentChatUser}
+        canSend={canSendChat}
+        readOnlyReason={chatReadOnlyReason}
+      />
 
       <Card className="rounded-md shadow-none">
         <CardHeader className="flex-row items-center justify-between gap-3">

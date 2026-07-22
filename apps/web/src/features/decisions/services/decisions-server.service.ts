@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import type {
   DecisionDetail,
+  DecisionChatMessagePage,
   DecisionEventTimelineResponse,
   DecisionProposalListResponse,
   DecisionResolutionListResponse,
@@ -17,6 +18,7 @@ import type {
 import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
 import type { NestResponse } from '@/services/bff-request';
 import {
+  requestDecisionChatMessagesFromNest,
   requestDecisionDetailFromNest,
   requestDecisionEventsFromNest,
   requestDecisionProposalsFromNest,
@@ -57,6 +59,18 @@ export const getDecisionDetail = cache(async (decisionId: number): Promise<Decis
   const accessToken = await getAccessToken();
 
   return unwrapResponse(await requestDecisionDetailFromNest(accessToken, decisionId));
+});
+
+/** 读取决策详情页首屏最新 30 条群聊消息。 */
+export const getDecisionChatMessagePage = cache(async (decisionId: number): Promise<DecisionChatMessagePage> => {
+  const accessToken = await getAccessToken();
+
+  return unwrapResponse(
+    await requestDecisionChatMessagesFromNest(accessToken, decisionId, {
+      direction: 'before',
+      limit: 30,
+    }),
+  );
 });
 
 /** 按资源 ID 读取决策事件时间线；越权与不存在均由后端返回相同 404。 */

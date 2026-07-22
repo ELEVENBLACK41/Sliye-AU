@@ -7,6 +7,7 @@ import { SYSTEM_PERMISSIONS, SYSTEM_ROLES } from '@workspace/contracts/access';
 import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
 import type {
   DecisionDetail,
+  DecisionChatMessagePage,
   DecisionEventTimelineItem,
   DecisionProposal,
   DecisionResolution,
@@ -15,6 +16,7 @@ import type {
 import {
   DecisionDetailPage,
   DecisionServerError,
+  getDecisionChatMessagePage,
   getDecisionDetail,
   getDecisionEvents,
   getDecisionProposals,
@@ -39,14 +41,16 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
   }
 
   let decision: DecisionDetail;
+  let chatMessages: DecisionChatMessagePage;
   let events: DecisionEventTimelineItem[];
   let proposals: DecisionProposal[];
   let voteRounds: DecisionVoteRound[];
   let resolutions: DecisionResolution[];
 
   try {
-    [decision, events, proposals, voteRounds, resolutions] = await Promise.all([
+    [decision, chatMessages, events, proposals, voteRounds, resolutions] = await Promise.all([
       getDecisionDetail(decisionId),
+      getDecisionChatMessagePage(decisionId),
       getDecisionEvents(decisionId),
       getDecisionProposals(decisionId),
       getDecisionVoteRounds(decisionId),
@@ -84,10 +88,23 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
   const canManageConclusion = canManageVoteRounds;
   const canVote =
     decision.status === 'DISCUSSING' && (currentParticipantRole === 'OWNER' || currentParticipantRole === 'APPROVER');
+  const isChatLifecycleWritable = decision.status === 'DRAFT' || decision.status === 'DISCUSSING';
+  const canSendChat = isChatLifecycleWritable && currentParticipantRole !== undefined;
+  const chatReadOnlyReason = !isChatLifecycleWritable
+    ? '决策已经结束，群聊历史仅供查看。'
+    : currentParticipantRole === undefined
+      ? '你不在当前决策的参与者名单中，可以查看历史消息，但不能发送。'
+      : undefined;
 
   return (
     <DecisionDetailPage
       decision={decision}
+      initialChatPage={chatMessages}
+      currentChatUser={{
+        id: currentUser.id,
+        name: currentUser.name,
+        avatarUrl: currentUser.avatarUrl,
+      }}
       events={events}
       proposals={proposals}
       voteRounds={voteRounds}
@@ -98,6 +115,8 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
       canManageVoteRounds={canManageVoteRounds}
       canManageConclusion={canManageConclusion}
       canVote={canVote}
+      canSendChat={canSendChat}
+      chatReadOnlyReason={chatReadOnlyReason}
     />
   );
 }

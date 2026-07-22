@@ -7,6 +7,8 @@ import type {
   CreateDecisionResolutionRequestPayload,
   CreateDecisionVoteRoundRequestPayload,
   DecisionBallotReceipt,
+  DecisionChatMessageListQuery,
+  DecisionChatMessagePage,
   DecisionDetail,
   DecisionEventTimelineResponse,
   DecisionProposal,
@@ -36,6 +38,32 @@ export function requestDecisionDetailFromNest(
   decisionId: number,
 ): Promise<NestResponse<DecisionDetail>> {
   return requestNest<DecisionDetail>(`/decisions/${decisionId}`, {
+    method: 'GET',
+    headers: createAuthHeaders(accessToken),
+  });
+}
+
+/** 按资源 ID 查询授权范围内的决策群聊消息页。 */
+export function requestDecisionChatMessagesFromNest(
+  accessToken: string,
+  decisionId: number,
+  query: DecisionChatMessageListQuery = {},
+): Promise<NestResponse<DecisionChatMessagePage>> {
+  const searchParams = new URLSearchParams();
+
+  if (query.direction) {
+    searchParams.set('direction', query.direction);
+  }
+  if (query.cursor !== undefined) {
+    searchParams.set('cursor', String(query.cursor));
+  }
+  if (query.limit !== undefined) {
+    searchParams.set('limit', String(query.limit));
+  }
+
+  const queryString = searchParams.size > 0 ? `?${searchParams}` : '';
+
+  return requestNest<DecisionChatMessagePage>(`/decisions/${decisionId}/messages${queryString}`, {
     method: 'GET',
     headers: createAuthHeaders(accessToken),
   });
