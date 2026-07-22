@@ -25,6 +25,7 @@ const statusText: Record<DecisionSummary['status'], string> = {
   DRAFT: '草稿',
   DISCUSSING: '讨论中',
   RESOLVED: '已形成决议',
+  CANCELLED: '已取消',
   ARCHIVED: '已归档',
 };
 

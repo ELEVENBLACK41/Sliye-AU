@@ -13,6 +13,7 @@ import {
   DataScope,
   DecisionEventType,
   DecisionStatus,
+  DiscussionSpaceStatus,
   ProposalStatus,
   ResolutionKind,
   ResolutionStatus,
@@ -83,6 +84,7 @@ export class DecisionResolutionService {
       select: {
         id: true,
         ownerId: true,
+        spaceId: true,
         status: true,
         proposals: {
           where: { id: dto.sourceProposalId },
@@ -164,6 +166,14 @@ export class DecisionResolutionService {
           status: 409,
         });
       }
+
+      await tx.discussionSpace.update({
+        where: { id: decision.spaceId },
+        data: {
+          status: DiscussionSpaceStatus.READ_ONLY,
+          closedAt: decidedAt,
+        },
+      });
 
       const otherOpenProposals = await tx.decisionProposal.findMany({
         where: {

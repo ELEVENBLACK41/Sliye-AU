@@ -2,8 +2,8 @@
  * 本文件定义最小决策列表、详情和创建流程使用的跨端数据契约。
  */
 
-/** 决策事项从草稿、讨论、形成正式决议到归档的全局业务状态；投票状态由具体轮次管理。 */
-export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'RESOLVED' | 'ARCHIVED';
+/** 决策事项从草稿、讨论、形成正式决议或取消到归档的全局业务状态；投票状态由具体轮次管理。 */
+export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'RESOLVED' | 'CANCELLED' | 'ARCHIVED';
 
 /** 用户参与某个决策时承担的角色。 */
 export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER';

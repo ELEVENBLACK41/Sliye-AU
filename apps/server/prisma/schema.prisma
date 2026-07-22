@@ -105,6 +105,7 @@ enum DecisionStatus {
   DRAFT
   DISCUSSING
   RESOLVED
+  CANCELLED
   ARCHIVED
 }
 
@@ -147,14 +148,8 @@ enum ResolutionStatus {
 /// 讨论空间的生命周期状态。
 enum DiscussionSpaceStatus {
   ACTIVE
+  READ_ONLY
   ARCHIVED
-}
-
-/// 用户在讨论空间中的长期成员角色。
-enum DiscussionSpaceMemberRole {
-  OWNER
-  ADMIN
-  MEMBER
 }
 
 /// 讨论空间消息的内容类型。
@@ -257,21 +252,20 @@ model User {
 
   posts Post[]
 
-  createdDecisions           Decision[]              @relation("DecisionCreator")
-  ownedDecisions             Decision[]              @relation("DecisionOwner")
+  createdDecisions           Decision[]            @relation("DecisionCreator")
+  ownedDecisions             Decision[]            @relation("DecisionOwner")
   decisionParticipants       DecisionParticipant[]
-  proposalsCreated           DecisionProposal[]      @relation("ProposalCreator")
-  voteRoundsCreated          DecisionVoteRound[]     @relation("DecisionVoteRoundCreator")
+  proposalsCreated           DecisionProposal[]    @relation("ProposalCreator")
+  voteRoundsCreated          DecisionVoteRound[]   @relation("DecisionVoteRoundCreator")
   decisionBallots            DecisionBallot[]
-  resolutionsDecided         DecisionResolution[]    @relation("DecisionResolutionDecider")
-  assignedTasks              DecisionTask[]          @relation("TaskAssignee")
-  createdTasks               DecisionTask[]          @relation("TaskCreator")
-  decisionEvents             DecisionEvent[]         @relation("DecisionEventActor")
-  discussionSpacesCreated    DiscussionSpace[]       @relation("DiscussionSpaceCreator")
-  discussionSpaceMemberships DiscussionSpaceMember[]
-  discussionMessagesAuthored DiscussionMessage[]     @relation("DiscussionMessageAuthor")
-  discussionMessagesPinned   DiscussionMessage[]     @relation("DiscussionMessagePinner")
-  meetingsCreated            MeetingSession[]        @relation("MeetingSessionCreator")
+  resolutionsDecided         DecisionResolution[]  @relation("DecisionResolutionDecider")
+  assignedTasks              DecisionTask[]        @relation("TaskAssignee")
+  createdTasks               DecisionTask[]        @relation("TaskCreator")
+  decisionEvents             DecisionEvent[]       @relation("DecisionEventActor")
+  discussionSpacesCreated    DiscussionSpace[]     @relation("DiscussionSpaceCreator")
+  discussionMessagesAuthored DiscussionMessage[]   @relation("DiscussionMessageAuthor")
+  discussionMessagesPinned   DiscussionMessage[]   @relation("DiscussionMessagePinner")
+  meetingsCreated            MeetingSession[]      @relation("MeetingSessionCreator")
   meetingParticipants        MeetingParticipant[]
 
   @@index([deptId])
@@ -654,7 +648,7 @@ model AccessControlAuditLog {
   @@index([createdAt])
 }
 
-/// 承载长期群成员、文字讨论、议题和音视频会议的协作空间。
+/// 与一项决策一对一绑定的协作群组，承载普通聊天和多场音视频会议。
 model DiscussionSpace {
   id Int @id @default(autoincrement())
 
@@ -663,38 +657,22 @@ model DiscussionSpace {
   status      DiscussionSpaceStatus @default(ACTIVE)
   createdById Int
 
+  /// 决策形成正式结论或被取消后进入只读状态的时间。
+  closedAt   DateTime?
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
   createdBy User @relation("DiscussionSpaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
-  decisions Decision[]
-  members   DiscussionSpaceMember[]
-  messages  DiscussionMessage[]
-  meetings  MeetingSession[]
+  /// 一个群组最多只能被一项决策引用；决策参与者同时作为群成员来源。
+  decision Decision?
+  messages DiscussionMessage[]
+  meetings MeetingSession[]
 
   @@index([createdById])
   @@index([status])
   @@index([createdAt])
-}
-
-/// 用户与讨论空间之间的长期成员关系，不等同于具体议题参与者或会议出席记录。
-model DiscussionSpaceMember {
-  spaceId Int
-  userId  Int
-  role    DiscussionSpaceMemberRole @default(MEMBER)
-
-  joinedAt  DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-
-  space DiscussionSpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([spaceId, userId])
-  @@index([userId])
-  @@index([role])
 }
 
 /// 讨论空间中的持久化消息；普通消息不重复写入决策时间线，重要消息可被事件引用。
@@ -703,7 +681,6 @@ model DiscussionMessage {
 
   spaceId    Int
   authorId   Int?
-  decisionId Int?
   meetingId  Int?
   replyToId  Int?
   pinnedById Int?
@@ -717,9 +694,8 @@ model DiscussionMessage {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @default(now()) @updatedAt
 
-  space    DiscussionSpace     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  space    DiscussionSpace     @relation(fields: [spaceId], references: [id], onDelete: Restrict)
   author   User?               @relation("DiscussionMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-  decision Decision?           @relation(fields: [decisionId], references: [id], onDelete: SetNull)
   meeting  MeetingSession?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
   replyTo  DiscussionMessage?  @relation("DiscussionMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies  DiscussionMessage[] @relation("DiscussionMessageReplies")
@@ -729,7 +705,6 @@ model DiscussionMessage {
 
   @@index([spaceId, createdAt])
   @@index([authorId])
-  @@index([decisionId])
   @@index([meetingId])
   @@index([replyToId])
   @@index([pinnedById])
@@ -746,17 +721,18 @@ model Decision {
   creatorId Int
   ownerId   Int?
   deptId    Int
-  spaceId   Int?
+  /// 决策创建时同步创建的唯一协作群组；禁止删除仍被决策引用的群组。
+  spaceId   Int  @unique
 
   decidedAt  DateTime?
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  department Department       @relation(fields: [deptId], references: [id], onDelete: Restrict)
-  creator    User             @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  owner      User?            @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  space      DiscussionSpace? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  department Department      @relation(fields: [deptId], references: [id], onDelete: Restrict)
+  creator    User            @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  owner      User?           @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  space      DiscussionSpace @relation(fields: [spaceId], references: [id], onDelete: Restrict)
 
   participants DecisionParticipant[]
   proposals    DecisionProposal[]
@@ -764,13 +740,10 @@ model Decision {
   resolutions  DecisionResolution[]
   tasks        DecisionTask[]
   events       DecisionEvent[]
-  messages     DiscussionMessage[]
-  meetingLinks MeetingDecision[]
 
   @@index([deptId])
   @@index([creatorId])
   @@index([ownerId])
-  @@index([spaceId])
   @@index([status])
   @@index([createdAt])
 }
@@ -1073,7 +1046,6 @@ model MeetingSession {
   createdBy User            @relation("MeetingSessionCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
   participants MeetingParticipant[]
-  decisions    MeetingDecision[]
   messages     DiscussionMessage[]
   recordings   MeetingRecording[]
   resolutions  DecisionResolution[]
@@ -1085,19 +1057,6 @@ model MeetingSession {
   @@index([status])
   @@index([scheduledAt])
   @@index([createdAt])
-}
-
-/// 一场会议与多个决策事项之间的显式多对多关联。
-model MeetingDecision {
-  meetingId  Int
-  decisionId Int
-  addedAt    DateTime @default(now())
-
-  meeting  MeetingSession @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  decision Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-
-  @@id([meetingId, decisionId])
-  @@index([decisionId])
 }
 
 model MeetingParticipant {

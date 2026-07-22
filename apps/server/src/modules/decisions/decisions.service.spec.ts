@@ -7,6 +7,7 @@ import {
   DataScope,
   DecisionEventType,
   DecisionStatus,
+  DiscussionSpaceStatus,
   ParticipantRole,
   ProposalStatus,
   ResolutionKind,
@@ -890,11 +891,13 @@ describe('DecisionsService', () => {
   it('创建决策时应校验部门范围并自动创建 OWNER 参与关系', async () => {
     const record = createDecisionRecord();
     let capturedCreateInput: unknown;
+    const createSpaceMock = jest.fn().mockResolvedValue({ id: 80 });
     const createDecisionMock = jest.fn((input: unknown) => {
       capturedCreateInput = input;
       return Promise.resolve(record);
     });
     const transaction = {
+      discussionSpace: { create: createSpaceMock },
       decision: { create: createDecisionMock },
     };
     const prisma = {
@@ -923,11 +926,20 @@ describe('DecisionsService', () => {
       3,
     );
     expect(createDecisionMock).toHaveBeenCalledTimes(1);
+    expect(createSpaceMock).toHaveBeenCalledWith({
+      data: {
+        name: record.title,
+        description: undefined,
+        createdById: 7,
+      },
+      select: { id: true },
+    });
 
     expect(capturedCreateInput).toMatchObject({
       data: {
         creatorId: 7,
         ownerId: 7,
+        spaceId: 80,
         participants: { create: { userId: 7, role: 'OWNER' } },
       },
     });
@@ -1534,6 +1546,7 @@ describe('DecisionsService', () => {
     });
     const transaction = {
       decision: { updateMany: resolveDecision },
+      discussionSpace: { update: jest.fn().mockResolvedValue({ id: 80 }) },
       decisionProposal: {
         findMany: jest.fn().mockResolvedValue([{ id: 51 }]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -1550,6 +1563,7 @@ describe('DecisionsService', () => {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
           ownerId: 7,
+          spaceId: 80,
           status: DecisionStatus.DISCUSSING,
           proposals: [{ id: 50, status: ProposalStatus.OPEN }],
         }),
@@ -1596,6 +1610,13 @@ describe('DecisionsService', () => {
       },
     });
     expect(resolvedDecisionInput.data.decidedAt).toBeInstanceOf(Date);
+    expect(transaction.discussionSpace.update).toHaveBeenCalledWith({
+      where: { id: 80 },
+      data: {
+        status: DiscussionSpaceStatus.READ_ONLY,
+        closedAt: expect.any(Date),
+      },
+    });
     expect(transaction.decisionProposal.updateMany).toHaveBeenCalledTimes(2);
     const cancelledRoundInput = transaction.decisionVoteRound.updateMany.mock
       .calls[0]?.[0] as {

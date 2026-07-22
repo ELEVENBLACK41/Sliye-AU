@@ -243,7 +243,7 @@ export class DecisionCoreService {
     return toDecisionDetail(updatedDecision);
   }
 
-  /** 在授权部门内创建决策，并原子写入创建人和时间线事件。 */
+  /** 在授权部门内创建决策及其唯一协作群组，并原子写入创建人和时间线事件。 */
   async create(
     authorization: AuthorizationContext,
     dto: CreateDecisionDto,
@@ -254,14 +254,24 @@ export class DecisionCoreService {
       dto.departmentId,
     );
 
-    const decision = await this.prisma.$transaction(async (tx) =>
-      tx.decision.create({
+    const decision = await this.prisma.$transaction(async (tx) => {
+      const space = await tx.discussionSpace.create({
+        data: {
+          name: dto.title,
+          description: dto.description,
+          createdById: authorization.userId,
+        },
+        select: { id: true },
+      });
+
+      return tx.decision.create({
         data: {
           title: dto.title,
           description: dto.description,
           deptId: dto.departmentId,
           creatorId: authorization.userId,
           ownerId: authorization.userId,
+          spaceId: space.id,
           participants: {
             create: {
               userId: authorization.userId,
@@ -290,8 +300,8 @@ export class DecisionCoreService {
             orderBy: { createdAt: 'asc' },
           },
         },
-      }),
-    );
+      });
+    });
 
     return toDecisionDetail(decision);
   }
