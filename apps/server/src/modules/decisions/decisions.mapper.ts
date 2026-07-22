@@ -13,85 +13,19 @@ import type {
   DecisionVoteRound as DecisionVoteRoundContract,
 } from '@workspace/contracts/decisions';
 import type {
-  Decision,
-  DecisionBallot,
-  DecisionEvent,
-  DecisionParticipant,
-  DecisionProposal,
-  DecisionResolution,
-  DecisionVoteOption,
-  DecisionVoteRound,
-  Department,
-  User,
-} from '../../generated/prisma';
+  DecisionDetailRecord,
+  DecisionEventRecord,
+  DecisionParticipantCandidateRecord,
+  DecisionParticipantRecord,
+  DecisionProposalRecord,
+  DecisionResolutionRecord,
+  DecisionSummaryRecord,
+  DecisionUserRecord,
+  DecisionVoteRoundRecord,
+} from './types/decision-mapper.types';
 
-/** 决策列表映射需要的关联数据。 */
-type DecisionSummaryRecord = Decision & {
-  /** 决策所属部门。 */
-  department: Department;
-  /** 决策创建人。 */
-  creator: Pick<User, 'id' | 'name' | 'avatarUrl'>;
-  /** 决策负责人。 */
-  owner: Pick<User, 'id' | 'name' | 'avatarUrl'> | null;
-  /** 聚合统计。 */
-  _count: { participants: number };
-};
-
-/** 决策详情映射需要的参与者关联数据。 */
-type DecisionDetailRecord = DecisionSummaryRecord & {
-  /** 决策参与人及其身份。 */
-  participants: Array<
-    DecisionParticipant & {
-      /** 参与用户摘要。 */
-      user: Pick<User, 'id' | 'name' | 'avatarUrl'>;
-    }
-  >;
-};
-
-/** 单个决策参与者映射需要的用户关联数据。 */
-export type DecisionParticipantRecord = DecisionParticipant & {
-  /** 参与用户摘要。 */
-  user: Pick<User, 'id' | 'name' | 'avatarUrl'>;
-};
-
-/** 候选参与者映射需要的用户和部门摘要。 */
-export type DecisionParticipantCandidateRecord = Pick<
-  User,
-  'id' | 'name' | 'avatarUrl'
-> & {
-  /** 候选用户所属部门；不可用用户已在查询阶段被过滤。 */
-  department: Pick<Department, 'id' | 'code' | 'name'> | null;
-};
-
-/** 单个提案映射需要的创建人摘要。 */
-export type DecisionProposalRecord = DecisionProposal & {
-  /** 创建提案的用户摘要。 */
-  creator: Pick<User, 'id' | 'name' | 'avatarUrl'>;
-};
-
-/** 决策时间线映射需要的事件与操作者关联数据。 */
-export type DecisionEventRecord = DecisionEvent & {
-  /** 触发事件的用户；系统事件或用户已删除时为空。 */
-  actor: Pick<User, 'id' | 'name' | 'avatarUrl'> | null;
-};
-
-/** 投票轮次映射需要的选项统计和当前用户选票数据。 */
-export type DecisionVoteRoundRecord = DecisionVoteRound & {
-  /** 创建投票的用户摘要。 */
-  creator: Pick<User, 'id' | 'name' | 'avatarUrl'>;
-  /** 投票选项及各自选择数。 */
-  options: Array<DecisionVoteOption & { _count: { choices: number } }>;
-  /** 当前用户在本轮已经提交的选票，查询最多返回一条。 */
-  ballots: Array<Pick<DecisionBallot, 'id'>>;
-  /** 本轮全部选票聚合数。 */
-  _count: { ballots: number };
-};
-
-/** 正式决议映射需要的确认人摘要。 */
-export type DecisionResolutionRecord = DecisionResolution & {
-  /** 正式确认决议的用户摘要。 */
-  decidedBy: Pick<User, 'id' | 'name' | 'avatarUrl'>;
-};
+/** 标准决策投票选项使用的稳定代码。 */
+type StandardDecisionVoteOptionCode = 'APPROVE' | 'REJECT' | 'ABSTAIN';
 
 /** 将数据库决策映射为列表摘要。 */
 export function toDecisionSummary(
@@ -268,7 +202,10 @@ export function toDecisionEvent(
 }
 
 /** 读取指定稳定代码选项的得票数，不存在时按零票处理。 */
-function getVoteCount(round: DecisionVoteRoundRecord, code: string): number {
+function getVoteCount(
+  round: DecisionVoteRoundRecord,
+  code: StandardDecisionVoteOptionCode,
+): number {
   return (
     round.options.find((option) => option.code === code)?._count.choices ?? 0
   );
@@ -296,7 +233,7 @@ function getVoteOutcome(
 }
 
 /** 映射决策创建人、负责人或参与人的公共摘要。 */
-function toDecisionUser(user: Pick<User, 'id' | 'name' | 'avatarUrl'>) {
+function toDecisionUser(user: DecisionUserRecord) {
   return {
     id: user.id,
     name: user.name,
