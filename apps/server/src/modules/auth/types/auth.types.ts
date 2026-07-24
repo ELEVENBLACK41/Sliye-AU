@@ -13,6 +13,7 @@ export type {
   EmailVerificationState,
   OperationResult,
   RegisterResult as RegisterResponse,
+  UpdateAvatarResult,
 } from '@workspace/contracts/auth';
 
 /** 客户端随请求提供、可用于审计的基础信息。 */

@@ -10,7 +10,7 @@ import type { AuthSession, AuthUser } from '@workspace/contracts/auth';
 import { apiError, apiErrorFromUnknown } from '@/app/api/_utils/response';
 import { AUTH_ACCESS_COOKIE_NAME, AUTH_REFRESH_COOKIE_NAME } from '@/features/auth/constants';
 import { requestProfileFromNest, requestRefreshFromNest } from '@/features/auth/services/auth-nest-client';
-import { requestNest, type NestResponse } from '@/services/bff-request';
+import { requestNest, requestNestRaw, type NestResponse } from '@/services/bff-request';
 
 /** 同一服务进程内按刷新令牌合并的进行中刷新请求。 */
 const refreshFlights = new Map<string, Promise<NestResponse<AuthSession>>>();
@@ -58,7 +58,7 @@ export async function proxyAuthenticatedNestRequest({
       });
     }
 
-    const body = method === 'GET' || method === 'DELETE' ? undefined : await readJsonBody(request);
+    const body = method === 'GET' || method === 'DELETE' ? undefined : await readProxyBody(request);
     const query = new URL(request.url).search;
     let upstream = await requestUpstream(nestPath + query, method, accessToken, body);
 
@@ -79,6 +79,80 @@ export async function proxyAuthenticatedNestRequest({
     }
 
     return response;
+  } catch (error) {
+    return apiErrorFromUnknown(error, fallbackMessage, 500, new URL(request.url).pathname);
+  }
+}
+
+/** 把需要登录态的 NestJS 图片资源安全转发给浏览器。 */
+export async function proxyAuthenticatedNestAssetRequest(request: Request, nestPath: string, fallbackMessage: string) {
+  try {
+    const cookieStore = await cookies();
+    let accessToken = cookieStore.get(AUTH_ACCESS_COOKIE_NAME)?.value;
+
+    if (!accessToken) {
+      accessToken = await refreshAccessTokenFromCookie();
+    }
+
+    if (!accessToken) {
+      return apiError({
+        status: 401,
+        message: '登录状态已失效，请重新登录',
+        path: new URL(request.url).pathname,
+      });
+    }
+
+    let upstream = await requestNestRaw(nestPath, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (upstream.status === 401) {
+      const refreshedAccessToken = await refreshAccessTokenFromCookie();
+
+      if (refreshedAccessToken) {
+        accessToken = refreshedAccessToken;
+        upstream = await requestNestRaw(nestPath, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+      }
+    }
+
+    if (!upstream.ok) {
+      const body = await readUnknownJson(upstream);
+      const response = body
+        ? NextResponse.json(body, { status: upstream.status })
+        : apiError({
+            status: upstream.status,
+            message: fallbackMessage,
+            path: new URL(request.url).pathname,
+          });
+
+      if (upstream.status === 401) {
+        response.cookies.delete(AUTH_ACCESS_COOKIE_NAME);
+        response.cookies.delete(AUTH_REFRESH_COOKIE_NAME);
+      }
+
+      return response;
+    }
+
+    const contentType = upstream.headers.get('content-type');
+
+    if (!contentType?.startsWith('image/')) {
+      return apiError({
+        status: 502,
+        message: '头像资源响应格式异常，请稍后再试',
+        path: new URL(request.url).pathname,
+      });
+    }
+
+    return new NextResponse(upstream.body, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': upstream.headers.get('cache-control') ?? 'private, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
   } catch (error) {
     return apiErrorFromUnknown(error, fallbackMessage, 500, new URL(request.url).pathname);
   }
@@ -125,10 +199,23 @@ async function requestUpstream(path: string, method: ProxyHttpMethod, accessToke
 }
 
 /** 安全读取可选 JSON 请求体，空请求体保持为 `undefined`。 */
-async function readJsonBody(request: Request): Promise<unknown> {
+async function readProxyBody(request: Request): Promise<unknown> {
+  if (request.headers.get('content-type')?.startsWith('multipart/form-data')) {
+    return request.formData();
+  }
+
   const text = await request.text();
 
   return text ? (JSON.parse(text) as unknown) : undefined;
+}
+
+/** 尝试读取上游统一错误响应，非 JSON 响应返回空。 */
+async function readUnknownJson(response: Response): Promise<unknown | null> {
+  try {
+    return (await response.json()) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 /** 使用 httpOnly refresh Cookie 获取新 access token，并把轮换后的令牌写回响应 Cookie。 */

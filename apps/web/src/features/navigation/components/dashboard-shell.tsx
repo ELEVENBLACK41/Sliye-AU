@@ -12,6 +12,7 @@ import type { AuthUser } from '@workspace/contracts/auth';
 
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LogoutButton } from '@/features/auth/components/logout-button';
+import { DashboardUserMenu } from './dashboard-user-menu';
 import {
   Sidebar,
   SidebarContent,
@@ -118,6 +119,7 @@ export function DashboardShell({ children, currentUser }: DashboardShellProps) {
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
+        <DashboardUserMenu currentUser={currentUser} isActive={pathname.startsWith('/dashboard/profile')} />
         <SidebarRail />
       </Sidebar>
       <SidebarInset className="min-w-0">

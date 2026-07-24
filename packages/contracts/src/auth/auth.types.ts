@@ -125,6 +125,18 @@ export type AuthUser = {
   updatedAt: string;
 };
 
+/** 当前登录用户修改个人资料时提交的请求体。 */
+export type UpdateProfileRequestPayload = {
+  /** 修改后的用户显示名称。 */
+  name: string;
+};
+
+/** 当前登录用户上传或移除头像后的返回结果。 */
+export type UpdateAvatarResult = {
+  /** 已更新头像地址的最新认证用户资料。 */
+  user: AuthUser;
+};
+
 /** 一组可用于浏览器认证的访问令牌与刷新令牌。 */
 export type AuthTokens = {
   /** HTTP Authorization 头使用的令牌类型。 */
@@ -200,3 +212,9 @@ export type PasswordPublicKeyApiResponse = ApiResponse<PasswordPublicKey>;
 
 /** 获取安全认证会话接口响应。 */
 export type SanitizedAuthSessionApiResponse = ApiResponse<SanitizedAuthSession>;
+
+/** 修改当前用户个人资料接口响应。 */
+export type UpdateProfileApiResponse = ApiResponse<AuthUser>;
+
+/** 上传或移除当前用户头像接口响应。 */
+export type UpdateAvatarApiResponse = ApiResponse<UpdateAvatarResult>;

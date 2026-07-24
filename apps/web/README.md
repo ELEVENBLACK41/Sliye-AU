@@ -26,6 +26,7 @@ flowchart LR
 | `/dashboard/pending-access` | 新用户尚无部门或角色时展示待授权说明                     |
 | `/dashboard/forbidden`      | 中文 403 页面                                            |
 | `/dashboard/users`          | 部门树、用户调动/状态、角色、范围授权、直接授权和审计    |
+| `/dashboard/profile`        | 本人头像上传、移除、显示名称修改和只读账号信息          |
 | `/dashboard/decisions`      | 真实决策列表、空状态和创建入口                           |
 | `/dashboard/decisions/:id`  | 真实决策详情与参与者；后端防 IDOR                        |
 | `/dashboard/ai`             | 需要 `ai:chat:use` 的流式 AI 对话                        |
@@ -63,6 +64,7 @@ apps/web/src/
 │   └── api/                     # Auth、权限管理、决策、AI BFF
 ├── features/
 │   ├── auth/                    # 认证资料、Cookie 刷新、页面权限工具
+│   ├── profile/                 # 个人资料表单与头像管理
 │   ├── access-management/       # 权限与组织管理
 │   ├── decisions/               # 决策列表/详情/创建
 │   ├── ai/                      # AI 对话客户端

@@ -31,6 +31,7 @@ packages/
 DATABASE_URL=postgresql://用户名:密码@localhost:5432/数据库名
 PORT=3001
 SERVER_API_PREFIX=api/v1
+AVATAR_UPLOAD_DIR=./uploads/avatars
 ```
 
 **示例（本地开发）：**
@@ -39,17 +40,19 @@ SERVER_API_PREFIX=api/v1
 DATABASE_URL=postgresql://postgres:123456@localhost:5432/Sliye
 PORT=3001
 SERVER_API_PREFIX=api/v1
+AVATAR_UPLOAD_DIR=./uploads/avatars
 ```
 
 > 参考模板：[apps/server/.env.example](apps/server/.env.example)
 
 **变量说明：**
 
-| 变量名              | 说明                                             | 默认值   |
-| ------------------- | ------------------------------------------------ | -------- |
-| `DATABASE_URL`      | PostgreSQL 连接字符串，Prisma 和 NestJS 都会读取 | 必填     |
-| `PORT`              | NestJS 监听端口                                  | `3001`   |
-| `SERVER_API_PREFIX` | NestJS 全局 API 前缀                             | `api/v1` |
+| 变量名              | 说明                                                         | 默认值              |
+| ------------------- | ------------------------------------------------------------ | ------------------- |
+| `DATABASE_URL`      | PostgreSQL 连接字符串，Prisma 和 NestJS 都会读取             | 必填                |
+| `PORT`              | NestJS 监听端口                                              | `3001`              |
+| `SERVER_API_PREFIX` | NestJS 全局 API 前缀                                         | `api/v1`            |
+| `AVATAR_UPLOAD_DIR` | 用户头像本地存储目录；生产环境需使用具备持久化能力的挂载目录 | `./uploads/avatars` |
 
 ### 2. 前端（apps/web）
 

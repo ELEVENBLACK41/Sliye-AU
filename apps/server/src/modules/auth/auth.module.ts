@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { AccessTokenGuard } from './guards/access-token.guard';
 import { PermissionGuard } from './guards/permission.guard';
 import { AuthValidationService } from './services/auth-validation.service';
+import { AvatarStorageService } from './services/avatar-storage.service';
 import { AuthorizationService } from './services/authorization.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { PasswordCryptoService } from './services/password-crypto.service';
@@ -18,6 +19,7 @@ import { TokenService } from './services/token.service';
   providers: [
     AuthService,
     AuthValidationService,
+    AvatarStorageService,
     AuthorizationService,
     PasswordCryptoService,
     PasswordService,

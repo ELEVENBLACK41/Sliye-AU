@@ -81,7 +81,9 @@ apps/server/
 | --------------------- | ------------------------------------------------------- | ------------------------------------------------ |
 | GET                   | `/health`、`/health/ready`                              | `@Public()`                                      |
 | GET/POST              | `/auth/password-public-key`、注册、登录、刷新、邮箱验证 | `@Public()`                                      |
-| GET                   | `/auth/profile`、`/auth/me`                             | 仅认证                                           |
+| GET/PATCH             | `/auth/profile`、`/auth/me`                             | 仅认证；读取或修改本人资料                       |
+| POST/DELETE           | `/auth/profile/avatar`                                  | 仅认证；上传、替换或移除本人头像                 |
+| GET                   | `/auth/profile/avatar/:fileName`                        | 仅认证；读取不可变头像资源                       |
 | POST                  | `/auth/logout`                                          | 仅认证                                           |
 | GET                   | `/access-management/users`                              | `access:user:read` + 用户范围                    |
 | PATCH                 | `/access-management/users/:id/status`                   | `access:user:status:update` + 用户范围           |
@@ -158,3 +160,9 @@ pnpm access-control:check
 ```
 
 E2E 只验证公开健康检查和未登录全局鉴权，不向当前业务数据库写入临时测试数据。
+
+## 头像存储
+
+个人头像默认保存在 `AVATAR_UPLOAD_DIR=./uploads/avatars`，该目录已被 Git 忽略。上传接口仅接受经过文件头校验的 JPG、PNG 和 WebP，单个文件最大 2MB；替换或移除头像时会清理旧的本地文件。
+
+本地文件存储用于当前开发和单实例部署。生产环境必须把 `AVATAR_UPLOAD_DIR` 指向持久化挂载目录；如果后续改用对象存储，只替换 `AvatarStorageService` 的实现，不需要修改个人资料接口和前端页面。修改该环境变量后需要重启 NestJS 服务。

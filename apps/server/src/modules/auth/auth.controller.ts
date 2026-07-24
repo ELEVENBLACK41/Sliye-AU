@@ -1,9 +1,25 @@
 /**
  * 本文件定义认证、公开注册、邮箱验证、会话刷新和个人资料 HTTP 接口。
  */
-import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Req,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
@@ -12,6 +28,11 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SendEmailVerificationDto } from './dto/send-email-verification.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import {
+  MAX_AVATAR_FILE_SIZE,
+  type AvatarUploadFile,
+} from './services/avatar-storage.service';
 import { PasswordCryptoService } from './services/password-crypto.service';
 import type {
   AuthenticatedRequest,
@@ -87,6 +108,72 @@ export class AuthController {
   @ApiBearerAuth()
   profile(@CurrentUser() user: AuthUserResponse) {
     return this.authService.getProfile(user.id);
+  }
+
+  /** 修改当前登录用户的显示名称。 */
+  @Patch('profile')
+  @ApiBearerAuth()
+  updateProfile(
+    @CurrentUser() user: AuthUserResponse,
+    @Body() body: UpdateProfileDto,
+    @Req() request: Request,
+  ) {
+    return this.authService.updateProfile(
+      user.id,
+      body,
+      this.getClientMeta(request),
+    );
+  }
+
+  /** 上传并替换当前登录用户头像。 */
+  @Post('profile/avatar')
+  @HttpCode(200)
+  @ApiBearerAuth()
+  @UseInterceptors(
+    FileInterceptor('avatar', {
+      limits: { fileSize: MAX_AVATAR_FILE_SIZE },
+    }),
+  )
+  updateAvatar(
+    @CurrentUser() user: AuthUserResponse,
+    @UploadedFile() file: AvatarUploadFile | undefined,
+    @Req() request: Request,
+  ) {
+    if (!file) {
+      throw new BadRequestException('请选择需要上传的头像文件');
+    }
+
+    return this.authService.updateAvatar(
+      user.id,
+      file,
+      this.getClientMeta(request),
+    );
+  }
+
+  /** 移除当前登录用户头像。 */
+  @Delete('profile/avatar')
+  @ApiBearerAuth()
+  removeAvatar(@CurrentUser() user: AuthUserResponse, @Req() request: Request) {
+    return this.authService.removeAvatar(user.id, this.getClientMeta(request));
+  }
+
+  /** 返回受认证保护的不可变头像文件。 */
+  @Get('profile/avatar/:fileName')
+  @ApiBearerAuth()
+  async avatar(
+    @Param('fileName') fileName: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const avatar = await this.authService.getAvatar(fileName);
+
+    response.set({
+      'Content-Type': avatar.contentType,
+      'Content-Length': avatar.buffer.length.toString(),
+      'Cache-Control': 'private, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff',
+    });
+
+    return new StreamableFile(avatar.buffer);
   }
 
   /** 查询当前登录用户资料的兼容别名接口。 */

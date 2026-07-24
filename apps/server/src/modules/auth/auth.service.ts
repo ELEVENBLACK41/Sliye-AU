@@ -23,6 +23,12 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SendEmailVerificationDto } from './dto/send-email-verification.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import {
+  AvatarStorageService,
+  type AvatarUploadFile,
+  type StoredAvatar,
+} from './services/avatar-storage.service';
 import { EmailVerificationService } from './services/email-verification.service';
 import { AuthorizationService } from './services/authorization.service';
 import { AuthValidationService } from './services/auth-validation.service';
@@ -36,6 +42,7 @@ import {
   OperationResult,
   RegisterResponse,
   RequestClientMeta,
+  UpdateAvatarResult,
   type AuthorizationUserRecord,
 } from './types/auth.types';
 
@@ -75,6 +82,7 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly authorizationService: AuthorizationService,
+    private readonly avatarStorageService: AvatarStorageService,
   ) {}
 
   /** 注册新用户、保存密码凭据并生成邮箱验证码。 */
@@ -449,6 +457,116 @@ export class AuthService {
   /** 查询包含最新部门、角色和权限码的认证资料。 */
   async getProfile(userId: number): Promise<AuthUserResponse> {
     return this.getAuthUserResponse(userId);
+  }
+
+  /** 修改当前登录用户允许自行维护的个人资料字段。 */
+  async updateProfile(
+    userId: number,
+    dto: UpdateProfileDto,
+    meta: RequestClientMeta,
+  ): Promise<AuthUserResponse> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { name: dto.name },
+    });
+
+    await this.writeAuditLog({
+      userId,
+      event: AUTH_AUDIT_EVENTS.profileUpdated,
+      success: true,
+      metadata: { changedFields: 'name' },
+      meta,
+    });
+
+    return this.getAuthUserResponse(userId);
+  }
+
+  /** 保存当前用户的新头像、更新资料地址并清理被替换的旧文件。 */
+  async updateAvatar(
+    userId: number,
+    file: AvatarUploadFile,
+    meta: RequestClientMeta,
+  ): Promise<UpdateAvatarResult> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatarUrl: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('当前用户不可用，请重新登录');
+    }
+
+    const avatarUrl = await this.avatarStorageService.save(userId, file);
+
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl },
+      });
+    } catch (error) {
+      await this.avatarStorageService.removeByUrl(avatarUrl);
+      throw error;
+    }
+
+    await this.removeOldAvatarWithoutBlocking(user.avatarUrl);
+    await this.writeAuditLog({
+      userId,
+      event: AUTH_AUDIT_EVENTS.avatarUpdated,
+      success: true,
+      meta,
+    });
+
+    return { user: await this.getAuthUserResponse(userId) };
+  }
+
+  /** 移除当前用户头像，并保留其他个人资料不变。 */
+  async removeAvatar(
+    userId: number,
+    meta: RequestClientMeta,
+  ): Promise<UpdateAvatarResult> {
+    const previousUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatarUrl: true },
+    });
+
+    if (!previousUser) {
+      throw new UnauthorizedException('当前用户不可用，请重新登录');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: null },
+    });
+
+    await this.removeOldAvatarWithoutBlocking(previousUser.avatarUrl);
+    await this.writeAuditLog({
+      userId,
+      event: AUTH_AUDIT_EVENTS.avatarRemoved,
+      success: true,
+      meta,
+    });
+
+    return { user: await this.getAuthUserResponse(userId) };
+  }
+
+  /** 读取经过安全文件名校验的头像内容。 */
+  getAvatar(fileName: string): Promise<StoredAvatar> {
+    return this.avatarStorageService.read(fileName);
+  }
+
+  /** 清理旧头像文件；清理失败只记录告警，不回滚已经成功的资料修改。 */
+  private async removeOldAvatarWithoutBlocking(
+    avatarUrl: string | null | undefined,
+  ): Promise<void> {
+    try {
+      await this.avatarStorageService.removeByUrl(avatarUrl);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to remove old avatar: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
   }
 
   /** 登录前检查账号状态是否允许使用。 */

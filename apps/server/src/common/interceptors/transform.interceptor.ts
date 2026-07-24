@@ -9,6 +9,7 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
+  StreamableFile,
 } from '@nestjs/common';
 import type { ApiResponse } from '@workspace/contracts/common';
 import type { Response } from 'express';
@@ -49,14 +50,17 @@ export class TransformInterceptor<T> implements NestInterceptor<
 
     return next.handle().pipe(
       map(
-        (data: T): ApiResponse<T> => ({
-          success: true,
-          code: API_SUCCESS_CODE,
-          message: API_SUCCESS_MESSAGE,
-          data,
-          timestamp: Date.now(),
-          requestId,
-        }),
+        (data: T): ApiResponse<T> =>
+          data instanceof StreamableFile
+            ? (data as unknown as ApiResponse<T>)
+            : {
+                success: true,
+                code: API_SUCCESS_CODE,
+                message: API_SUCCESS_MESSAGE,
+                data,
+                timestamp: Date.now(),
+                requestId,
+              },
       ),
     );
   }

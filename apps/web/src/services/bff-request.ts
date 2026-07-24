@@ -72,6 +72,24 @@ export async function requestNest<TData, TBody = unknown>(
   }
 }
 
+/**
+ * 请求 NestJS 的二进制资源并保留原始响应。
+ *
+ * 仅供需要流式转发图片等非统一 JSON 响应的受保护 BFF 使用。
+ */
+export async function requestNestRaw(path: string, options?: RequestInit): Promise<Response> {
+  const baseUrl = getNestBaseUrl();
+
+  if (!baseUrl) {
+    throw new Error('Nest base URL is not configured');
+  }
+
+  return fetch(`${baseUrl}${path}`, {
+    ...options,
+    cache: options?.cache ?? 'no-store',
+  });
+}
+
 /** 读取 NestJS 地址，并自动补全默认 API 前缀。 */
 function getNestBaseUrl(): string | undefined {
   const baseUrl = process.env.NEST_BASE_URL?.replace(/\/+$/, '');

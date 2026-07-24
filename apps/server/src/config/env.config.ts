@@ -20,6 +20,7 @@ export interface ServerEnvConfig {
   AUTH_EMAIL_CODE_MAX_ATTEMPTS: number;
   CHAT_SOCKET_TICKET_SECRET?: string;
   CHAT_SOCKET_TICKET_TTL_SECONDS: number;
+  AVATAR_UPLOAD_DIR: string;
   WEB_ORIGINS: string[];
 }
 
@@ -31,6 +32,7 @@ const DEFAULT_EMAIL_CODE_TTL_SECONDS = 10 * 60;
 const DEFAULT_EMAIL_CODE_COOLDOWN_SECONDS = 60;
 const DEFAULT_EMAIL_CODE_MAX_ATTEMPTS = 5;
 const DEFAULT_CHAT_SOCKET_TICKET_TTL_SECONDS = 5 * 60;
+const DEFAULT_AVATAR_UPLOAD_DIR = './uploads/avatars';
 const DEFAULT_WEB_ORIGINS = ['http://localhost:3000'];
 
 // 校验 ConfigModule 读取到的环境变量，并返回带默认值的强类型配置对象。
@@ -111,6 +113,12 @@ export function validateEnvConfig(
       config.CHAT_SOCKET_TICKET_TTL_SECONDS,
       'CHAT_SOCKET_TICKET_TTL_SECONDS',
       DEFAULT_CHAT_SOCKET_TICKET_TTL_SECONDS,
+      errors,
+    ),
+    AVATAR_UPLOAD_DIR: readOptionalString(
+      config.AVATAR_UPLOAD_DIR,
+      'AVATAR_UPLOAD_DIR',
+      DEFAULT_AVATAR_UPLOAD_DIR,
       errors,
     ),
     WEB_ORIGINS: readWebOrigins(config.WEB_ORIGINS, errors),
