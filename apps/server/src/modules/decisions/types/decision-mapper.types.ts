@@ -132,6 +132,8 @@ export type DecisionProposalRecord = {
   id: number;
   /** 所属决策主键。 */
   decisionId: number;
+  /** 可选的提案形成会议主键。 */
+  meetingId: number | null;
   /** 提案标题。 */
   title: string;
   /** 提案补充说明。 */
@@ -208,6 +210,8 @@ export type DecisionVoteRoundRecord = {
   id: number;
   /** 所属决策主键。 */
   decisionId: number;
+  /** 可选的投票发起会议主键。 */
+  meetingId: number | null;
   /** 投票标题。 */
   title: string;
   /** 投票补充说明。 */
@@ -246,6 +250,8 @@ export type DecisionResolutionRecord = {
   id: number;
   /** 所属决策主键。 */
   decisionId: number;
+  /** 可选的决议形成会议主键。 */
+  meetingId: number | null;
   /** 来源提案主键。 */
   sourceProposalId: number | null;
   /** 来源投票轮次主键。 */

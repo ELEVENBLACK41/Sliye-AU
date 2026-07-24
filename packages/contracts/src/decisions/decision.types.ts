@@ -132,6 +132,8 @@ export type DecisionProposal = {
   id: number;
   /** 提案所属决策主键。 */
   decisionId: number;
+  /** 提案形成会议主键；不在会议中创建时为 `null`。 */
+  meetingId: number | null;
   /** 提案标题。 */
   title: string;
   /** 提案的背景、方案或补充说明。 */
@@ -186,6 +188,8 @@ export type DecisionVoteRound = {
   id: number;
   /** 投票所属决策主键。 */
   decisionId: number;
+  /** 投票发起会议主键；不在会议中发起时为 `null`。 */
+  meetingId: number | null;
   /** 本轮表决的提案主键；兼容不直接关联提案的通用投票时为 `null`。 */
   proposalId: number | null;
   /** 投票标题。 */
@@ -238,6 +242,8 @@ export type DecisionResolution = {
   id: number;
   /** 决议所属决策主键。 */
   decisionId: number;
+  /** 决议形成会议主键；不在会议中形成时为 `null`。 */
+  meetingId: number | null;
   /** 被正式采纳的来源提案主键。 */
   sourceProposalId: number | null;
   /** 作为决议依据的已关闭投票轮次主键。 */

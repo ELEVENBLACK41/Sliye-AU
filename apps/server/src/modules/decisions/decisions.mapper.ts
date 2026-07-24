@@ -129,6 +129,7 @@ export function toDecisionProposal(
   return {
     id: proposal.id,
     decisionId: proposal.decisionId,
+    meetingId: proposal.meetingId,
     title: proposal.title,
     description: proposal.description,
     status: proposal.status,
@@ -153,6 +154,7 @@ export function toDecisionVoteRound(
   return {
     id: round.id,
     decisionId: round.decisionId,
+    meetingId: round.meetingId,
     proposalId:
       round.options.find((option) => option.code === 'APPROVE')?.proposalId ??
       null,
@@ -196,6 +198,7 @@ export function toDecisionResolution(
   return {
     id: resolution.id,
     decisionId: resolution.decisionId,
+    meetingId: resolution.meetingId,
     sourceProposalId: resolution.sourceProposalId,
     sourceVoteRoundId: resolution.sourceVoteRoundId,
     title: resolution.title,

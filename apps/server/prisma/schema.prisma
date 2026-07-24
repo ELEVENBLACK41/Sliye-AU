@@ -679,8 +679,8 @@ model DiscussionSpace {
 model DiscussionMessage {
   id Int @id @default(autoincrement())
 
-  spaceId  Int
-  authorId Int?
+  spaceId         Int
+  authorId        Int?
   /// 浏览器生成的消息幂等标识；系统消息不经过浏览器发送时允许为空。
   clientMessageId String? @db.Uuid
   meetingId       Int?
@@ -705,6 +705,7 @@ model DiscussionMessage {
 
   events DecisionEvent[]
 
+  @@unique([authorId, clientMessageId])
   @@index([spaceId, createdAt])
   @@index([spaceId, id])
   @@index([authorId])
@@ -712,7 +713,6 @@ model DiscussionMessage {
   @@index([replyToId])
   @@index([pinnedById])
   @@index([type])
-  @@unique([authorId, clientMessageId])
 }
 
 model Decision {
@@ -792,6 +792,8 @@ model DecisionProposal {
 
   decisionId Int
   creatorId  Int
+  /// 可选的提案形成会议；为空表示提案在非会议协作场景中创建。
+  meetingId  Int?
 
   title       String
   description String?
@@ -802,8 +804,9 @@ model DecisionProposal {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  creator  User     @relation("ProposalCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  decision Decision        @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  creator  User            @relation("ProposalCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  meeting  MeetingSession? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
 
   voteOptions DecisionVoteOption[]
   resolutions DecisionResolution[]
@@ -811,6 +814,7 @@ model DecisionProposal {
 
   @@index([decisionId])
   @@index([creatorId])
+  @@index([meetingId])
   @@index([status])
 }
 
@@ -822,6 +826,8 @@ model DecisionVoteRound {
   decisionId Int
   /// 创建本轮投票的用户。
   creatorId  Int
+  /// 可选的投票发起会议；为空表示投票在非会议协作场景中发起。
+  meetingId  Int?
 
   /// 面向参与者展示的投票标题。
   title       String
@@ -846,8 +852,9 @@ model DecisionVoteRound {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @default(now()) @updatedAt
 
-  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  creator  User     @relation("DecisionVoteRoundCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  decision Decision        @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  creator  User            @relation("DecisionVoteRoundCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  meeting  MeetingSession? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
 
   options     DecisionVoteOption[]
   ballots     DecisionBallot[]
@@ -856,6 +863,7 @@ model DecisionVoteRound {
 
   @@index([decisionId])
   @@index([creatorId])
+  @@index([meetingId])
   @@index([status])
   @@index([createdAt])
 }
@@ -1051,6 +1059,8 @@ model MeetingSession {
 
   participants MeetingParticipant[]
   messages     DiscussionMessage[]
+  proposals    DecisionProposal[]
+  voteRounds   DecisionVoteRound[]
   recordings   MeetingRecording[]
   resolutions  DecisionResolution[]
   events       DecisionEvent[]

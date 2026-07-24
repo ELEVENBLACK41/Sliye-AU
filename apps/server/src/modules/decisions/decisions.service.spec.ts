@@ -1436,6 +1436,7 @@ describe('DecisionsService', () => {
       {
         id: 90,
         decisionId: 20,
+        meetingId: null,
         sourceProposalId: 50,
         sourceVoteRoundId: 70,
         title: resolution.title,
