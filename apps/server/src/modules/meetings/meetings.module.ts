@@ -1,0 +1,15 @@
+/**
+ * 本文件注册无音视频会议生命周期相关的控制器与服务。
+ */
+import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
+import { MeetingsController } from './meetings.controller';
+import { MeetingsService } from './meetings.service';
+import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
+
+@Module({
+  imports: [AuthModule],
+  controllers: [MeetingsController],
+  providers: [MeetingsService, MeetingLifecycleService],
+})
+export class MeetingsModule {}
