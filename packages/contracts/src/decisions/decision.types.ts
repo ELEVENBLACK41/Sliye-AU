@@ -338,6 +338,8 @@ export type CreateDecisionProposalRequestPayload = {
   title: string;
   /** 提案的背景、方案或补充说明。 */
   description?: string;
+  /** 可选的提案形成会议主键；传入时会议必须属于当前决策且正在进行。 */
+  meetingId?: number;
 };
 
 /** 为一个开放提案创建并立即开启投票的请求体。 */
@@ -352,6 +354,8 @@ export type CreateDecisionVoteRoundRequestPayload = {
   isAnonymous?: boolean;
   /** 达到有效投票所需的最少选票数；省略时不限制。 */
   quorumCount?: number;
+  /** 可选的投票发起会议主键；传入时会议必须属于当前决策且正在进行。 */
+  meetingId?: number;
 };
 
 /** 当前参与者提交单选选票的请求体。 */
@@ -378,6 +382,8 @@ export type CreateDecisionResolutionRequestPayload = {
   title: string;
   /** 正式决议正文和确认理由。 */
   content: string;
+  /** 可选的决议形成会议主键；传入时会议必须属于当前决策且正在进行。 */
+  meetingId?: number;
 };
 
 /** 决策列表接口返回的业务数据。 */

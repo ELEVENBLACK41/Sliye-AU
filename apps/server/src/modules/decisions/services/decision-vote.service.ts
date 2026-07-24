@@ -21,6 +21,7 @@ import {
 } from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
+import { MeetingContextService } from '../../meetings/services/meeting-context.service';
 import { CreateDecisionVoteRoundDto } from '../dto/create-decision-vote-round.dto';
 import { SubmitDecisionBallotDto } from '../dto/submit-decision-ballot.dto';
 import { toDecisionVoteRound } from '../decisions.mapper';
@@ -56,6 +57,7 @@ export class DecisionVoteService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
+    private readonly meetingContextService: MeetingContextService,
   ) {}
 
   /** 查询可访问决策的投票轮次，开放期间不返回实时选项票数。 */
@@ -179,10 +181,18 @@ export class DecisionVoteService {
         });
       }
 
+      const meetingId =
+        await this.meetingContextService.resolveWritableMeetingId(
+          decision.id,
+          dto.meetingId,
+          tx,
+        );
+
       const result = await tx.decisionVoteRound.create({
         data: {
           decisionId: decision.id,
           creatorId: authorization.userId,
+          meetingId,
           title: dto.title ?? `是否采纳「${proposal.title}」`,
           description: dto.description,
           method: VoteMethod.SINGLE_CHOICE,
@@ -213,6 +223,7 @@ export class DecisionVoteService {
           actorId: authorization.userId,
           proposalId: proposal.id,
           voteRoundId: result.id,
+          meetingId,
           type: DecisionEventType.VOTE_ROUND_CREATED,
           title: '创建投票轮次',
           payload: { proposalId: proposal.id, voteRoundId: result.id },
@@ -229,6 +240,7 @@ export class DecisionVoteService {
           actorId: authorization.userId,
           proposalId: proposal.id,
           voteRoundId: result.id,
+          meetingId,
           type: DecisionEventType.VOTE_ROUND_OPENED,
           title: '开启投票',
           after: {

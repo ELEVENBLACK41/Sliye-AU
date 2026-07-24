@@ -55,4 +55,11 @@ export class CreateDecisionVoteRoundDto implements CreateDecisionVoteRoundReques
   @IsInt()
   @Min(1)
   quorumCount?: number;
+
+  /** 可选的投票发起会议；服务端会校验会议属于当前决策且正在进行。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  meetingId?: number;
 }

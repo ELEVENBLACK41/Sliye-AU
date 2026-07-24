@@ -78,6 +78,8 @@ export type CreateDecisionChatMessageRequest = {
   content: string;
   /** 可选的同群组一级回复目标消息主键。 */
   replyToId?: number;
+  /** 可选的来源会议主键；传入时会议必须属于当前决策且正在进行。 */
+  meetingId?: number;
 };
 
 /** 浏览器连接指定决策实时房间所需的短期凭证。 */

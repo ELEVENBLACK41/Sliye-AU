@@ -18,6 +18,7 @@ import {
 } from '../../generated/prisma';
 import type { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
+import type { MeetingContextService } from '../meetings/services/meeting-context.service';
 import { DecisionsService } from './decisions.service';
 import { DecisionCoreService } from './services/decision-core.service';
 import { DecisionParticipantService } from './services/decision-participant.service';
@@ -30,12 +31,31 @@ function createDecisionsService(
   prisma: PrismaService,
   authorizationService: AuthorizationService,
 ): DecisionsService {
+  const meetingContextService = {
+    resolveWritableMeetingId: jest.fn(
+      (_decisionId: number, meetingId: number | undefined) =>
+        Promise.resolve(meetingId ?? null),
+    ),
+  } as unknown as MeetingContextService;
+
   return new DecisionsService(
     new DecisionCoreService(prisma, authorizationService),
     new DecisionParticipantService(prisma, authorizationService),
-    new DecisionProposalService(prisma, authorizationService),
-    new DecisionResolutionService(prisma, authorizationService),
-    new DecisionVoteService(prisma, authorizationService),
+    new DecisionProposalService(
+      prisma,
+      authorizationService,
+      meetingContextService,
+    ),
+    new DecisionResolutionService(
+      prisma,
+      authorizationService,
+      meetingContextService,
+    ),
+    new DecisionVoteService(
+      prisma,
+      authorizationService,
+      meetingContextService,
+    ),
   );
 }
 
@@ -138,6 +158,7 @@ function createProposalRecord() {
     creatorId: 7,
     title: '先抽离权限计算服务',
     description: '稳定权限边界后再迁移调用方。',
+    meetingId: null,
     status: ProposalStatus.OPEN,
     acceptedAt: null,
     closedAt: null,
@@ -966,6 +987,7 @@ describe('DecisionsService', () => {
       {
         id: 50,
         decisionId: 20,
+        meetingId: null,
         title: proposal.title,
         description: proposal.description,
         status: 'OPEN',
@@ -1030,6 +1052,7 @@ describe('DecisionsService', () => {
       service.createProposal(createAuthorization(), 20, {
         title: proposal.title,
         description: proposal.description,
+        meetingId: 90,
       }),
     ).resolves.toMatchObject({ id: 50, status: 'OPEN' });
     expect(createProposal).toHaveBeenCalledWith({
@@ -1038,6 +1061,7 @@ describe('DecisionsService', () => {
         creatorId: 7,
         title: proposal.title,
         description: proposal.description,
+        meetingId: 90,
       },
       include: {
         creator: { select: { id: true, name: true, avatarUrl: true } },
@@ -1048,6 +1072,7 @@ describe('DecisionsService', () => {
         decisionId: 20,
         actorId: 7,
         proposalId: 50,
+        meetingId: 90,
         type: 'PROPOSAL_CREATED',
         title: '创建提案',
         payload: { proposalId: 50 },
@@ -1198,6 +1223,7 @@ describe('DecisionsService', () => {
         proposalId: 50,
         isAnonymous: true,
         quorumCount: 2,
+        meetingId: 90,
       }),
     ).resolves.toMatchObject({ id: 70, status: 'OPEN', proposalId: 50 });
     expect(createRound.mock.calls[0]?.[0]).toMatchObject({
@@ -1205,6 +1231,7 @@ describe('DecisionsService', () => {
         method: VoteMethod.SINGLE_CHOICE,
         status: VoteRoundStatus.OPEN,
         maxChoices: 1,
+        meetingId: 90,
         options: {
           create: [
             { code: 'APPROVE', proposalId: 50 },
@@ -1218,12 +1245,14 @@ describe('DecisionsService', () => {
     expect(createEvent.mock.calls[0]?.[0]).toMatchObject({
       data: {
         voteRoundId: 70,
+        meetingId: 90,
         type: DecisionEventType.VOTE_ROUND_CREATED,
       },
     });
     expect(createEvent.mock.calls[1]?.[0]).toMatchObject({
       data: {
         voteRoundId: 70,
+        meetingId: 90,
         type: DecisionEventType.VOTE_ROUND_OPENED,
       },
     });
@@ -1545,9 +1574,17 @@ describe('DecisionsService', () => {
       void input;
       return Promise.resolve({ count: 1 });
     });
+    const updateDiscussionSpace = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve({ id: 80 });
+    });
+    const createResolution = jest.fn((input: unknown) => {
+      void input;
+      return Promise.resolve(resolution);
+    });
     const transaction = {
       decision: { updateMany: resolveDecision },
-      discussionSpace: { update: jest.fn().mockResolvedValue({ id: 80 }) },
+      discussionSpace: { update: updateDiscussionSpace },
       decisionProposal: {
         findMany: jest.fn().mockResolvedValue([{ id: 51 }]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -1556,7 +1593,7 @@ describe('DecisionsService', () => {
         findMany: jest.fn().mockResolvedValue([{ id: 71 }]),
         updateMany: cancelOtherVoteRounds,
       },
-      decisionResolution: { create: jest.fn().mockResolvedValue(resolution) },
+      decisionResolution: { create: createResolution },
       decisionEvent: { create: createEvent },
     };
     const prisma = {
@@ -1592,6 +1629,7 @@ describe('DecisionsService', () => {
         sourceVoteRoundId: 70,
         title: resolution.title,
         content: resolution.content,
+        meetingId: 90,
       }),
     ).resolves.toMatchObject({
       id: 90,
@@ -1611,13 +1649,22 @@ describe('DecisionsService', () => {
       },
     });
     expect(resolvedDecisionInput.data.decidedAt).toBeInstanceOf(Date);
-    expect(transaction.discussionSpace.update).toHaveBeenCalledWith({
+    const discussionSpaceInput = transaction.discussionSpace.update.mock
+      .calls[0]?.[0] as {
+      data: { closedAt: unknown };
+    };
+    expect(discussionSpaceInput).toMatchObject({
       where: { id: 80 },
       data: {
         status: DiscussionSpaceStatus.READ_ONLY,
-        closedAt: expect.any(Date),
       },
     });
+    expect(discussionSpaceInput.data.closedAt).toBeInstanceOf(Date);
+    const resolutionCreateInput = transaction.decisionResolution.create.mock
+      .calls[0]?.[0] as {
+      data: { meetingId: number | null };
+    };
+    expect(resolutionCreateInput.data.meetingId).toBe(90);
     expect(transaction.decisionProposal.updateMany).toHaveBeenCalledTimes(2);
     const cancelledRoundInput = transaction.decisionVoteRound.updateMany.mock
       .calls[0]?.[0] as {

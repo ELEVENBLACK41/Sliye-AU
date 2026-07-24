@@ -10,6 +10,7 @@ import {
 } from '../../../generated/prisma';
 import type { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
+import type { MeetingContextService } from '../../meetings/services/meeting-context.service';
 import type { DecisionChatGateway } from '../gateways/decision-chat.gateway';
 import { DecisionChatService } from './decision-chat.service';
 import type { DecisionChatTicketService } from './decision-chat-ticket.service';
@@ -53,6 +54,7 @@ function createMessageRecord(
     content: string;
     clientMessageId: string;
     replyToId: number | null;
+    meetingId: number | null;
   }> = {},
 ) {
   const createdAt = new Date(
@@ -65,7 +67,7 @@ function createMessageRecord(
     authorId: 7,
     clientMessageId:
       overrides.clientMessageId ?? '4f8ea9c0-6e12-4af3-81aa-6b4812449b72',
-    meetingId: null,
+    meetingId: overrides.meetingId ?? null,
     replyToId: overrides.replyToId ?? null,
     pinnedById: null,
     type: DiscussionMessageType.TEXT,
@@ -90,12 +92,19 @@ function createService(
   gateway: DecisionChatGateway = {
     broadcastMessageCreated: jest.fn(),
   } as unknown as DecisionChatGateway,
+  meetingContextService: MeetingContextService = {
+    resolveWritableMeetingId: jest.fn(
+      (_decisionId: number, meetingId: number | undefined) =>
+        Promise.resolve(meetingId ?? null),
+    ),
+  } as unknown as MeetingContextService,
 ): DecisionChatService {
   return new DecisionChatService(
     prisma,
     authorizationService,
     ticketService,
     gateway,
+    meetingContextService,
   );
 }
 
@@ -358,6 +367,7 @@ describe('DecisionChatService', () => {
       service.create(createAuthorization(), 20, {
         clientMessageId: createdMessage.clientMessageId,
         content: '新消息',
+        meetingId: 90,
       }),
     ).resolves.toMatchObject({ id: 42, content: '新消息' });
     expect(prisma.discussionMessage.create).toHaveBeenCalledWith(
@@ -368,6 +378,7 @@ describe('DecisionChatService', () => {
           clientMessageId: createdMessage.clientMessageId,
           content: '新消息',
           replyToId: undefined,
+          meetingId: 90,
         },
       }),
     );

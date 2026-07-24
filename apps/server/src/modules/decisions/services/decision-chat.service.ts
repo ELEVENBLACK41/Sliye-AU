@@ -17,6 +17,7 @@ import {
 } from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
+import { MeetingContextService } from '../../meetings/services/meeting-context.service';
 import { toDecisionChatMessage } from '../decisions.mapper';
 import { CreateDecisionChatMessageDto } from '../dto/create-decision-chat-message.dto';
 import { ListDecisionChatMessagesDto } from '../dto/list-decision-chat-messages.dto';
@@ -65,6 +66,7 @@ export class DecisionChatService {
     private readonly authorizationService: AuthorizationService,
     private readonly ticketService: DecisionChatTicketService,
     private readonly gateway: DecisionChatGateway,
+    private readonly meetingContextService: MeetingContextService,
   ) {}
 
   /** 为有权查看当前决策的登录会话签发短期 Socket Ticket。 */
@@ -152,6 +154,10 @@ export class DecisionChatService {
 
     this.assertWritable(decision);
     await this.assertReplyTarget(decision.spaceId, dto.replyToId);
+    const meetingId = await this.meetingContextService.resolveWritableMeetingId(
+      decision.id,
+      dto.meetingId,
+    );
 
     try {
       const message = await this.prisma.discussionMessage.create({
@@ -161,6 +167,7 @@ export class DecisionChatService {
           clientMessageId: dto.clientMessageId,
           content: dto.content,
           replyToId: dto.replyToId,
+          meetingId,
         },
         include: decisionChatMessageInclude,
       });
@@ -320,10 +327,12 @@ export class DecisionChatService {
     dto: CreateDecisionChatMessageDto,
   ): DecisionChatMessage {
     const requestedReplyToId = dto.replyToId ?? null;
+    const requestedMeetingId = dto.meetingId ?? null;
     const matchesOriginalRequest =
       message.spaceId === spaceId &&
       message.content === dto.content &&
-      message.replyToId === requestedReplyToId;
+      message.replyToId === requestedReplyToId &&
+      message.meetingId === requestedMeetingId;
 
     if (!matchesOriginalRequest) {
       throw new BusinessException({

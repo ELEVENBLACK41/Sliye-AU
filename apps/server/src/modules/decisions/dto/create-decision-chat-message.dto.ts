@@ -37,4 +37,11 @@ export class CreateDecisionChatMessageDto implements CreateDecisionChatMessageRe
   @IsInt()
   @Min(1)
   replyToId?: number;
+
+  /** 可选的来源会议；服务端会校验会议属于当前决策且正在进行。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  meetingId?: number;
 }

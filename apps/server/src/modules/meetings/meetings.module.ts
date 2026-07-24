@@ -6,10 +6,12 @@ import { AuthModule } from '../auth/auth.module';
 import { MeetingsController } from './meetings.controller';
 import { MeetingsService } from './meetings.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
+import { MeetingContextService } from './services/meeting-context.service';
 
 @Module({
   imports: [AuthModule],
   controllers: [MeetingsController],
-  providers: [MeetingsService, MeetingLifecycleService],
+  providers: [MeetingsService, MeetingContextService, MeetingLifecycleService],
+  exports: [MeetingContextService],
 })
 export class MeetingsModule {}

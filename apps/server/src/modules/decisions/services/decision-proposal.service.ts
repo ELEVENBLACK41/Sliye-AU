@@ -19,6 +19,7 @@ import {
 } from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
+import { MeetingContextService } from '../../meetings/services/meeting-context.service';
 import { CloseDecisionProposalDto } from '../dto/close-decision-proposal.dto';
 import { CreateDecisionProposalDto } from '../dto/create-decision-proposal.dto';
 import { toDecisionProposal } from '../decisions.mapper';
@@ -41,6 +42,7 @@ export class DecisionProposalService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
+    private readonly meetingContextService: MeetingContextService,
   ) {}
 
   /** 查询单个可访问决策的全部提案。 */
@@ -149,12 +151,20 @@ export class DecisionProposalService {
         });
       }
 
+      const meetingId =
+        await this.meetingContextService.resolveWritableMeetingId(
+          decision.id,
+          dto.meetingId,
+          tx,
+        );
+
       const result = await tx.decisionProposal.create({
         data: {
           decisionId: decision.id,
           creatorId: authorization.userId,
           title: dto.title,
           description: dto.description,
+          meetingId,
         },
         include: {
           creator: {
@@ -168,6 +178,7 @@ export class DecisionProposalService {
           decisionId: decision.id,
           actorId: authorization.userId,
           proposalId: result.id,
+          meetingId,
           type: DecisionEventType.PROPOSAL_CREATED,
           title: '创建提案',
           payload: { proposalId: result.id },

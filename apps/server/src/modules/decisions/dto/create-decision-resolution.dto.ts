@@ -49,4 +49,11 @@ export class CreateDecisionResolutionDto implements CreateDecisionResolutionRequ
   @MinLength(2)
   @MaxLength(5000)
   content!: string;
+
+  /** 可选的决议形成会议；服务端会校验会议属于当前决策且正在进行。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  meetingId?: number;
 }

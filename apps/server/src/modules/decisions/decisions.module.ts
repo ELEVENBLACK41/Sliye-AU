@@ -3,6 +3,7 @@
  */
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { MeetingsModule } from '../meetings/meetings.module';
 import { DecisionsController } from './decisions.controller';
 import { DecisionsService } from './decisions.service';
 import { DecisionChatGateway } from './gateways/decision-chat.gateway';
@@ -15,7 +16,7 @@ import { DecisionResolutionService } from './services/decision-resolution.servic
 import { DecisionVoteService } from './services/decision-vote.service';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, MeetingsModule],
   controllers: [DecisionsController],
   providers: [
     DecisionsService,

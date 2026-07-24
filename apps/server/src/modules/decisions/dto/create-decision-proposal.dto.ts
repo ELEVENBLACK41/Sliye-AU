@@ -4,7 +4,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { CreateDecisionProposalRequestPayload } from '@workspace/contracts/decisions';
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 /** 校验在现有决策中创建开放提案的请求。 */
 export class CreateDecisionProposalDto implements CreateDecisionProposalRequestPayload {
@@ -27,4 +34,11 @@ export class CreateDecisionProposalDto implements CreateDecisionProposalRequestP
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  /** 可选的提案形成会议；服务端会校验会议属于当前决策且正在进行。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  meetingId?: number;
 }

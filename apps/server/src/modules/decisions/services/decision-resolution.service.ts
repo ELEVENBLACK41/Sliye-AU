@@ -21,6 +21,7 @@ import {
 } from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
+import { MeetingContextService } from '../../meetings/services/meeting-context.service';
 import { CreateDecisionResolutionDto } from '../dto/create-decision-resolution.dto';
 import { toDecisionResolution } from '../decisions.mapper';
 
@@ -37,6 +38,7 @@ export class DecisionResolutionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
+    private readonly meetingContextService: MeetingContextService,
   ) {}
 
   /** 查询可访问决策的正式决议，并按确认时间倒序返回。 */
@@ -167,6 +169,13 @@ export class DecisionResolutionService {
         });
       }
 
+      const meetingId =
+        await this.meetingContextService.resolveWritableMeetingId(
+          decision.id,
+          dto.meetingId,
+          tx,
+        );
+
       await tx.discussionSpace.update({
         where: { id: decision.spaceId },
         data: {
@@ -232,6 +241,7 @@ export class DecisionResolutionService {
           decisionId: decision.id,
           sourceProposalId: proposal.id,
           sourceVoteRoundId: dto.sourceVoteRoundId,
+          meetingId,
           decidedById: authorization.userId,
           title: dto.title,
           content: dto.content,
@@ -247,6 +257,7 @@ export class DecisionResolutionService {
           decisionId: decision.id,
           actorId: authorization.userId,
           proposalId: proposal.id,
+          meetingId,
           type: DecisionEventType.PROPOSAL_UPDATED,
           title: '采纳提案',
           before: { status: ProposalStatus.OPEN },
@@ -262,6 +273,7 @@ export class DecisionResolutionService {
             decisionId: decision.id,
             actorId: authorization.userId,
             proposalId: otherProposal.id,
+            meetingId,
             type: DecisionEventType.PROPOSAL_UPDATED,
             title: '决议形成，取消其他提案',
             before: { status: ProposalStatus.OPEN },
@@ -278,6 +290,7 @@ export class DecisionResolutionService {
             decisionId: decision.id,
             actorId: authorization.userId,
             voteRoundId,
+            meetingId,
             type: DecisionEventType.VOTE_ROUND_CLOSED,
             title: '决议形成，取消其他投票',
             before: { status: VoteRoundStatus.OPEN },
@@ -295,6 +308,7 @@ export class DecisionResolutionService {
           proposalId: proposal.id,
           voteRoundId: dto.sourceVoteRoundId,
           resolutionId: result.id,
+          meetingId,
           type: DecisionEventType.RESOLUTION_CREATED,
           title: '形成正式决议',
           payload: {
@@ -314,6 +328,7 @@ export class DecisionResolutionService {
           decisionId: decision.id,
           actorId: authorization.userId,
           resolutionId: result.id,
+          meetingId,
           type: DecisionEventType.STATUS_CHANGED,
           title: '决策已形成结论',
           before: { status: DecisionStatus.DISCUSSING },
