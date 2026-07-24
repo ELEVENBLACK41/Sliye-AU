@@ -22,6 +22,8 @@ type DecisionResolutionSectionProps = {
   resolutions: DecisionResolution[];
   /** 当前用户是否具备形成正式决议的管理权限。 */
   canManageConclusion: boolean;
+  /** 可选的当前会议主键，用于标记房间内形成的决议。 */
+  meetingId?: number;
 };
 
 /** 展示最终结论，并提供全过程回放和形成正式决议入口。 */
@@ -31,6 +33,7 @@ export function DecisionResolutionSection({
   voteRounds,
   resolutions,
   canManageConclusion,
+  meetingId,
 }: DecisionResolutionSectionProps) {
   const openProposals = proposals.filter((proposal) => proposal.status === 'OPEN');
 
@@ -53,6 +56,7 @@ export function DecisionResolutionSection({
               decisionId={decisionId}
               proposals={openProposals}
               voteRounds={voteRounds}
+              meetingId={meetingId}
             />
           ) : null}
         </div>

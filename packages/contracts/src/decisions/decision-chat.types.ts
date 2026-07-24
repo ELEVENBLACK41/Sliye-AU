@@ -68,6 +68,8 @@ export type DecisionChatMessageListQuery = {
   cursor?: number;
   /** 单页消息数量，服务端默认 30 且最大为 50。 */
   limit?: number;
+  /** 可选的会议主键；传入时只返回该会议中的消息。 */
+  meetingId?: number;
 };
 
 /** 发送一条决策群聊文字消息的请求体。 */

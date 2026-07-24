@@ -29,10 +29,12 @@ import { Textarea } from '@workspace/ui/components/textarea';
 type DecisionProposalActionsProps = {
   /** 当前决策数据库主键。 */
   decisionId: number;
+  /** 可选的提案形成会议主键。 */
+  meetingId?: number;
 };
 
 /** 渲染创建提案 Sheet，并覆盖提交中、失败和成功状态。 */
-export function DecisionProposalActions({ decisionId }: DecisionProposalActionsProps) {
+export function DecisionProposalActions({ decisionId, meetingId }: DecisionProposalActionsProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,6 +75,7 @@ export function DecisionProposalActions({ decisionId }: DecisionProposalActionsP
       const proposal = await createDecisionProposal(decisionId, {
         title: normalizedTitle,
         description: normalizedDescription || undefined,
+        meetingId,
       });
 
       setTitle('');

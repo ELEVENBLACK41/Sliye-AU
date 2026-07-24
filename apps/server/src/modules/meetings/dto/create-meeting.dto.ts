@@ -2,20 +2,15 @@
  * 本文件定义创建无音视频会议的运行时校验 DTO。
  */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type {
-  CreateMeetingRequestPayload,
-  MeetingMode as MeetingModeContract,
-} from '@workspace/contracts/meetings';
+import type { CreateMeetingRequestPayload } from '@workspace/contracts/meetings';
 import { Transform } from 'class-transformer';
 import {
-  IsEnum,
   IsISO8601,
   IsOptional,
   IsString,
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { MeetingMode } from '../../../generated/prisma';
 
 /** 校验在一项决策中创建计划会议所需的字段。 */
 export class CreateMeetingDto implements CreateMeetingRequestPayload {
@@ -38,11 +33,6 @@ export class CreateMeetingDto implements CreateMeetingRequestPayload {
   @IsString()
   @MaxLength(1000)
   description?: string;
-
-  /** 会议预期使用的沟通模式，当前阶段仅用于业务展示。 */
-  @ApiProperty({ enum: MeetingMode, example: MeetingMode.VIDEO })
-  @IsEnum(MeetingMode)
-  mode!: MeetingModeContract;
 
   /** 可选的计划开始时间。 */
   @ApiPropertyOptional({ example: '2026-07-25T06:00:00.000Z' })

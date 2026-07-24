@@ -35,10 +35,12 @@ type UseDecisionChatOptions = {
   currentUser: DecisionUserSummary;
   /** 当前页面是否允许展示发送能力；最终权限仍由 NestJS 校验。 */
   canSend: boolean;
+  /** 可选的当前会议主键。 */
+  meetingId?: number;
 };
 
 /** 管理 HTTP 真源和 Socket 实时推送协同的群聊状态。 */
-export function useDecisionChat({ decisionId, initialPage, currentUser, canSend }: UseDecisionChatOptions) {
+export function useDecisionChat({ decisionId, initialPage, currentUser, canSend, meetingId }: UseDecisionChatOptions) {
   const [messages, setMessages] = useState<DecisionChatViewMessage[]>(() => initialPage.items.map(toSentViewMessage));
   const [historyCursor, setHistoryCursor] = useState(initialPage.nextCursor);
   const [hasMoreHistory, setHasMoreHistory] = useState(initialPage.hasMore);
@@ -109,6 +111,7 @@ export function useDecisionChat({ decisionId, initialPage, currentUser, canSend 
       clientMessageId: crypto.randomUUID(),
       content: trimmedContent,
       ...(replyTo ? { replyToId: replyTo.id } : {}),
+      ...(meetingId !== undefined ? { meetingId } : {}),
     };
     const optimisticMessage = createOptimisticMessage({
       id: nextOptimisticIdRef.current,
@@ -140,6 +143,7 @@ export function useDecisionChat({ decisionId, initialPage, currentUser, canSend 
       clientMessageId,
       content: failedMessage.content,
       ...(failedMessage.replyTo ? { replyToId: failedMessage.replyTo.id } : {}),
+      ...(meetingId !== undefined ? { meetingId } : {}),
     };
 
     setMessages((current) => updateDeliveryState(current, clientMessageId, 'sending'));
@@ -277,7 +281,7 @@ function createOptimisticMessage({
           deletedAt: replyTo.deletedAt,
         }
       : null,
-    meetingId: null,
+    meetingId: payload.meetingId ?? null,
     pinnedAt: null,
     editedAt: null,
     deletedAt: null,

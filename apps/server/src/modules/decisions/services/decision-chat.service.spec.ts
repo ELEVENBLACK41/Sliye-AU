@@ -169,13 +169,14 @@ describe('DecisionChatService', () => {
       direction: 'after',
       cursor: 10,
       limit: 2,
+      meetingId: 90,
     });
 
     expect(result.items.map((message) => message.id)).toEqual([11, 12]);
     expect(result).toMatchObject({ hasMore: true, nextCursor: 12 });
     expect(prisma.discussionMessage.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { spaceId: 80, id: { gt: 10 } },
+        where: { spaceId: 80, meetingId: 90, id: { gt: 10 } },
         orderBy: { id: 'asc' },
         take: 3,
       }),

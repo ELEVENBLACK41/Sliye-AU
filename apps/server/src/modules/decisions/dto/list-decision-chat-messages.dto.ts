@@ -33,4 +33,12 @@ export class ListDecisionChatMessagesDto implements DecisionChatMessageListQuery
   @Min(1)
   @Max(50)
   limit?: number;
+
+  /** 可选的会议消息筛选条件。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  meetingId?: number;
 }

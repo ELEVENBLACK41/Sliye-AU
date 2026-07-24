@@ -90,7 +90,6 @@ export function toMeetingSummary(
     decisionId: decision.id,
     title: meeting.title,
     description: meeting.description,
-    mode: meeting.mode,
     status: meeting.status,
     createdBy: toMeetingUser(meeting.createdBy),
     participantCount: meeting._count.participants,

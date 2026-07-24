@@ -60,6 +60,9 @@ export function requestDecisionChatMessagesFromNest(
   if (query.limit !== undefined) {
     searchParams.set('limit', String(query.limit));
   }
+  if (query.meetingId !== undefined) {
+    searchParams.set('meetingId', String(query.meetingId));
+  }
 
   const queryString = searchParams.size > 0 ? `?${searchParams}` : '';
 

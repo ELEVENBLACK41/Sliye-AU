@@ -45,6 +45,8 @@ type DecisionResolutionCreateActionProps = {
   proposals: DecisionProposal[];
   /** 当前决策中可作为依据的已关闭投票轮次。 */
   voteRounds: DecisionVoteRound[];
+  /** 可选的决议形成会议主键。 */
+  meetingId?: number;
 };
 
 /** 渲染正式决议表单，并在真正闭环前执行不可逆操作确认。 */
@@ -52,6 +54,7 @@ export function DecisionResolutionCreateAction({
   decisionId,
   proposals,
   voteRounds,
+  meetingId,
 }: DecisionResolutionCreateActionProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -126,6 +129,7 @@ export function DecisionResolutionCreateAction({
         sourceVoteRoundId: voteRoundId === 'none' ? undefined : Number(voteRoundId),
         title: title.trim(),
         content: content.trim(),
+        meetingId,
       });
 
       setIsConfirmOpen(false);
@@ -197,7 +201,8 @@ export function DecisionResolutionCreateAction({
                   <SelectItem value="none">不关联投票</SelectItem>
                   {availableVoteRounds.map((round) => (
                     <SelectItem key={round.id} value={String(round.id)}>
-                      {round.title}{round.result ? ` · ${formatVoteOutcome(round.result.outcome)}` : ''}
+                      {round.title}
+                      {round.result ? ` · ${formatVoteOutcome(round.result.outcome)}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>

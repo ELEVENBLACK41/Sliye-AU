@@ -7,6 +7,7 @@ import { LoaderCircle, Reply, RotateCcw } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
+import { Badge } from '@workspace/ui/components/badge';
 import { cn } from '@workspace/ui/lib/utils';
 import type { DecisionChatViewMessage } from '../hooks/use-decision-chat';
 
@@ -16,6 +17,8 @@ type DecisionChatMessageListProps = {
   messages: DecisionChatViewMessage[];
   /** 当前登录用户主键，用于区分自己发送的消息。 */
   currentUserId: number;
+  /** 当前所在会议主键；用于区分本场和其他会议消息。 */
+  currentMeetingId?: number;
   /** 当前用户是否可以选择回复目标。 */
   canSend: boolean;
   /** 是否仍有更早历史消息。 */
@@ -36,6 +39,7 @@ type DecisionChatMessageListProps = {
 export function DecisionChatMessageList({
   messages,
   currentUserId,
+  currentMeetingId,
   canSend,
   hasMoreHistory,
   isLoadingHistory,
@@ -74,6 +78,7 @@ export function DecisionChatMessageList({
               key={message.id > 0 ? `message-${message.id}` : `client-${message.clientMessageId}`}
               message={message}
               isMine={message.author?.id === currentUserId}
+              meetingContextLabel={getMeetingContextLabel(message.meetingId, currentMeetingId)}
               canReply={canSend}
               onReply={onReply}
               onRetry={onRetry}
@@ -92,6 +97,7 @@ function DecisionChatMessageItem({
   canReply,
   onReply,
   onRetry,
+  meetingContextLabel,
 }: {
   /** 当前展示消息。 */
   message: DecisionChatViewMessage;
@@ -103,6 +109,8 @@ function DecisionChatMessageItem({
   onReply: (message: DecisionChatViewMessage) => void;
   /** 重试失败消息。 */
   onRetry: (clientMessageId: string) => void;
+  /** 消息会议来源标签；普通决策消息不显示。 */
+  meetingContextLabel: string | null;
 }) {
   if (message.type === 'SYSTEM') {
     return <li className="text-center text-xs text-muted-foreground">{message.content || '系统消息已删除'}</li>;
@@ -121,6 +129,7 @@ function DecisionChatMessageItem({
         <div className={cn('mb-1 flex items-center gap-2 text-xs text-muted-foreground', isMine && 'justify-end')}>
           <span>{authorName}</span>
           <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
+          {meetingContextLabel ? <Badge variant="outline">{meetingContextLabel}</Badge> : null}
         </div>
 
         <div
@@ -182,6 +191,19 @@ function DecisionChatMessageItem({
       </div>
     </li>
   );
+}
+
+/** 根据当前页面上下文生成消息的会议来源标签。 */
+function getMeetingContextLabel(messageMeetingId: number | null, currentMeetingId?: number): string | null {
+  if (messageMeetingId === null) {
+    return null;
+  }
+
+  if (currentMeetingId === undefined) {
+    return '会议消息';
+  }
+
+  return messageMeetingId === currentMeetingId ? '本场会议' : '其他会议';
 }
 
 /** 生成头像缺省文字。 */

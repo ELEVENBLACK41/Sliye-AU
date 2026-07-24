@@ -100,7 +100,6 @@ export class MeetingsService {
         createdById: authorization.userId,
         title: dto.title,
         description: dto.description,
-        mode: dto.mode,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
         participants: {
           createMany: {

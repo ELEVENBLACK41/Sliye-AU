@@ -99,6 +99,9 @@ export class DecisionChatService {
     const messages = await this.prisma.discussionMessage.findMany({
       where: {
         spaceId: decision.spaceId,
+        ...(query.meetingId !== undefined
+          ? { meetingId: query.meetingId }
+          : {}),
         ...(query.cursor
           ? {
               id:

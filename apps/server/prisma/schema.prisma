@@ -173,11 +173,6 @@ enum MeetingStatus {
 }
 
 /// 会议使用的实时沟通模式。
-enum MeetingMode {
-  AUDIO
-  VIDEO
-}
-
 /// 用户在单次会议中的实际参会角色。
 enum MeetingParticipantRole {
   HOST
@@ -1038,7 +1033,6 @@ model MeetingSession {
 
   title       String
   description String?
-  mode        MeetingMode
   status      MeetingStatus @default(SCHEDULED)
 
   /// 项目内部稳定且不可重复的房间代码，不保存临时加入令牌。

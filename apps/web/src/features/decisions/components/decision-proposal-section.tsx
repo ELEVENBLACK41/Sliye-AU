@@ -19,6 +19,8 @@ type DecisionProposalSectionProps = {
   canCreateProposal: boolean;
   /** 当前用户是否具备拒绝或取消开放提案的管理权限。 */
   canManageConclusion: boolean;
+  /** 可选的当前会议主键，用于标记房间内新建提案。 */
+  meetingId?: number;
 };
 
 /** 提案状态对应的中文名称和徽标样式。 */
@@ -43,12 +45,13 @@ export function DecisionProposalSection({
   proposals,
   canCreateProposal,
   canManageConclusion,
+  meetingId,
 }: DecisionProposalSectionProps) {
   return (
     <Card className="rounded-md shadow-none">
       <CardHeader className="flex-row items-center justify-between gap-3">
         <CardTitle className="text-base">提案（{proposals.length}）</CardTitle>
-        {canCreateProposal ? <DecisionProposalActions decisionId={decisionId} /> : null}
+        {canCreateProposal ? <DecisionProposalActions decisionId={decisionId} meetingId={meetingId} /> : null}
       </CardHeader>
       <CardContent>
         {proposals.length ? (

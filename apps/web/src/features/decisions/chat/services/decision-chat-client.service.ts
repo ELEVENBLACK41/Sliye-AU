@@ -58,6 +58,9 @@ function createMessageSearchParams(query: DecisionChatMessageListQuery): URLSear
   if (query.limit !== undefined) {
     searchParams.set('limit', String(query.limit));
   }
+  if (query.meetingId !== undefined) {
+    searchParams.set('meetingId', String(query.meetingId));
+  }
 
   return searchParams;
 }

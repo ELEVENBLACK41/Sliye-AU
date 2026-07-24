@@ -21,6 +21,8 @@ type DecisionVoteSectionProps = {
   canManageVoteRounds: boolean;
   /** 当前用户是否具备提交选票的参与身份。 */
   canVote: boolean;
+  /** 可选的当前会议主键，用于标记房间内新投票。 */
+  meetingId?: number;
 };
 
 /** 投票轮次状态对应的中文名称和徽标样式。 */
@@ -54,6 +56,7 @@ export function DecisionVoteSection({
   voteRounds,
   canManageVoteRounds,
   canVote,
+  meetingId,
 }: DecisionVoteSectionProps) {
   const openProposalIds = new Set(
     voteRounds.filter((round) => round.status === 'OPEN').map((round) => round.proposalId),
@@ -67,7 +70,7 @@ export function DecisionVoteSection({
       <CardHeader className="flex-row items-center justify-between gap-3">
         <CardTitle className="text-base">投票（{voteRounds.length}）</CardTitle>
         {canManageVoteRounds ? (
-          <DecisionVoteCreateAction decisionId={decisionId} proposals={availableProposals} />
+          <DecisionVoteCreateAction decisionId={decisionId} proposals={availableProposals} meetingId={meetingId} />
         ) : null}
       </CardHeader>
       <CardContent>

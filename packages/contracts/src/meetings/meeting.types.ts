@@ -5,9 +5,6 @@
 /** 会议从计划到结束的稳定业务状态。 */
 export type MeetingStatus = 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
 
-/** 会议预期使用的实时沟通模式；真实媒体能力将在后续接入。 */
-export type MeetingMode = 'AUDIO' | 'VIDEO';
-
 /** 用户在单场会议中承担的业务角色。 */
 export type MeetingParticipantRole = 'HOST' | 'CO_HOST' | 'ATTENDEE';
 
@@ -49,8 +46,6 @@ export type MeetingSummary = {
   title: string;
   /** 会议背景或目标说明。 */
   description: string | null;
-  /** 会议预期采用的沟通模式。 */
-  mode: MeetingMode;
   /** 会议当前业务状态。 */
   status: MeetingStatus;
   /** 创建会议的用户摘要。 */
@@ -81,8 +76,6 @@ export type CreateMeetingRequestPayload = {
   title: string;
   /** 会议背景、目标或补充说明。 */
   description?: string;
-  /** 会议预期采用的沟通模式。 */
-  mode: MeetingMode;
   /** 计划开始时间，使用 ISO 8601 字符串。 */
   scheduledAt?: string;
 };

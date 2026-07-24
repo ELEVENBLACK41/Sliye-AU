@@ -13,6 +13,7 @@ import type {
   DecisionResolution,
   DecisionVoteRound,
 } from '@workspace/contracts/decisions';
+import type { MeetingSummary } from '@workspace/contracts/meetings';
 import {
   DecisionDetailPage,
   DecisionServerError,
@@ -23,6 +24,7 @@ import {
   getDecisionResolutions,
   getDecisionVoteRounds,
 } from '@/features/decisions';
+import { getDecisionMeetings } from '@/features/meetings/services/meetings-server.service';
 
 /** 动态决策详情路由参数。 */
 type DecisionDetailRouteProps = {
@@ -46,15 +48,17 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
   let proposals: DecisionProposal[];
   let voteRounds: DecisionVoteRound[];
   let resolutions: DecisionResolution[];
+  let meetings: MeetingSummary[];
 
   try {
-    [decision, chatMessages, events, proposals, voteRounds, resolutions] = await Promise.all([
+    [decision, chatMessages, events, proposals, voteRounds, resolutions, meetings] = await Promise.all([
       getDecisionDetail(decisionId),
       getDecisionChatMessagePage(decisionId),
       getDecisionEvents(decisionId),
       getDecisionProposals(decisionId),
       getDecisionVoteRounds(decisionId),
       getDecisionResolutions(decisionId),
+      getDecisionMeetings(decisionId),
     ]);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
@@ -86,6 +90,10 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
     hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
     (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
   const canManageConclusion = canManageVoteRounds;
+  const canCreateMeeting =
+    (decision.status === 'DRAFT' || decision.status === 'DISCUSSING') &&
+    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
+    (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
   const canVote =
     decision.status === 'DISCUSSING' && (currentParticipantRole === 'OWNER' || currentParticipantRole === 'APPROVER');
   const isChatLifecycleWritable = decision.status === 'DRAFT' || decision.status === 'DISCUSSING';
@@ -109,6 +117,7 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
       proposals={proposals}
       voteRounds={voteRounds}
       resolutions={resolutions}
+      meetings={meetings}
       canStartDiscussion={canStartDiscussion}
       canManageParticipants={canManageParticipants}
       canCreateProposal={canCreateProposal}
@@ -116,6 +125,7 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
       canManageConclusion={canManageConclusion}
       canVote={canVote}
       canSendChat={canSendChat}
+      canCreateMeeting={canCreateMeeting}
       chatReadOnlyReason={chatReadOnlyReason}
     />
   );

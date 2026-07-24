@@ -34,10 +34,12 @@ type DecisionVoteCreateActionProps = {
   decisionId: number;
   /** 当前可以发起新一轮投票的开放提案。 */
   proposals: DecisionProposal[];
+  /** 可选的投票发起会议主键。 */
+  meetingId?: number;
 };
 
 /** 渲染创建投票 Sheet，并覆盖校验、提交中、失败和成功状态。 */
-export function DecisionVoteCreateAction({ decisionId, proposals }: DecisionVoteCreateActionProps) {
+export function DecisionVoteCreateAction({ decisionId, proposals, meetingId }: DecisionVoteCreateActionProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -102,6 +104,7 @@ export function DecisionVoteCreateAction({ decisionId, proposals }: DecisionVote
         description: normalizedDescription || undefined,
         isAnonymous,
         quorumCount: normalizedQuorumCount,
+        meetingId,
       });
 
       setProposalId('');

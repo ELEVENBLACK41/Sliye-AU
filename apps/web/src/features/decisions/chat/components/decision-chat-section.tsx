@@ -44,6 +44,8 @@ type DecisionChatSectionProps = {
   canSend: boolean;
   /** 不可发送时展示的只读原因。 */
   readOnlyReason?: string;
+  /** 可选的当前会议主键；只标记房间内新消息，不切断决策聊天上下文。 */
+  meetingId?: number;
 };
 
 /** 渲染嵌入决策详情页并带实时状态的群聊区域。 */
@@ -53,6 +55,7 @@ export function DecisionChatSection({
   currentUser,
   canSend,
   readOnlyReason,
+  meetingId,
 }: DecisionChatSectionProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const hasInitialScrollRef = useRef(false);
@@ -71,7 +74,7 @@ export function DecisionChatSection({
     clearReply,
     sendMessage,
     retryMessage,
-  } = useDecisionChat({ decisionId, initialPage, currentUser, canSend });
+  } = useDecisionChat({ decisionId, initialPage, currentUser, canSend, meetingId });
   const connectionView = connectionStatusView[connectionStatus];
 
   /** 首次进入滚动到底部；当前用户新建乐观消息时保持查看最新消息。 */
@@ -197,6 +200,7 @@ export function DecisionChatSection({
           >
             <DecisionChatMessageList
               messages={messages}
+              currentMeetingId={meetingId}
               currentUserId={currentUser.id}
               canSend={canSend}
               hasMoreHistory={hasMoreHistory}

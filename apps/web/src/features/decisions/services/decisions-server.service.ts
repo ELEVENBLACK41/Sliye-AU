@@ -62,16 +62,19 @@ export const getDecisionDetail = cache(async (decisionId: number): Promise<Decis
 });
 
 /** 读取决策详情页首屏最新 30 条群聊消息。 */
-export const getDecisionChatMessagePage = cache(async (decisionId: number): Promise<DecisionChatMessagePage> => {
-  const accessToken = await getAccessToken();
+export const getDecisionChatMessagePage = cache(
+  async (decisionId: number, meetingId?: number): Promise<DecisionChatMessagePage> => {
+    const accessToken = await getAccessToken();
 
-  return unwrapResponse(
-    await requestDecisionChatMessagesFromNest(accessToken, decisionId, {
-      direction: 'before',
-      limit: 30,
-    }),
-  );
-});
+    return unwrapResponse(
+      await requestDecisionChatMessagesFromNest(accessToken, decisionId, {
+        direction: 'before',
+        limit: 30,
+        meetingId,
+      }),
+    );
+  },
+);
 
 /** 按资源 ID 读取决策事件时间线；越权与不存在均由后端返回相同 404。 */
 export const getDecisionEvents = cache(async (decisionId: number): Promise<DecisionEventTimelineResponse> => {

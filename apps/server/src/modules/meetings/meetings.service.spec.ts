@@ -6,7 +6,6 @@ import type { PrismaService } from '../../database/prisma.service';
 import {
   DataScope,
   DecisionStatus,
-  MeetingMode,
   MeetingParticipantRole,
   MeetingStatus,
   ParticipantRole,
@@ -41,7 +40,6 @@ function createMeetingRecord(
     createdById: 7,
     title: '权限模块重构方案评审会',
     description: '讨论候选方案并决定是否进入投票。',
-    mode: MeetingMode.VIDEO,
     status: MeetingStatus.SCHEDULED,
     roomKey: 'meeting-room-key',
     provider: null,
@@ -168,7 +166,6 @@ describe('MeetingsService', () => {
       service.create(createAuthorization(), 20, {
         title: '权限模块重构方案评审会',
         description: '讨论候选方案并决定是否进入投票。',
-        mode: MeetingMode.VIDEO,
         scheduledAt: '2026-07-25T06:00:00.000Z',
       }),
     ).resolves.toMatchObject({
@@ -206,7 +203,6 @@ describe('MeetingsService', () => {
     await expect(
       service.create(createAuthorization(), 20, {
         title: '方案评审会',
-        mode: MeetingMode.VIDEO,
       }),
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
