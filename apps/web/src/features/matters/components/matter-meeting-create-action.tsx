@@ -117,7 +117,10 @@ export function MatterMeetingCreateAction({ matterId, area, decisions, candidate
           />
           <ChoiceGroup
             label="关联决策（可为空）"
-            items={decisions.map((item) => ({ id: item.id, label: item.title }))}
+            items={decisions.map((item) => ({
+              id: item.id,
+              label: `${item.scope === 'AREA' ? '【小组】' : '【议事】'}${item.title}`,
+            }))}
             selected={decisionIds}
             onToggle={(id) => toggle(decisionIds, id, setDecisionIds)}
           />

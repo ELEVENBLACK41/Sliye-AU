@@ -176,11 +176,30 @@ export class AuthorizationService {
   ): Promise<Prisma.DecisionWhereInput> {
     void _permission;
     return Promise.resolve({
-      matter: {
-        members: {
-          some: { userId: context.userId },
+      AND: [
+        {
+          matter: {
+            members: {
+              some: { userId: context.userId },
+            },
+          },
         },
-      },
+        {
+          OR: [
+            { areaId: null },
+            {
+              area: {
+                is: {
+                  OR: [
+                    { type: 'PUBLIC' },
+                    { members: { some: { userId: context.userId } } },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      ],
     });
   }
 

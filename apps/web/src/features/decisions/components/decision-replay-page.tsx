@@ -85,7 +85,10 @@ export function DecisionReplayPage({ decision, events, proposals, voteRounds, re
               </p>
               <CardTitle className="mt-1 text-2xl">{decision.title}</CardTitle>
             </div>
-            <Badge>{decision.status}</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">{decision.area ? decision.area.name : '议事级'}</Badge>
+              <Badge>{decision.status}</Badge>
+            </div>
           </div>
           <p className="text-sm text-muted-foreground">
             从创建、参与讨论、提案、投票到正式结论，按真实发生顺序还原这项决策。

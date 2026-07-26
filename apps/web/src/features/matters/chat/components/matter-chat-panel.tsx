@@ -172,6 +172,7 @@ export function MatterChatPanel({
                   <SelectItem value="none">不关联决策</SelectItem>
                   {decisions.map((decision) => (
                     <SelectItem key={decision.id} value={String(decision.id)}>
+                      {decision.scope === 'AREA' ? '【小组】' : '【议事】'}
                       {decision.title}
                     </SelectItem>
                   ))}

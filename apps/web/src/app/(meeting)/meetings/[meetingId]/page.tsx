@@ -64,11 +64,13 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
       getMatterMessages(meeting.matterId, meeting.areaId, { meetingId }),
     ]);
     matter = matterResult;
-    matterDecisions = decisions;
     initialChatPage = chatPage;
     const visibleArea = areas.find((item) => item.id === meeting.areaId);
     if (!visibleArea) notFound();
     area = visibleArea;
+    matterDecisions = decisions.filter(
+      (decision) => decision.scope === 'MATTER' || decision.area?.id === meeting.areaId,
+    );
   } catch (error) {
     if ((error instanceof MeetingServerError || error instanceof MatterServerError) && error.status === 404) {
       notFound();
@@ -101,13 +103,20 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
   const participantRole = selectedDecision?.participants.find((item) => item.user.id === currentUser.id)?.role;
   const canUpdateDecision = hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update);
   const isLive = meeting.status === 'LIVE';
+  const isDraft = selectedDecision?.status === 'DRAFT';
+  const isDiscussing = selectedDecision?.status === 'DISCUSSING';
   const canManageMeeting =
     hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.matter.update) &&
     (meetingRole === 'HOST' || meetingRole === 'CO_HOST');
   const canCreateProposal =
-    isLive && canUpdateDecision && (participantRole === 'OWNER' || participantRole === 'EDITOR');
-  const canManageConclusion = isLive && canUpdateDecision && selectedDecision?.owner?.id === currentUser.id;
-  const canVote = isLive && (participantRole === 'OWNER' || participantRole === 'APPROVER');
+    isLive &&
+    (isDraft || isDiscussing) &&
+    canUpdateDecision &&
+    (participantRole === 'OWNER' || participantRole === 'EDITOR');
+  const canStartDiscussion = isLive && isDraft && canUpdateDecision && selectedDecision?.owner?.id === currentUser.id;
+  const canManageConclusion =
+    isLive && isDiscussing && canUpdateDecision && selectedDecision?.owner?.id === currentUser.id;
+  const canVote = isLive && isDiscussing && (participantRole === 'OWNER' || participantRole === 'APPROVER');
   const canSendChat = matter.status === 'ACTIVE' && area.status === 'ACTIVE' && isLive && meetingRole !== undefined;
 
   return (
@@ -123,6 +132,7 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
       voteRounds={voteRounds}
       resolutions={resolutions}
       canManageMeeting={canManageMeeting}
+      canStartDiscussion={canStartDiscussion}
       canCreateProposal={canCreateProposal}
       canManageVoteRounds={canManageConclusion}
       canManageConclusion={canManageConclusion}

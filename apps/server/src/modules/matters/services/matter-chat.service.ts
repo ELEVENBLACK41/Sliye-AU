@@ -161,7 +161,7 @@ export class MatterChatService {
     this.accessService.assertAreaWritable(area);
     await Promise.all([
       this.assertReplyTarget(areaId, dto.replyToId),
-      this.assertDecisionInMatter(matterId, dto.decisionId),
+      this.assertDecisionInArea(matterId, areaId, dto.decisionId),
       this.assertMeetingInArea(areaId, dto.meetingId, true),
     ]);
 
@@ -224,7 +224,7 @@ export class MatterChatService {
       });
     }
 
-    await this.assertDecisionInMatter(matterId, dto.decisionId);
+    await this.assertDecisionInArea(matterId, sourceAreaId, dto.decisionId);
     const sourceMessages = await this.prisma.discussionMessage.findMany({
       where: { id: { in: dto.sourceMessageIds }, areaId: sourceAreaId },
       select: { id: true },
@@ -305,22 +305,27 @@ export class MatterChatService {
     }
   }
 
-  /** 校验消息关联的决策属于当前议事。 */
-  private async assertDecisionInMatter(
+  /** 校验消息关联的是议事级决策或当前分区自己的小组决策。 */
+  private async assertDecisionInArea(
     matterId: number,
+    areaId: number,
     decisionId: number | undefined,
   ): Promise<void> {
     if (decisionId === undefined) {
       return;
     }
     const decision = await this.prisma.decision.findFirst({
-      where: { id: decisionId, matterId },
+      where: {
+        id: decisionId,
+        matterId,
+        OR: [{ areaId: null }, { areaId }],
+      },
       select: { id: true },
     });
     if (!decision) {
       throw new BusinessException({
         code: API_ERROR_CODES.DECISION_NOT_FOUND,
-        message: '关联决策不存在或不属于当前议事',
+        message: '关联决策不存在或不属于当前讨论分区',
         status: 404,
       });
     }
@@ -362,7 +367,7 @@ export class MatterChatService {
     query: ListMatterChatMessagesDto,
   ): Promise<void> {
     await Promise.all([
-      this.assertDecisionInMatter(matterId, query.decisionId),
+      this.assertDecisionInArea(matterId, areaId, query.decisionId),
       this.assertMeetingInArea(areaId, query.meetingId, false),
     ]);
   }

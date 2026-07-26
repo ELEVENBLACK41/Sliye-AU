@@ -46,7 +46,7 @@ export class MeetingsService {
     this.matterAccessService.assertAreaWritable(area);
 
     await Promise.all([
-      this.assertDecisionsInMatter(matterId, dto.decisionIds),
+      this.assertDecisionsInArea(matterId, dto.areaId, dto.decisionIds),
       this.assertParticipantsVisible(matterId, dto.areaId, area.type, [
         ...new Set([authorization.userId, ...dto.participantIds]),
       ]),
@@ -134,21 +134,26 @@ export class MeetingsService {
     return toMeetingDetail(meeting);
   }
 
-  /** 校验全部关联决策属于同一议事。 */
-  private async assertDecisionsInMatter(
+  /** 校验会议只关联议事级决策或当前分区自己的小组决策。 */
+  private async assertDecisionsInArea(
     matterId: number,
+    areaId: number,
     decisionIds: number[],
   ): Promise<void> {
     if (decisionIds.length === 0) {
       return;
     }
     const count = await this.prisma.decision.count({
-      where: { id: { in: decisionIds }, matterId },
+      where: {
+        id: { in: decisionIds },
+        matterId,
+        OR: [{ areaId: null }, { areaId }],
+      },
     });
     if (count !== decisionIds.length) {
       throw new BusinessException({
         code: API_ERROR_CODES.MEETING_DECISION_INVALID,
-        message: '会议关联的决策必须全部属于当前议事',
+        message: '会议只能关联议事级决策或当前分区的小组决策',
         status: 400,
       });
     }

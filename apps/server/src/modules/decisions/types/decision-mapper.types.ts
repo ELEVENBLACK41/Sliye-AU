@@ -46,6 +46,10 @@ export type DecisionSummaryRecord = {
   status: DecisionStatus;
   /** 决策所属议事主键。 */
   matterId: number;
+  /** 小组级决策所属分区主键；议事级决策为 `null`。 */
+  areaId: number | null;
+  /** 小组级决策所属分区摘要。 */
+  area: { id: number; name: string } | null;
   /** 决策所属议事摘要。 */
   matter: { id: number; title: string };
   /** 决策所属部门。 */

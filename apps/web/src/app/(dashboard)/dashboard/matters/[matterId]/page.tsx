@@ -72,7 +72,11 @@ export default async function MatterRoutePage({ params, searchParams }: MatterRo
 
     const requestedDecisionId = query.decisionId ? Number(query.decisionId) : undefined;
     const decisionFilterId =
-      requestedDecisionId && decisions.some((decision) => decision.id === requestedDecisionId)
+      requestedDecisionId &&
+      decisions.some(
+        (decision) =>
+          decision.id === requestedDecisionId && (decision.scope === 'MATTER' || decision.area?.id === currentArea.id),
+      )
         ? requestedDecisionId
         : undefined;
     const canManageMatter =

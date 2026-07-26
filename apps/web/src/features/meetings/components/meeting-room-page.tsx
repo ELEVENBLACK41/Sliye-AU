@@ -21,8 +21,10 @@ import type { MeetingDetail } from '@workspace/contracts/meetings';
 import { MeetingLifecycleActions } from './meeting-lifecycle-actions';
 import { DecisionProposalSection } from '@/features/decisions/components/decision-proposal-section';
 import { DecisionResolutionSection } from '@/features/decisions/components/decision-resolution-section';
+import { DecisionStatusActions } from '@/features/decisions/components/decision-status-actions';
 import { DecisionVoteSection } from '@/features/decisions/components/decision-vote-section';
 import { MatterChatPanel } from '@/features/matters/chat/components/matter-chat-panel';
+import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -41,6 +43,7 @@ type MeetingRoomPageProps = {
   voteRounds: DecisionVoteRound[];
   resolutions: DecisionResolution[];
   canManageMeeting: boolean;
+  canStartDiscussion: boolean;
   canCreateProposal: boolean;
   canManageVoteRounds: boolean;
   canManageConclusion: boolean;
@@ -61,6 +64,7 @@ export function MeetingRoomPage({
   voteRounds,
   resolutions,
   canManageMeeting,
+  canStartDiscussion,
   canCreateProposal,
   canManageVoteRounds,
   canManageConclusion,
@@ -129,6 +133,18 @@ export function MeetingRoomPage({
               )}
             </CardContent>
           </Card>
+
+          {selectedDecision?.status === 'DRAFT' ? (
+            <>
+              <Alert>
+                <AlertTitle>当前决策仍处于草稿阶段</AlertTitle>
+                <AlertDescription>
+                  草稿阶段可以继续整理提案，但必须由决策负责人先开始讨论，才能发起投票或形成正式决议。
+                </AlertDescription>
+              </Alert>
+              {canStartDiscussion ? <DecisionStatusActions decisionId={selectedDecision.id} /> : null}
+            </>
+          ) : null}
 
           <Tabs defaultValue="discussion" className="gap-4">
             <TabsList className="h-auto w-full justify-start overflow-x-auto bg-background p-1">

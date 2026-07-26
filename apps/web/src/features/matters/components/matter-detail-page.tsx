@@ -71,6 +71,9 @@ export function MatterDetailPage({
   decisionFilterId,
 }: MatterDetailPageProps) {
   const canSend = matter.status === 'ACTIVE' && currentArea.status === 'ACTIVE' && matter.currentUserRole !== 'VIEWER';
+  const currentAreaDecisions = decisions.filter(
+    (decision) => decision.scope === 'MATTER' || decision.area?.id === currentArea.id,
+  );
 
   return (
     <main className="space-y-4">
@@ -92,13 +95,17 @@ export function MatterDetailPage({
             <div className="flex flex-wrap gap-2">
               <Badge>{statusText[matter.status]}</Badge>
               {canCreateDecision && matter.status === 'ACTIVE' ? (
-                <MatterDecisionCreateAction matterId={matter.id} departmentId={matter.department.id} />
+                <MatterDecisionCreateAction
+                  matterId={matter.id}
+                  departmentId={matter.department.id}
+                  area={currentArea}
+                />
               ) : null}
               {canCreateMeeting ? (
                 <MatterMeetingCreateAction
                   matterId={matter.id}
                   area={currentArea}
-                  decisions={decisions}
+                  decisions={currentAreaDecisions}
                   candidates={meetingCandidates}
                 />
               ) : null}
@@ -123,7 +130,7 @@ export function MatterDetailPage({
           {areas.map((area) => (
             <Link
               key={area.id}
-              href={`/dashboard/matters/${matter.id}?areaId=${area.id}${decisionFilterId ? `&decisionId=${decisionFilterId}` : ''}`}
+              href={`/dashboard/matters/${matter.id}?areaId=${area.id}`}
               className={cn(
                 'flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm transition-colors hover:bg-muted',
                 area.id === currentArea.id && 'border-primary bg-primary/5',
@@ -149,7 +156,7 @@ export function MatterDetailPage({
             area={currentArea}
             initialPage={initialMessages}
             currentUser={currentUser}
-            decisions={decisions}
+            decisions={currentAreaDecisions}
             canSend={canSend}
             initialDecisionId={decisionFilterId}
             readOnlyReason={
@@ -209,8 +216,11 @@ function DecisionList({ matter, decisions }: { matter: MatterDetail; decisions: 
           </Link>
           <div className="mt-2 flex gap-2">
             <Badge variant="secondary">{decision.status}</Badge>
+            <Badge variant="outline">{decision.scope === 'AREA' ? decision.area?.name || '小组决策' : '议事级'}</Badge>
             <Button asChild size="sm" variant="ghost" className="h-6 px-2">
-              <Link href={`/dashboard/matters/${matter.id}?areaId=${matter.publicAreaId}&decisionId=${decision.id}`}>
+              <Link
+                href={`/dashboard/matters/${matter.id}?areaId=${decision.area?.id ?? matter.publicAreaId}&decisionId=${decision.id}`}
+              >
                 相关讨论
               </Link>
             </Button>

@@ -21,12 +21,17 @@ import {
   SheetTrigger,
 } from '@workspace/ui/components/sheet';
 import { Textarea } from '@workspace/ui/components/textarea';
+import type { DiscussionAreaSummary } from '@workspace/contracts/matters';
 
 /** 议事决策创建操作属性。 */
-type MatterDecisionCreateActionProps = { matterId: number; departmentId: number };
+type MatterDecisionCreateActionProps = {
+  matterId: number;
+  departmentId: number;
+  area: DiscussionAreaSummary;
+};
 
 /** 创建决策并跳转到新的嵌套路由。 */
-export function MatterDecisionCreateAction({ matterId, departmentId }: MatterDecisionCreateActionProps) {
+export function MatterDecisionCreateAction({ matterId, departmentId, area }: MatterDecisionCreateActionProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -45,6 +50,7 @@ export function MatterDecisionCreateAction({ matterId, departmentId }: MatterDec
         title: title.trim(),
         description: description.trim() || undefined,
         departmentId,
+        areaId: area.type === 'PRIVATE' ? area.id : undefined,
       });
       setOpen(false);
       router.push(`/dashboard/matters/${matterId}/decisions/${decision.id}`);
@@ -61,13 +67,17 @@ export function MatterDecisionCreateAction({ matterId, departmentId }: MatterDec
       <SheetTrigger asChild>
         <Button>
           <Plus aria-hidden />
-          新建决策
+          {area.type === 'PRIVATE' ? '新建小组决策' : '新建议事决策'}
         </Button>
       </SheetTrigger>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>在议事中创建决策</SheetTitle>
-          <SheetDescription>决策共享当前议事讨论，不再创建独立群聊。</SheetDescription>
+          <SheetTitle>{area.type === 'PRIVATE' ? `在“${area.name}”创建小组决策` : '创建议事级决策'}</SheetTitle>
+          <SheetDescription>
+            {area.type === 'PRIVATE'
+              ? '仅当前小组成员可查看和参与，会议、消息及候选参与者都限制在本分区。'
+              : '面向当前议事全部成员，可在各讨论分区中关联和推进。'}
+          </SheetDescription>
         </SheetHeader>
         <form className="flex flex-1 flex-col gap-4 overflow-y-auto px-4" onSubmit={handleSubmit}>
           <div className="grid gap-2">

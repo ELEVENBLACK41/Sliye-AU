@@ -5,6 +5,9 @@
 /** 决策事项从草稿、讨论、形成正式决议或取消到归档的全局业务状态；投票状态由具体轮次管理。 */
 export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'RESOLVED' | 'CANCELLED' | 'ARCHIVED';
 
+/** 决策的协作可见范围；议事级面向全部议事成员，小组级仅面向绑定分区成员。 */
+export type DecisionScope = 'MATTER' | 'AREA';
+
 /** 用户参与某个决策时承担的角色。 */
 export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER';
 
@@ -64,6 +67,14 @@ export type DecisionDepartmentSummary = {
   name: string;
 };
 
+/** 小组级决策所属讨论分区的安全摘要。 */
+export type DecisionAreaSummary = {
+  /** 讨论分区数据库主键。 */
+  id: number;
+  /** 讨论分区名称。 */
+  name: string;
+};
+
 /** 决策创建人、负责人或参与人的轻量摘要。 */
 export type DecisionUserSummary = {
   /** 用户数据库主键。 */
@@ -86,6 +97,10 @@ export type DecisionSummary = {
   status: DecisionStatus;
   /** 决策所属议事主键。 */
   matterId: number;
+  /** 决策作用于整个议事还是一个私有小组。 */
+  scope: DecisionScope;
+  /** 小组级决策所属分区；议事级决策为 `null`。 */
+  area: DecisionAreaSummary | null;
   /** 决策所属议事摘要。 */
   matter: { id: number; title: string };
   /** 决策所属部门。 */
@@ -318,6 +333,8 @@ export type CreateDecisionRequestPayload = {
   description?: string;
   /** 可选的来源会议；创建成功后会自动建立会议决策关联。 */
   meetingId?: number;
+  /** 私有讨论分区主键；省略时创建议事级决策。 */
+  areaId?: number;
   /** 决策所属的启用部门主键。 */
   departmentId: number;
   /** 初始负责人用户主键；省略或传入 `null` 时由服务端使用创建人。 */

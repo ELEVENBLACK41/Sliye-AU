@@ -7,6 +7,9 @@ import {
   DataScope,
   DecisionEventType,
   DecisionStatus,
+  DiscussionAreaMemberRole,
+  DiscussionAreaStatus,
+  DiscussionAreaType,
   MatterMemberRole,
   MatterStatus,
   ParticipantRole,
@@ -45,6 +48,16 @@ function createDecisionsService(
       status: MatterStatus.ACTIVE,
       memberRole: MatterMemberRole.MEMBER,
     }),
+    findArea: jest.fn().mockResolvedValue({
+      id: 40,
+      matterId: 10,
+      type: DiscussionAreaType.PRIVATE,
+      status: DiscussionAreaStatus.ACTIVE,
+      matterStatus: MatterStatus.ACTIVE,
+      matterMemberRole: MatterMemberRole.MEMBER,
+      areaMemberRole: DiscussionAreaMemberRole.MEMBER,
+    }),
+    assertAreaWritable: jest.fn(),
   } as unknown as MatterAccessService;
 
   return new DecisionsService(
@@ -87,6 +100,8 @@ function createDecisionRecord() {
   return {
     id: 20,
     matterId: 10,
+    areaId: null,
+    area: null,
     title: '是否重构权限模块',
     description: null,
     status: DecisionStatus.DRAFT,
@@ -418,6 +433,7 @@ describe('DecisionsService', () => {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
           matterId: 10,
+          areaId: null,
           ownerId: 7,
           status: DecisionStatus.DRAFT,
         }),
@@ -622,6 +638,40 @@ describe('DecisionsService', () => {
       },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
     });
+  });
+
+  it('小组决策的候选参与者应仅来自所属私有分区', async () => {
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          matterId: 10,
+          areaId: 40,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+        }),
+      },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+    };
+    const service = createDecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await service.listParticipantCandidates(createAuthorization(), 20);
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // Jest 非对称匹配器在类型层会退化为 any，仅用于断言查询载荷。
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        where: expect.objectContaining({
+          discussionAreaMemberships: { some: { areaId: 40 } },
+        }),
+      }),
+    );
   });
 
   it('不存在或越权的决策不能通过候选参与者接口探测', async () => {
@@ -967,6 +1017,63 @@ describe('DecisionsService', () => {
         ownerId: 7,
         matterId: 10,
         participants: { create: { userId: 7, role: 'OWNER' } },
+      },
+    });
+  });
+
+  it('私有分区成员创建决策时应绑定分区并返回小组范围', async () => {
+    const record = {
+      ...createDecisionRecord(),
+      areaId: 40,
+      area: { id: 40, name: '研发小组' },
+    };
+    let capturedCreateInput: unknown;
+    const transaction = {
+      decision: {
+        create: jest.fn((input: unknown) => {
+          capturedCreateInput = input;
+          return Promise.resolve(record);
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      assertDepartmentInScope: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = createDecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.create(createAuthorization(), 10, {
+        title: record.title,
+        departmentId: 3,
+        areaId: 40,
+      }),
+    ).resolves.toMatchObject({
+      id: 20,
+      scope: 'AREA',
+      area: { id: 40, name: '研发小组' },
+    });
+    expect(capturedCreateInput).toMatchObject({
+      data: {
+        matterId: 10,
+        areaId: 40,
+        events: {
+          create: {
+            payload: {
+              matterId: 10,
+              areaId: 40,
+              scope: 'AREA',
+            },
+          },
+        },
       },
     });
   });

@@ -70,6 +70,10 @@ export function DecisionDetailPage({
   canManageConclusion,
   canVote,
 }: DecisionDetailPageProps) {
+  const discussionHref = decision.area
+    ? `/dashboard/matters/${decision.matterId}?areaId=${decision.area.id}&decisionId=${decision.id}`
+    : `/dashboard/matters/${decision.matterId}?decisionId=${decision.id}`;
+
   return (
     <main className="flex flex-col gap-4">
       <div>
@@ -88,7 +92,10 @@ export function DecisionDetailPage({
               <p className="text-sm text-muted-foreground">决策 #{decision.id}</p>
               <CardTitle className="mt-1 text-2xl">{decision.title}</CardTitle>
             </div>
-            <Badge>{decision.status}</Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">{decision.area ? decision.area.name : '议事级'}</Badge>
+              <Badge>{decision.status}</Badge>
+            </div>
           </div>
           <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
             {decision.description || '暂无背景说明'}
@@ -114,10 +121,12 @@ export function DecisionDetailPage({
         </CardHeader>
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            决策不再维护独立群聊，相关消息统一沉淀在所属议事的公共区或私有分区中。
+            {decision.area
+              ? `当前决策仅在“${decision.area.name}”小组内推进，公开信息需通过分区摘要发布。`
+              : '当前决策面向全部议事成员，可在各个可见讨论分区中关联和推进。'}
           </p>
           <Button asChild variant="outline">
-            <Link href={`/dashboard/matters/${decision.matterId}?decisionId=${decision.id}`}>查看相关讨论</Link>
+            <Link href={discussionHref}>查看相关讨论</Link>
           </Button>
         </CardContent>
       </Card>

@@ -311,7 +311,7 @@ export type CreateMatterChatMessageRequestPayload = {
   replyToId?: number;
   /** 可选的来源会议主键。 */
   meetingId?: number;
-  /** 可选的同议事关联决策主键。 */
+  /** 可选的议事级决策或当前分区小组决策主键。 */
   decisionId?: number;
 };
 
@@ -323,7 +323,7 @@ export type CreateDiscussionPublicationRequestPayload = {
   summary: string;
   /** 被摘要引用的私有原始消息主键。 */
   sourceMessageIds: number[];
-  /** 可选的同议事关联决策主键。 */
+  /** 可选的议事级决策或来源分区小组决策主键。 */
   decisionId?: number;
 };
 

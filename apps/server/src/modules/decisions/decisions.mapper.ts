@@ -37,6 +37,8 @@ export function toDecisionSummary(
     description: decision.description,
     status: decision.status,
     matterId: decision.matterId,
+    scope: (decision.areaId ?? null) === null ? 'MATTER' : 'AREA',
+    area: decision.area ?? null,
     matter: decision.matter,
     department: {
       id: decision.department.id,

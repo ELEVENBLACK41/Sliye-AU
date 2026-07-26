@@ -13,6 +13,7 @@ import { PrismaService } from '../../../database/prisma.service';
 import {
   DecisionEventType,
   DecisionStatus,
+  DiscussionAreaType,
   MatterStatus,
   MeetingStatus,
   ParticipantRole,
@@ -31,6 +32,7 @@ import { MatterAccessService } from '../../matters/services/matter-access.servic
 /** 决策列表与详情统一加载的基础关系。 */
 const decisionSummaryInclude = {
   matter: { select: { id: true, title: true } },
+  area: { select: { id: true, name: true } },
   department: true,
   creator: {
     select: { id: true, name: true, avatarUrl: true },
@@ -75,8 +77,12 @@ export class DecisionCoreService {
     matterId: number,
   ): Promise<DecisionListResponse> {
     await this.matterAccessService.findMatter(authorization, matterId);
+    const scopeWhere = await this.authorizationService.buildDecisionWhere(
+      authorization,
+      'decision:read',
+    );
     const decisions = await this.prisma.decision.findMany({
-      where: { matterId },
+      where: { AND: [{ matterId }, scopeWhere] },
       include: decisionSummaryInclude,
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
     });
@@ -286,11 +292,28 @@ export class DecisionCoreService {
       dto.departmentId,
     );
 
+    if (dto.areaId !== undefined) {
+      const area = await this.matterAccessService.findArea(
+        authorization,
+        matterId,
+        dto.areaId,
+      );
+      this.matterAccessService.assertAreaWritable(area);
+      if (area.type !== DiscussionAreaType.PRIVATE) {
+        throw new BusinessException({
+          code: API_ERROR_CODES.DECISION_AREA_INVALID,
+          message: '公共讨论区应创建议事级决策',
+          status: 400,
+        });
+      }
+    }
+
     if (dto.meetingId !== undefined) {
       const sourceMeeting = await this.prisma.meetingSession.findFirst({
         where: {
           id: dto.meetingId,
           status: MeetingStatus.LIVE,
+          ...(dto.areaId === undefined ? {} : { areaId: dto.areaId }),
           area: {
             matterId,
             OR: [
@@ -317,6 +340,7 @@ export class DecisionCoreService {
           title: dto.title,
           description: dto.description,
           matterId,
+          areaId: dto.areaId,
           deptId: dto.departmentId,
           creatorId: authorization.userId,
           ownerId: authorization.userId,
@@ -333,6 +357,8 @@ export class DecisionCoreService {
               title: '创建决策',
               payload: {
                 matterId,
+                areaId: dto.areaId ?? null,
+                scope: dto.areaId === undefined ? 'MATTER' : 'AREA',
                 departmentId: dto.departmentId,
                 meetingId: dto.meetingId ?? null,
               },

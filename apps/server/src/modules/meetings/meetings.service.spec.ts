@@ -205,7 +205,11 @@ describe('MeetingsService', () => {
     });
     expect(matterAccessService.assertAreaMeetingManager).toHaveBeenCalled();
     expect(prisma.decision.count).toHaveBeenCalledWith({
-      where: { id: { in: [20, 21] }, matterId: 10 },
+      where: {
+        id: { in: [20, 21] },
+        matterId: 10,
+        OR: [{ areaId: null }, { areaId: 40 }],
+      },
     });
     expect(prisma.meetingSession.create).toHaveBeenCalledWith(
       expect.objectContaining({

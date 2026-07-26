@@ -713,7 +713,7 @@ model Matter {
   @@index([createdAt])
 }
 
-/// 用户与议事之间的显式成员关系；正式决策可见性以该关系为基础。
+/// 用户与议事之间的显式成员关系；议事级决策以此为可见边界，小组决策还需校验分区成员关系。
 model MatterMember {
   id Int @id @default(autoincrement())
 
@@ -757,6 +757,7 @@ model DiscussionArea {
   members          DiscussionAreaMember[]
   messages         DiscussionMessage[]
   meetings         MeetingSession[]
+  decisions        Decision[]
   publicationsFrom DiscussionPublication[] @relation("DiscussionPublicationSourceArea")
   publicationsTo   DiscussionPublication[] @relation("DiscussionPublicationTargetArea")
   auditLogs        CollaborationAuditLog[]
@@ -913,6 +914,8 @@ model Decision {
   status      DecisionStatus @default(DRAFT)
 
   matterId  Int
+  /// 为空表示议事级决策；有值时表示仅属于一个私有讨论分区的小组决策。
+  areaId    Int?
   creatorId Int
   ownerId   Int?
   /// 牵头部门只表达业务责任归属，不决定议事聊天可见性。
@@ -923,10 +926,11 @@ model Decision {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  matter     Matter     @relation(fields: [matterId], references: [id], onDelete: Restrict)
-  department Department @relation(fields: [deptId], references: [id], onDelete: Restrict)
-  creator    User       @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  owner      User?      @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  matter     Matter          @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  area       DiscussionArea? @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  department Department      @relation(fields: [deptId], references: [id], onDelete: Restrict)
+  creator    User            @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  owner      User?           @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   participants DecisionParticipant[]
   proposals    DecisionProposal[]
@@ -939,6 +943,7 @@ model Decision {
   publications DiscussionPublication[]
 
   @@index([matterId])
+  @@index([areaId])
   @@index([deptId])
   @@index([creatorId])
   @@index([ownerId])

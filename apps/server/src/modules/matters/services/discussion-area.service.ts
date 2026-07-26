@@ -286,9 +286,23 @@ export class DiscussionAreaService {
       }
     }
 
+    const ownedDecisionCount = await this.prisma.decision.count({
+      where: { areaId, ownerId: userId },
+    });
+    if (ownedDecisionCount > 0) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.DISCUSSION_AREA_MEMBER_INVALID,
+        message: '目标成员仍负责当前小组决策，请先转移决策负责人',
+        status: 409,
+      });
+    }
+
     await this.prisma.$transaction(async (tx) => {
       await tx.meetingParticipant.deleteMany({
         where: { userId, meeting: { areaId } },
+      });
+      await tx.decisionParticipant.deleteMany({
+        where: { userId, decision: { areaId } },
       });
       await tx.discussionAreaMember.delete({ where: { id: member.id } });
     });

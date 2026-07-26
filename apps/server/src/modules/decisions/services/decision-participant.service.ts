@@ -58,7 +58,13 @@ export class DecisionParticipantService {
       where: {
         AND: [{ id: decisionId }, scopeWhere],
       },
-      select: { id: true, matterId: true, ownerId: true, status: true },
+      select: {
+        id: true,
+        matterId: true,
+        areaId: true,
+        ownerId: true,
+        status: true,
+      },
     });
 
     if (!decision) {
@@ -85,11 +91,18 @@ export class DecisionParticipantService {
       });
     }
 
+    const areaId = decision.areaId ?? null;
     const targetUser = await this.prisma.user.findFirst({
       where: {
         id: dto.userId,
         ...availableParticipantUserWhere,
-        matterMemberships: { some: { matterId: decision.matterId } },
+        ...(areaId === null
+          ? { matterMemberships: { some: { matterId: decision.matterId } } }
+          : {
+              discussionAreaMemberships: {
+                some: { areaId },
+              },
+            }),
       },
       select: { id: true },
     });
@@ -187,7 +200,13 @@ export class DecisionParticipantService {
       where: {
         AND: [{ id: decisionId }, scopeWhere],
       },
-      select: { id: true, matterId: true, ownerId: true, status: true },
+      select: {
+        id: true,
+        matterId: true,
+        areaId: true,
+        ownerId: true,
+        status: true,
+      },
     });
 
     if (!decision) {
@@ -214,10 +233,17 @@ export class DecisionParticipantService {
       });
     }
 
+    const areaId = decision.areaId ?? null;
     const users = await this.prisma.user.findMany({
       where: {
         ...availableParticipantUserWhere,
-        matterMemberships: { some: { matterId: decision.matterId } },
+        ...(areaId === null
+          ? { matterMemberships: { some: { matterId: decision.matterId } } }
+          : {
+              discussionAreaMemberships: {
+                some: { areaId },
+              },
+            }),
         decisionParticipants: {
           none: { decisionId: decision.id },
         },

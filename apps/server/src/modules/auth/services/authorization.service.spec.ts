@@ -37,6 +37,27 @@ function createUserRecord(
   };
 }
 
+/** 返回决策读取同时受议事成员和私有分区成员约束的预期查询条件。 */
+function createExpectedDecisionWhere(userId: number) {
+  return {
+    AND: [
+      { matter: { members: { some: { userId } } } },
+      {
+        OR: [
+          { areaId: null },
+          {
+            area: {
+              is: {
+                OR: [{ type: 'PUBLIC' }, { members: { some: { userId } } }],
+              },
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 describe('AuthorizationService', () => {
   let prisma: ReturnType<typeof createPrismaMock>;
   let service: AuthorizationService;
@@ -164,9 +185,7 @@ describe('AuthorizationService', () => {
 
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
-    ).resolves.toEqual({
-      matter: { members: { some: { userId: 10 } } },
-    });
+    ).resolves.toEqual(createExpectedDecisionWhere(10));
   });
 
   it('ALL 范围也不应穿透议事成员边界', async () => {
@@ -178,9 +197,7 @@ describe('AuthorizationService', () => {
 
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
-    ).resolves.toEqual({
-      matter: { members: { some: { userId: 10 } } },
-    });
+    ).resolves.toEqual(createExpectedDecisionWhere(10));
   });
 
   it('DEPT 范围的决策读取也应按议事成员关系裁剪', async () => {
@@ -193,9 +210,7 @@ describe('AuthorizationService', () => {
 
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
-    ).resolves.toEqual({
-      matter: { members: { some: { userId: 10 } } },
-    });
+    ).resolves.toEqual(createExpectedDecisionWhere(10));
   });
 
   it('无部门用户的 DEPT 范围不应匹配任何资源', async () => {
@@ -208,9 +223,7 @@ describe('AuthorizationService', () => {
 
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
-    ).resolves.toEqual({
-      matter: { members: { some: { userId: 10 } } },
-    });
+    ).resolves.toEqual(createExpectedDecisionWhere(10));
     await expect(
       service.buildDepartmentWhere(context, 'access:department:read'),
     ).resolves.toEqual({ id: -1 });
@@ -228,9 +241,7 @@ describe('AuthorizationService', () => {
 
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
-    ).resolves.toEqual({
-      matter: { members: { some: { userId: 10 } } },
-    });
+    ).resolves.toEqual(createExpectedDecisionWhere(10));
   });
 
   it('普通管理员不能授予超出自身范围的权限', () => {
