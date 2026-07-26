@@ -170,49 +170,18 @@ export class AuthorizationService {
   }
 
   /** 根据数据范围生成决策列表和详情查询条件。 */
-  async buildDecisionWhere(
+  buildDecisionWhere(
     context: AuthorizationContext,
-    permission: SystemPermissionCode,
+    _permission: SystemPermissionCode,
   ): Promise<Prisma.DecisionWhereInput> {
-    const scopes = this.getScopes(context, permission);
-
-    if (scopes.has(DataScope.ALL)) {
-      return {};
-    }
-
-    const conditions: Prisma.DecisionWhereInput[] = [];
-
-    if (scopes.has(DataScope.OWN)) {
-      conditions.push({
-        OR: [{ creatorId: context.userId }, { ownerId: context.userId }],
-      });
-    }
-
-    if (scopes.has(DataScope.DEPT) && context.deptId) {
-      conditions.push({ deptId: context.deptId });
-    }
-
-    if (scopes.has(DataScope.DEPT_AND_CHILD) && context.deptId) {
-      conditions.push({
-        deptId: {
-          in: await this.getDepartmentTreeIds(context.deptId),
+    void _permission;
+    return Promise.resolve({
+      matter: {
+        members: {
+          some: { userId: context.userId },
         },
-      });
-    }
-
-    if (scopes.has(DataScope.PARTICIPATED)) {
-      conditions.push({
-        participants: {
-          some: {
-            userId: context.userId,
-          },
-        },
-      });
-    }
-
-    return conditions.length > 0
-      ? { OR: conditions }
-      : { id: IMPOSSIBLE_RECORD_ID };
+      },
+    });
   }
 
   /** 根据数据范围生成用户管理列表和目标用户查询条件。 */

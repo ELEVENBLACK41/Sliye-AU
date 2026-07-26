@@ -84,6 +84,10 @@ export type DecisionSummary = {
   description: string | null;
   /** 决策当前业务状态。 */
   status: DecisionStatus;
+  /** 决策所属议事主键。 */
+  matterId: number;
+  /** 决策所属议事摘要。 */
+  matter: { id: number; title: string };
   /** 决策所属部门。 */
   department: DecisionDepartmentSummary;
   /** 创建该决策的用户。 */
@@ -312,6 +316,8 @@ export type CreateDecisionRequestPayload = {
   title: string;
   /** 决策背景或目标说明。 */
   description?: string;
+  /** 可选的来源会议；创建成功后会自动建立会议决策关联。 */
+  meetingId?: number;
   /** 决策所属的启用部门主键。 */
   departmentId: number;
   /** 初始负责人用户主键；省略或传入 `null` 时由服务端使用创建人。 */

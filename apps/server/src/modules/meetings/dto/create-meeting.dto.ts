@@ -5,15 +5,25 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { CreateMeetingRequestPayload } from '@workspace/contracts/meetings';
 import { Transform } from 'class-transformer';
 import {
+  ArrayUnique,
+  IsArray,
   IsISO8601,
+  IsInt,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
 /** 校验在一项决策中创建计划会议所需的字段。 */
 export class CreateMeetingDto implements CreateMeetingRequestPayload {
+  /** 会议所属讨论分区主键。 */
+  @ApiProperty({ minimum: 1 })
+  @IsInt()
+  @Min(1)
+  areaId!: number;
+
   /** 会议标题。 */
   @ApiProperty({ example: '权限模块重构方案评审会' })
   @Transform(({ value }: { value: unknown }) =>
@@ -39,4 +49,20 @@ export class CreateMeetingDto implements CreateMeetingRequestPayload {
   @IsOptional()
   @IsISO8601({ strict: true })
   scheduledAt?: string;
+
+  /** 同一议事内需要关联的决策主键，普通会议允许为空数组。 */
+  @ApiProperty({ type: [Number], example: [11, 12] })
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  decisionIds!: number[];
+
+  /** 当前分区可见成员中的受邀用户主键。 */
+  @ApiProperty({ type: [Number], example: [3, 5, 8] })
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  participantIds!: number[];
 }

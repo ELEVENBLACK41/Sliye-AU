@@ -11,9 +11,10 @@ import type {
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
 import {
-  DataScope,
   DecisionEventType,
   DecisionStatus,
+  MatterStatus,
+  MeetingStatus,
   ParticipantRole,
 } from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
@@ -25,9 +26,11 @@ import {
   toDecisionEvent,
   toDecisionSummary,
 } from '../decisions.mapper';
+import { MatterAccessService } from '../../matters/services/matter-access.service';
 
 /** 决策列表与详情统一加载的基础关系。 */
 const decisionSummaryInclude = {
+  matter: { select: { id: true, title: true } },
   department: true,
   creator: {
     select: { id: true, name: true, avatarUrl: true },
@@ -46,6 +49,7 @@ export class DecisionCoreService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
+    private readonly matterAccessService: MatterAccessService,
   ) {}
 
   /** 返回经过数据范围裁剪的决策列表。 */
@@ -65,10 +69,26 @@ export class DecisionCoreService {
     return decisions.map(toDecisionSummary);
   }
 
+  /** 返回指定议事下当前成员可见的全部正式决策。 */
+  async listMatter(
+    authorization: AuthorizationContext,
+    matterId: number,
+  ): Promise<DecisionListResponse> {
+    await this.matterAccessService.findMatter(authorization, matterId);
+    const decisions = await this.prisma.decision.findMany({
+      where: { matterId },
+      include: decisionSummaryInclude,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    });
+
+    return decisions.map(toDecisionSummary);
+  }
+
   /** 查询单个可访问决策，越权与不存在统一返回 404。 */
   async get(
     authorization: AuthorizationContext,
     decisionId: number,
+    matterId?: number,
   ): Promise<DecisionDetail> {
     const scopeWhere = await this.authorizationService.buildDecisionWhere(
       authorization,
@@ -76,7 +96,11 @@ export class DecisionCoreService {
     );
     const decision = await this.prisma.decision.findFirst({
       where: {
-        AND: [{ id: decisionId }, scopeWhere],
+        AND: [
+          { id: decisionId },
+          ...(matterId === undefined ? [] : [{ matterId }]),
+          scopeWhere,
+        ],
       },
       include: {
         ...decisionSummaryInclude,
@@ -163,11 +187,7 @@ export class DecisionCoreService {
       });
     }
 
-    const canManageAll = this.authorizationService
-      .getScopes(authorization, 'decision:update')
-      .has(DataScope.ALL);
-
-    if (!canManageAll && decision.ownerId !== authorization.userId) {
+    if (decision.ownerId !== authorization.userId) {
       throw new BusinessException({
         code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
         message: '只有决策负责人可以开始讨论',
@@ -243,35 +263,63 @@ export class DecisionCoreService {
     return toDecisionDetail(updatedDecision);
   }
 
-  /** 在授权部门内创建决策及其唯一协作群组，并原子写入创建人和时间线事件。 */
+  /** 在进行中的议事内创建决策、负责人参与关系和时间线事件。 */
   async create(
     authorization: AuthorizationContext,
+    matterId: number,
     dto: CreateDecisionDto,
   ): Promise<DecisionDetail> {
+    const matter = await this.matterAccessService.findMatter(
+      authorization,
+      matterId,
+    );
+    if (matter.status !== MatterStatus.ACTIVE) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.MATTER_READ_ONLY,
+        message: '只有进行中的议事可以创建决策',
+        status: 409,
+      });
+    }
     await this.authorizationService.assertDepartmentInScope(
       authorization,
       'decision:create',
       dto.departmentId,
     );
 
-    const decision = await this.prisma.$transaction(async (tx) => {
-      const space = await tx.discussionSpace.create({
-        data: {
-          name: dto.title,
-          description: dto.description,
-          createdById: authorization.userId,
+    if (dto.meetingId !== undefined) {
+      const sourceMeeting = await this.prisma.meetingSession.findFirst({
+        where: {
+          id: dto.meetingId,
+          status: MeetingStatus.LIVE,
+          area: {
+            matterId,
+            OR: [
+              { type: 'PUBLIC' },
+              { members: { some: { userId: authorization.userId } } },
+            ],
+          },
+          participants: { some: { userId: authorization.userId } },
         },
         select: { id: true },
       });
+      if (!sourceMeeting) {
+        throw new BusinessException({
+          code: API_ERROR_CODES.MEETING_NOT_FOUND,
+          message: '来源会议不存在、未进行或当前用户不是受邀成员',
+          status: 404,
+        });
+      }
+    }
 
-      return tx.decision.create({
+    const decision = await this.prisma.$transaction(async (tx) =>
+      tx.decision.create({
         data: {
           title: dto.title,
           description: dto.description,
+          matterId,
           deptId: dto.departmentId,
           creatorId: authorization.userId,
           ownerId: authorization.userId,
-          spaceId: space.id,
           participants: {
             create: {
               userId: authorization.userId,
@@ -284,10 +332,20 @@ export class DecisionCoreService {
               type: DecisionEventType.DECISION_CREATED,
               title: '创建决策',
               payload: {
+                matterId,
                 departmentId: dto.departmentId,
+                meetingId: dto.meetingId ?? null,
               },
+              meetingId: dto.meetingId,
             },
           },
+          ...(dto.meetingId === undefined
+            ? {}
+            : {
+                meetingLinks: {
+                  create: { meetingId: dto.meetingId },
+                },
+              }),
         },
         include: {
           ...decisionSummaryInclude,
@@ -300,8 +358,8 @@ export class DecisionCoreService {
             orderBy: { createdAt: 'asc' },
           },
         },
-      });
-    });
+      }),
+    );
 
     return toDecisionDetail(decision);
   }

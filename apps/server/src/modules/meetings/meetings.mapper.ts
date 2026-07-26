@@ -1,5 +1,5 @@
 /**
- * 本文件负责把 Prisma 会议查询结果转换为前后端共享会议契约。
+ * 本文件负责把 Prisma 分区会议查询结果转换为前后端共享会议契约。
  */
 import type {
   MeetingDetail,
@@ -9,33 +9,27 @@ import type {
 } from '@workspace/contracts/meetings';
 import type { Prisma } from '../../generated/prisma';
 
-/** 会议摘要查询统一加载的关系。 */
+/** 会议摘要查询统一加载的分区、关联决策和创建人。 */
 export const meetingSummaryInclude = {
-  createdBy: {
-    select: { id: true, name: true, avatarUrl: true },
-  },
-  space: {
-    select: {
-      decision: {
-        select: { id: true, ownerId: true, status: true },
-      },
+  createdBy: { select: { id: true, name: true, avatarUrl: true } },
+  area: { select: { id: true, matterId: true, name: true, type: true } },
+  decisionLinks: {
+    include: {
+      decision: { select: { id: true, title: true, status: true } },
     },
+    orderBy: { decisionId: 'asc' as const },
   },
-  _count: {
-    select: { participants: true },
-  },
+  _count: { select: { participants: true } },
 } as const satisfies Prisma.MeetingSessionInclude;
 
-/** 会议详情查询统一加载的关系。 */
+/** 会议详情查询额外加载全部受邀成员。 */
 export const meetingDetailInclude = {
   ...meetingSummaryInclude,
   participants: {
     include: {
-      user: {
-        select: { id: true, name: true, avatarUrl: true },
-      },
+      user: { select: { id: true, name: true, avatarUrl: true } },
     },
-    orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    orderBy: [{ role: 'asc' as const }, { createdAt: 'asc' as const }],
   },
 } as const satisfies Prisma.MeetingSessionInclude;
 
@@ -53,11 +47,7 @@ export type MeetingDetailRecord = Prisma.MeetingSessionGetPayload<{
 function toMeetingUser(
   user: MeetingSummaryRecord['createdBy'],
 ): MeetingUserSummary {
-  return {
-    id: user.id,
-    name: user.name,
-    avatarUrl: user.avatarUrl,
-  };
+  return { id: user.id, name: user.name, avatarUrl: user.avatarUrl };
 }
 
 /** 将数据库参与关系映射为会议参与者契约。 */
@@ -75,24 +65,22 @@ function toMeetingParticipant(
   };
 }
 
-/** 将数据库会议映射为列表和房间头部使用的摘要。 */
+/** 将数据库会议映射为议事会议摘要。 */
 export function toMeetingSummary(
   meeting: MeetingSummaryRecord,
 ): MeetingSummary {
-  const decision = meeting.space.decision;
-
-  if (!decision) {
-    throw new Error('会议未关联有效决策');
-  }
-
   return {
     id: meeting.id,
-    decisionId: decision.id,
+    matterId: meeting.area.matterId,
+    areaId: meeting.area.id,
+    areaType: meeting.area.type,
+    areaName: meeting.area.name,
     title: meeting.title,
     description: meeting.description,
     status: meeting.status,
     createdBy: toMeetingUser(meeting.createdBy),
     participantCount: meeting._count.participants,
+    decisions: meeting.decisionLinks.map(({ decision }) => decision),
     scheduledAt: meeting.scheduledAt?.toISOString() ?? null,
     startedAt: meeting.startedAt?.toISOString() ?? null,
     endedAt: meeting.endedAt?.toISOString() ?? null,

@@ -1,6 +1,8 @@
 /**
- * 本文件定义无音视频会议生命周期及参会成员的前后端共享契约。
+ * 本文件定义议事分区会议、参与者和多决策关联的前后端共享契约。
  */
+
+import type { DiscussionAreaType } from '../matters/matter.types.ts';
 
 /** 会议从计划到结束的稳定业务状态。 */
 export type MeetingStatus = 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
@@ -18,6 +20,16 @@ export type MeetingUserSummary = {
   avatarUrl: string | null;
 };
 
+/** 会议关联的一项决策摘要。 */
+export type MeetingDecisionSummary = {
+  /** 决策数据库主键。 */
+  id: number;
+  /** 决策标题。 */
+  title: string;
+  /** 决策当前状态。 */
+  status: 'DRAFT' | 'DISCUSSING' | 'RESOLVED' | 'CANCELLED' | 'ARCHIVED';
+};
+
 /** 一场会议中的受邀成员及其业务角色。 */
 export type MeetingParticipant = {
   /** 会议参与关系数据库主键。 */
@@ -28,11 +40,11 @@ export type MeetingParticipant = {
   role: MeetingParticipantRole;
   /** 参与者用户摘要。 */
   user: MeetingUserSummary;
-  /** 首次实际加入会议的时间；尚未接入实时服务或未加入时为 `null`。 */
+  /** 首次实际加入会议的时间。 */
   joinedAt: string | null;
-  /** 最近一次实际离开会议的时间；尚未离开时为 `null`。 */
+  /** 最近一次实际离开会议的时间。 */
   leftAt: string | null;
-  /** 参与关系创建时间，使用 ISO 8601 字符串。 */
+  /** 参与关系创建时间。 */
   createdAt: string;
 };
 
@@ -40,8 +52,14 @@ export type MeetingParticipant = {
 export type MeetingSummary = {
   /** 会议数据库主键。 */
   id: number;
-  /** 会议所属决策数据库主键。 */
-  decisionId: number;
+  /** 会议所属议事主键。 */
+  matterId: number;
+  /** 会议所属讨论分区主键。 */
+  areaId: number;
+  /** 会议可见范围。 */
+  areaType: DiscussionAreaType;
+  /** 会议所属分区名称。 */
+  areaName: string;
   /** 会议标题。 */
   title: string;
   /** 会议背景或目标说明。 */
@@ -50,17 +68,19 @@ export type MeetingSummary = {
   status: MeetingStatus;
   /** 创建会议的用户摘要。 */
   createdBy: MeetingUserSummary;
-  /** 当前会议的受邀成员数量。 */
+  /** 当前会议受邀成员数量。 */
   participantCount: number;
-  /** 计划开始时间；未安排明确时间时为 `null`。 */
+  /** 会议关联的零到多项决策。 */
+  decisions: MeetingDecisionSummary[];
+  /** 计划开始时间。 */
   scheduledAt: string | null;
-  /** 实际开始时间；会议尚未开始时为 `null`。 */
+  /** 实际开始时间。 */
   startedAt: string | null;
-  /** 实际结束时间；会议尚未结束时为 `null`。 */
+  /** 实际结束时间。 */
   endedAt: string | null;
-  /** 会议记录创建时间，使用 ISO 8601 字符串。 */
+  /** 会议记录创建时间。 */
   createdAt: string;
-  /** 会议记录最后更新时间，使用 ISO 8601 字符串。 */
+  /** 会议记录最后更新时间。 */
   updatedAt: string;
 };
 
@@ -70,15 +90,21 @@ export type MeetingDetail = MeetingSummary & {
   participants: MeetingParticipant[];
 };
 
-/** 在一项决策中创建会议的请求体。 */
+/** 在议事分区中创建会议的请求体。 */
 export type CreateMeetingRequestPayload = {
+  /** 会议所属讨论分区主键。 */
+  areaId: number;
   /** 会议标题。 */
   title: string;
   /** 会议背景、目标或补充说明。 */
   description?: string;
-  /** 计划开始时间，使用 ISO 8601 字符串。 */
+  /** 计划开始时间。 */
   scheduledAt?: string;
+  /** 同一议事内需要关联的决策主键。 */
+  decisionIds: number[];
+  /** 当前分区可见成员中的受邀用户主键。 */
+  participantIds: number[];
 };
 
-/** 指定决策下的会议列表接口返回数据。 */
+/** 指定议事下当前用户可见的会议列表。 */
 export type MeetingListResponse = MeetingSummary[];

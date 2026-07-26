@@ -20,6 +20,7 @@ import { AccessTokenGuard } from './modules/auth/guards/access-token.guard';
 import { PermissionGuard } from './modules/auth/guards/permission.guard';
 import { DecisionsModule } from './modules/decisions/decisions.module';
 import { MeetingsModule } from './modules/meetings/meetings.module';
+import { MattersModule } from './modules/matters/matters.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 // import { AppController } from './app.controller';
 // import { AppService } from './app.service';
@@ -35,6 +36,7 @@ import { RequestContextMiddleware } from './common/middleware/request-context.mi
     AuthModule,
     HealthModule,
     AccessManagementModule,
+    MattersModule,
     DecisionsModule,
     MeetingsModule,
   ],

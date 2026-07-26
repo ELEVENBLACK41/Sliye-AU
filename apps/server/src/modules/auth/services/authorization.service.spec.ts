@@ -144,7 +144,7 @@ describe('AuthorizationService', () => {
     );
   });
 
-  it('部门及下级范围应转换为包含后代部门的决策查询', async () => {
+  it('决策读取应始终限定为当前用户所在议事', async () => {
     prisma.department.findMany.mockResolvedValue([
       { id: 2, parentId: null },
       { id: 3, parentId: 2 },
@@ -165,11 +165,11 @@ describe('AuthorizationService', () => {
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
     ).resolves.toEqual({
-      OR: [{ deptId: { in: [2, 3, 4] } }],
+      matter: { members: { some: { userId: 10 } } },
     });
   });
 
-  it('ALL 范围应生成不附加隔离条件的决策查询', async () => {
+  it('ALL 范围也不应穿透议事成员边界', async () => {
     const context = service.buildContext(
       createUserRecord({
         roleGrants: [{ code: 'decision:read', scopeType: DataScope.ALL }],
@@ -178,10 +178,12 @@ describe('AuthorizationService', () => {
 
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
-    ).resolves.toEqual({});
+    ).resolves.toEqual({
+      matter: { members: { some: { userId: 10 } } },
+    });
   });
 
-  it('DEPT 范围只应匹配当前主部门', async () => {
+  it('DEPT 范围的决策读取也应按议事成员关系裁剪', async () => {
     const context = service.buildContext(
       createUserRecord({
         deptId: 2,
@@ -191,7 +193,9 @@ describe('AuthorizationService', () => {
 
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
-    ).resolves.toEqual({ OR: [{ deptId: 2 }] });
+    ).resolves.toEqual({
+      matter: { members: { some: { userId: 10 } } },
+    });
   });
 
   it('无部门用户的 DEPT 范围不应匹配任何资源', async () => {
@@ -204,13 +208,15 @@ describe('AuthorizationService', () => {
 
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
-    ).resolves.toEqual({ id: -1 });
+    ).resolves.toEqual({
+      matter: { members: { some: { userId: 10 } } },
+    });
     await expect(
       service.buildDepartmentWhere(context, 'access:department:read'),
     ).resolves.toEqual({ id: -1 });
   });
 
-  it('本人和参与范围应按 OR 组合，避免扩大为全部数据', async () => {
+  it('本人和参与范围不应改变议事成员读取边界', async () => {
     const context = service.buildContext(
       createUserRecord({
         roleGrants: [
@@ -223,10 +229,7 @@ describe('AuthorizationService', () => {
     await expect(
       service.buildDecisionWhere(context, 'decision:read'),
     ).resolves.toEqual({
-      OR: [
-        { OR: [{ creatorId: 10 }, { ownerId: 10 }] },
-        { participants: { some: { userId: 10 } } },
-      ],
+      matter: { members: { some: { userId: 10 } } },
     });
   });
 

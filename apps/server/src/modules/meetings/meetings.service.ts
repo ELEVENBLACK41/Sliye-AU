@@ -1,5 +1,5 @@
 /**
- * 本文件负责无音视频会议的创建、列表和详情查询。
+ * 本文件负责议事分区会议的创建、可见列表和详情查询。
  */
 import { Injectable } from '@nestjs/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
@@ -10,12 +10,11 @@ import type {
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { PrismaService } from '../../database/prisma.service';
 import {
-  DataScope,
-  DecisionStatus,
+  DiscussionAreaType,
   MeetingParticipantRole,
 } from '../../generated/prisma';
-import { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
+import { MatterAccessService } from '../matters/services/matter-access.service';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import {
   meetingDetailInclude,
@@ -24,91 +23,65 @@ import {
   toMeetingSummary,
 } from './meetings.mapper';
 
-/** 仍允许创建新会议的决策状态。 */
-const meetingCreatableDecisionStatuses = new Set<DecisionStatus>([
-  DecisionStatus.DRAFT,
-  DecisionStatus.DISCUSSING,
-]);
-
 @Injectable()
 export class MeetingsService {
-  /** 注入数据库和统一授权服务。 */
+  /** 注入数据库和统一议事分区授权服务。 */
   constructor(
     private readonly prisma: PrismaService,
-    private readonly authorizationService: AuthorizationService,
+    private readonly matterAccessService: MatterAccessService,
   ) {}
 
-  /** 在负责人管理的决策中创建计划会议并同步当前决策参与者。 */
+  /** 在当前用户可管理的议事分区中创建会议和多决策关联。 */
   async create(
     authorization: AuthorizationContext,
-    decisionId: number,
+    matterId: number,
     dto: CreateMeetingDto,
   ): Promise<MeetingDetail> {
-    const scopeWhere = await this.authorizationService.buildDecisionWhere(
+    const area = await this.matterAccessService.findArea(
       authorization,
-      'decision:update',
+      matterId,
+      dto.areaId,
     );
-    const decision = await this.prisma.decision.findFirst({
-      where: { AND: [{ id: decisionId }, scopeWhere] },
-      select: {
-        id: true,
-        ownerId: true,
-        spaceId: true,
-        status: true,
-        participants: {
-          select: { userId: true, role: true },
-          orderBy: { createdAt: 'asc' },
-        },
-      },
-    });
+    this.matterAccessService.assertAreaMeetingManager(area);
+    this.matterAccessService.assertAreaWritable(area);
 
-    if (!decision) {
-      this.throwDecisionNotFound();
-    }
+    await Promise.all([
+      this.assertDecisionsInMatter(matterId, dto.decisionIds),
+      this.assertParticipantsVisible(matterId, dto.areaId, area.type, [
+        ...new Set([authorization.userId, ...dto.participantIds]),
+      ]),
+    ]);
 
-    this.assertDecisionManager(
-      authorization,
-      decision.ownerId,
-      '只有决策负责人可以创建会议',
-    );
-
-    if (!meetingCreatableDecisionStatuses.has(decision.status)) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.MEETING_CREATE_NOT_ALLOWED,
-        message: '当前决策状态不允许创建会议',
-        status: 409,
-      });
-    }
-
-    const hostUserId = decision.ownerId ?? authorization.userId;
-    const participantRoles = new Map<number, MeetingParticipantRole>();
-
-    for (const participant of decision.participants) {
-      participantRoles.set(
-        participant.userId,
-        participant.userId === hostUserId
-          ? MeetingParticipantRole.HOST
-          : MeetingParticipantRole.ATTENDEE,
-      );
-    }
-
-    participantRoles.set(hostUserId, MeetingParticipantRole.HOST);
-
+    const participantIds = [
+      ...new Set([authorization.userId, ...dto.participantIds]),
+    ];
     const meeting = await this.prisma.meetingSession.create({
       data: {
-        spaceId: decision.spaceId,
+        areaId: dto.areaId,
         createdById: authorization.userId,
         title: dto.title,
         description: dto.description,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
         participants: {
           createMany: {
-            data: [...participantRoles].map(([userId, role]) => ({
+            data: participantIds.map((userId) => ({
               userId,
-              role,
+              role:
+                userId === authorization.userId
+                  ? MeetingParticipantRole.HOST
+                  : MeetingParticipantRole.ATTENDEE,
             })),
           },
         },
+        ...(dto.decisionIds.length === 0
+          ? {}
+          : {
+              decisionLinks: {
+                createMany: {
+                  data: dto.decisionIds.map((decisionId) => ({ decisionId })),
+                },
+              },
+            }),
       },
       include: meetingDetailInclude,
     });
@@ -116,53 +89,40 @@ export class MeetingsService {
     return toMeetingDetail(meeting);
   }
 
-  /** 查询当前用户可见决策下的全部会议。 */
+  /** 查询一项议事下当前用户可见分区中的全部会议。 */
   async list(
     authorization: AuthorizationContext,
-    decisionId: number,
+    matterId: number,
   ): Promise<MeetingListResponse> {
-    const scopeWhere = await this.authorizationService.buildDecisionWhere(
-      authorization,
-      'decision:read',
-    );
-    const decision = await this.prisma.decision.findFirst({
-      where: { AND: [{ id: decisionId }, scopeWhere] },
-      select: {
-        space: {
-          select: {
-            meetings: {
-              include: meetingSummaryInclude,
-              orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-            },
-          },
-        },
+    await this.matterAccessService.findMatter(authorization, matterId);
+    const meetings = await this.prisma.meetingSession.findMany({
+      where: {
+        area: this.matterAccessService.buildVisibleAreaWhere(
+          authorization.userId,
+          matterId,
+        ),
       },
+      include: meetingSummaryInclude,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
 
-    if (!decision) {
-      this.throwDecisionNotFound();
-    }
-
-    return decision.space.meetings.map(toMeetingSummary);
+    return meetings.map(toMeetingSummary);
   }
 
-  /** 查询当前用户授权范围内的一场会议。 */
+  /** 查询当前用户通过所在分区可见的一场会议。 */
   async get(
     authorization: AuthorizationContext,
     meetingId: number,
   ): Promise<MeetingDetail> {
-    const scopeWhere = await this.authorizationService.buildDecisionWhere(
-      authorization,
-      'decision:read',
-    );
     const meeting = await this.prisma.meetingSession.findFirst({
       where: {
         id: meetingId,
-        space: { decision: { is: scopeWhere } },
+        area: this.matterAccessService.buildVisibleAreaWhere(
+          authorization.userId,
+        ),
       },
       include: meetingDetailInclude,
     });
-
     if (!meeting) {
       throw new BusinessException({
         code: API_ERROR_CODES.MEETING_NOT_FOUND,
@@ -174,31 +134,50 @@ export class MeetingsService {
     return toMeetingDetail(meeting);
   }
 
-  /** 断言当前用户是决策负责人或拥有全部数据范围。 */
-  private assertDecisionManager(
-    authorization: AuthorizationContext,
-    ownerId: number | null,
-    message: string,
-  ): void {
-    const canManageAll = this.authorizationService
-      .getScopes(authorization, 'decision:update')
-      .has(DataScope.ALL);
-
-    if (!canManageAll && ownerId !== authorization.userId) {
+  /** 校验全部关联决策属于同一议事。 */
+  private async assertDecisionsInMatter(
+    matterId: number,
+    decisionIds: number[],
+  ): Promise<void> {
+    if (decisionIds.length === 0) {
+      return;
+    }
+    const count = await this.prisma.decision.count({
+      where: { id: { in: decisionIds }, matterId },
+    });
+    if (count !== decisionIds.length) {
       throw new BusinessException({
-        code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
-        message,
-        status: 403,
+        code: API_ERROR_CODES.MEETING_DECISION_INVALID,
+        message: '会议关联的决策必须全部属于当前议事',
+        status: 400,
       });
     }
   }
 
-  /** 抛出决策不存在或越权的统一异常。 */
-  private throwDecisionNotFound(): never {
-    throw new BusinessException({
-      code: API_ERROR_CODES.DECISION_NOT_FOUND,
-      message: '决策不存在或当前账号无权访问',
-      status: 404,
-    });
+  /** 校验受邀用户全部位于公共区或私有区的可见成员集合。 */
+  private async assertParticipantsVisible(
+    matterId: number,
+    areaId: number,
+    areaType: DiscussionAreaType,
+    participantIds: number[],
+  ): Promise<void> {
+    const count =
+      areaType === DiscussionAreaType.PUBLIC
+        ? await this.prisma.matterMember.count({
+            where: { matterId, userId: { in: participantIds } },
+          })
+        : await this.prisma.discussionAreaMember.count({
+            where: { areaId, userId: { in: participantIds } },
+          });
+    if (count !== participantIds.length) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.MEETING_PARTICIPANT_INVALID,
+        message:
+          areaType === DiscussionAreaType.PUBLIC
+            ? '公共会议只能邀请当前议事成员'
+            : '私有会议只能邀请当前私有分区成员',
+        status: 400,
+      });
+    }
   }
 }

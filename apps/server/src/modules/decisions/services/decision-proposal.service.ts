@@ -10,7 +10,6 @@ import type {
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
 import {
-  DataScope,
   DecisionEventType,
   DecisionStatus,
   ParticipantRole,
@@ -114,15 +113,9 @@ export class DecisionProposalService {
       });
     }
 
-    const canManageAll = this.authorizationService
-      .getScopes(authorization, 'decision:update')
-      .has(DataScope.ALL);
     const participantRole = decision.participants[0]?.role;
 
-    if (
-      !canManageAll &&
-      (!participantRole || !proposalCreatorRoles.has(participantRole))
-    ) {
+    if (!participantRole || !proposalCreatorRoles.has(participantRole)) {
       throw new BusinessException({
         code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
         message: '只有决策负责人或编辑者可以创建提案',
@@ -155,6 +148,7 @@ export class DecisionProposalService {
         await this.meetingContextService.resolveWritableMeetingId(
           decision.id,
           dto.meetingId,
+          authorization.userId,
           tx,
         );
 
@@ -238,10 +232,7 @@ export class DecisionProposalService {
       });
     }
 
-    const canManageAll = this.authorizationService
-      .getScopes(authorization, 'decision:update')
-      .has(DataScope.ALL);
-    if (!canManageAll && decision.ownerId !== authorization.userId) {
+    if (decision.ownerId !== authorization.userId) {
       throw new BusinessException({
         code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
         message: '只有决策负责人可以关闭提案',

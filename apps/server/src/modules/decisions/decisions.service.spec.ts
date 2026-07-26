@@ -7,7 +7,8 @@ import {
   DataScope,
   DecisionEventType,
   DecisionStatus,
-  DiscussionSpaceStatus,
+  MatterMemberRole,
+  MatterStatus,
   ParticipantRole,
   ProposalStatus,
   ResolutionKind,
@@ -19,6 +20,7 @@ import {
 import type { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import type { MeetingContextService } from '../meetings/services/meeting-context.service';
+import type { MatterAccessService } from '../matters/services/matter-access.service';
 import { DecisionsService } from './decisions.service';
 import { DecisionCoreService } from './services/decision-core.service';
 import { DecisionParticipantService } from './services/decision-participant.service';
@@ -37,9 +39,16 @@ function createDecisionsService(
         Promise.resolve(meetingId ?? null),
     ),
   } as unknown as MeetingContextService;
+  const matterAccessService = {
+    findMatter: jest.fn().mockResolvedValue({
+      id: 10,
+      status: MatterStatus.ACTIVE,
+      memberRole: MatterMemberRole.MEMBER,
+    }),
+  } as unknown as MatterAccessService;
 
   return new DecisionsService(
-    new DecisionCoreService(prisma, authorizationService),
+    new DecisionCoreService(prisma, authorizationService, matterAccessService),
     new DecisionParticipantService(prisma, authorizationService),
     new DecisionProposalService(
       prisma,
@@ -77,6 +86,7 @@ function createDecisionRecord() {
 
   return {
     id: 20,
+    matterId: 10,
     title: '是否重构权限模块',
     description: null,
     status: DecisionStatus.DRAFT,
@@ -92,6 +102,7 @@ function createDecisionRecord() {
       code: 'engineering',
       name: '研发部',
     },
+    matter: { id: 10, title: '权限模块议事' },
     creator: { id: 7, name: '成员甲', avatarUrl: null },
     owner: { id: 7, name: '成员甲', avatarUrl: null },
     _count: { participants: 1 },
@@ -406,6 +417,7 @@ describe('DecisionsService', () => {
       decision: {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
+          matterId: 10,
           ownerId: 7,
           status: DecisionStatus.DRAFT,
         }),
@@ -568,6 +580,7 @@ describe('DecisionsService', () => {
       decision: {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
+          matterId: 10,
           ownerId: 7,
           status: DecisionStatus.DISCUSSING,
         }),
@@ -596,6 +609,7 @@ describe('DecisionsService', () => {
         emailVerifiedAt: { not: null },
         deptId: { not: null },
         roles: { some: {} },
+        matterMemberships: { some: { matterId: 10 } },
         decisionParticipants: { none: { decisionId: 20 } },
       },
       select: {
@@ -675,6 +689,7 @@ describe('DecisionsService', () => {
       decision: {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
+          matterId: 10,
           ownerId: 7,
           status: DecisionStatus.DISCUSSING,
         }),
@@ -716,6 +731,7 @@ describe('DecisionsService', () => {
         emailVerifiedAt: { not: null },
         deptId: { not: null },
         roles: { some: {} },
+        matterMemberships: { some: { matterId: 10 } },
       },
       select: { id: true },
     });
@@ -912,13 +928,11 @@ describe('DecisionsService', () => {
   it('创建决策时应校验部门范围并自动创建 OWNER 参与关系', async () => {
     const record = createDecisionRecord();
     let capturedCreateInput: unknown;
-    const createSpaceMock = jest.fn().mockResolvedValue({ id: 80 });
     const createDecisionMock = jest.fn((input: unknown) => {
       capturedCreateInput = input;
       return Promise.resolve(record);
     });
     const transaction = {
-      discussionSpace: { create: createSpaceMock },
       decision: { create: createDecisionMock },
     };
     const prisma = {
@@ -936,7 +950,7 @@ describe('DecisionsService', () => {
     );
 
     await expect(
-      service.create(createAuthorization(), {
+      service.create(createAuthorization(), 10, {
         title: record.title,
         departmentId: 3,
       }),
@@ -947,20 +961,11 @@ describe('DecisionsService', () => {
       3,
     );
     expect(createDecisionMock).toHaveBeenCalledTimes(1);
-    expect(createSpaceMock).toHaveBeenCalledWith({
-      data: {
-        name: record.title,
-        description: undefined,
-        createdById: 7,
-      },
-      select: { id: true },
-    });
-
     expect(capturedCreateInput).toMatchObject({
       data: {
         creatorId: 7,
         ownerId: 7,
-        spaceId: 80,
+        matterId: 10,
         participants: { create: { userId: 7, role: 'OWNER' } },
       },
     });
@@ -1574,17 +1579,12 @@ describe('DecisionsService', () => {
       void input;
       return Promise.resolve({ count: 1 });
     });
-    const updateDiscussionSpace = jest.fn((input: unknown) => {
-      void input;
-      return Promise.resolve({ id: 80 });
-    });
     const createResolution = jest.fn((input: unknown) => {
       void input;
       return Promise.resolve(resolution);
     });
     const transaction = {
       decision: { updateMany: resolveDecision },
-      discussionSpace: { update: updateDiscussionSpace },
       decisionProposal: {
         findMany: jest.fn().mockResolvedValue([{ id: 51 }]),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -1601,7 +1601,6 @@ describe('DecisionsService', () => {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
           ownerId: 7,
-          spaceId: 80,
           status: DecisionStatus.DISCUSSING,
           proposals: [{ id: 50, status: ProposalStatus.OPEN }],
         }),
@@ -1649,17 +1648,6 @@ describe('DecisionsService', () => {
       },
     });
     expect(resolvedDecisionInput.data.decidedAt).toBeInstanceOf(Date);
-    const discussionSpaceInput = transaction.discussionSpace.update.mock
-      .calls[0]?.[0] as {
-      data: { closedAt: unknown };
-    };
-    expect(discussionSpaceInput).toMatchObject({
-      where: { id: 80 },
-      data: {
-        status: DiscussionSpaceStatus.READ_ONLY,
-      },
-    });
-    expect(discussionSpaceInput.data.closedAt).toBeInstanceOf(Date);
     const resolutionCreateInput = transaction.decisionResolution.create.mock
       .calls[0]?.[0] as {
       data: { meetingId: number | null };

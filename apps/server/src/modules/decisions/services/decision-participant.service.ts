@@ -10,7 +10,6 @@ import type {
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
 import {
-  DataScope,
   DecisionEventType,
   DecisionStatus,
   UserStatus,
@@ -59,7 +58,7 @@ export class DecisionParticipantService {
       where: {
         AND: [{ id: decisionId }, scopeWhere],
       },
-      select: { id: true, ownerId: true, status: true },
+      select: { id: true, matterId: true, ownerId: true, status: true },
     });
 
     if (!decision) {
@@ -70,11 +69,7 @@ export class DecisionParticipantService {
       });
     }
 
-    const canManageAll = this.authorizationService
-      .getScopes(authorization, 'decision:update')
-      .has(DataScope.ALL);
-
-    if (!canManageAll && decision.ownerId !== authorization.userId) {
+    if (decision.ownerId !== authorization.userId) {
       throw new BusinessException({
         code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
         message: '只有决策负责人可以添加参与者',
@@ -94,6 +89,7 @@ export class DecisionParticipantService {
       where: {
         id: dto.userId,
         ...availableParticipantUserWhere,
+        matterMemberships: { some: { matterId: decision.matterId } },
       },
       select: { id: true },
     });
@@ -191,7 +187,7 @@ export class DecisionParticipantService {
       where: {
         AND: [{ id: decisionId }, scopeWhere],
       },
-      select: { id: true, ownerId: true, status: true },
+      select: { id: true, matterId: true, ownerId: true, status: true },
     });
 
     if (!decision) {
@@ -202,11 +198,7 @@ export class DecisionParticipantService {
       });
     }
 
-    const canManageAll = this.authorizationService
-      .getScopes(authorization, 'decision:update')
-      .has(DataScope.ALL);
-
-    if (!canManageAll && decision.ownerId !== authorization.userId) {
+    if (decision.ownerId !== authorization.userId) {
       throw new BusinessException({
         code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
         message: '只有决策负责人可以查看可添加参与者',
@@ -225,6 +217,7 @@ export class DecisionParticipantService {
     const users = await this.prisma.user.findMany({
       where: {
         ...availableParticipantUserWhere,
+        matterMemberships: { some: { matterId: decision.matterId } },
         decisionParticipants: {
           none: { decisionId: decision.id },
         },

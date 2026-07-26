@@ -67,6 +67,12 @@ export const SYSTEM_PERMISSIONS = {
     create: 'decision:create',
     update: 'decision:update',
   },
+  matter: {
+    read: 'matter:read',
+    create: 'matter:create',
+    update: 'matter:update',
+    auditRead: 'matter:audit:read',
+  },
   ai: {
     chatUse: 'ai:chat:use',
   },
@@ -84,6 +90,7 @@ export type SystemPermissionCode =
   | (typeof SYSTEM_PERMISSIONS.access.userPermission)[keyof typeof SYSTEM_PERMISSIONS.access.userPermission]
   | (typeof SYSTEM_PERMISSIONS.access.audit)[keyof typeof SYSTEM_PERMISSIONS.access.audit]
   | (typeof SYSTEM_PERMISSIONS.decision)[keyof typeof SYSTEM_PERMISSIONS.decision]
+  | (typeof SYSTEM_PERMISSIONS.matter)[keyof typeof SYSTEM_PERMISSIONS.matter]
   | (typeof SYSTEM_PERMISSIONS.ai)[keyof typeof SYSTEM_PERMISSIONS.ai];
 
 /** 系统权限的唯一事实来源，部署同步与启动漂移检查均应读取此数组。 */
@@ -241,6 +248,38 @@ export const SYSTEM_PERMISSION_DEFINITIONS = [
     allowedScopes: ['ALL', 'OWN', 'DEPT', 'DEPT_AND_CHILD', 'PARTICIPATED'],
   },
   {
+    code: SYSTEM_PERMISSIONS.matter.read,
+    name: '查看议事',
+    module: 'matter',
+    action: 'read',
+    description: '允许读取自己作为成员加入的议事及其公共内容。',
+    allowedScopes: ['ALL', 'PARTICIPATED'],
+  },
+  {
+    code: SYSTEM_PERMISSIONS.matter.create,
+    name: '创建议事',
+    module: 'matter',
+    action: 'create',
+    description: '允许在授权部门范围内创建议事空间。',
+    allowedScopes: ['ALL', 'DEPT', 'DEPT_AND_CHILD'],
+  },
+  {
+    code: SYSTEM_PERMISSIONS.matter.update,
+    name: '管理议事',
+    module: 'matter',
+    action: 'update',
+    description: '允许议事负责人或管理员维护成员、分区、会议和生命周期。',
+    allowedScopes: ['ALL', 'PARTICIPATED'],
+  },
+  {
+    code: SYSTEM_PERMISSIONS.matter.auditRead,
+    name: '审计读取私有议事内容',
+    module: 'matter:audit',
+    action: 'read',
+    description: '允许填写原因并通过独立审计入口只读访问私有分区内容。',
+    allowedScopes: ['ALL'],
+  },
+  {
     code: SYSTEM_PERMISSIONS.ai.chatUse,
     name: '使用 AI 对话',
     module: 'ai:chat',
@@ -316,6 +355,9 @@ export const SYSTEM_ROLE_DEFINITIONS = [
       { code: SYSTEM_PERMISSIONS.decision.read, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.decision.create, scopeType: 'DEPT_AND_CHILD' },
       { code: SYSTEM_PERMISSIONS.decision.update, scopeType: 'PARTICIPATED' },
+      { code: SYSTEM_PERMISSIONS.matter.read, scopeType: 'PARTICIPATED' },
+      { code: SYSTEM_PERMISSIONS.matter.create, scopeType: 'DEPT_AND_CHILD' },
+      { code: SYSTEM_PERMISSIONS.matter.update, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.ai.chatUse, scopeType: 'ALL' },
     ],
   },
@@ -329,6 +371,9 @@ export const SYSTEM_ROLE_DEFINITIONS = [
       { code: SYSTEM_PERMISSIONS.decision.read, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.decision.create, scopeType: 'DEPT' },
       { code: SYSTEM_PERMISSIONS.decision.update, scopeType: 'PARTICIPATED' },
+      { code: SYSTEM_PERMISSIONS.matter.read, scopeType: 'PARTICIPATED' },
+      { code: SYSTEM_PERMISSIONS.matter.create, scopeType: 'DEPT' },
+      { code: SYSTEM_PERMISSIONS.matter.update, scopeType: 'PARTICIPATED' },
       { code: SYSTEM_PERMISSIONS.ai.chatUse, scopeType: 'ALL' },
     ],
   },

@@ -6,4 +6,5 @@ export type * from './auth/index.ts';
 export * from './common/index.ts';
 export * from './access/index.ts';
 export type * from './decisions/index.ts';
+export type * from './matters/index.ts';
 export type * from './meetings/index.ts';

@@ -2,7 +2,6 @@
  * @Description: 决策数据库实体到前后端共享响应契约的映射函数。
  */
 import type {
-  DecisionChatMessage,
   DecisionDetail,
   DecisionEventTimelineItem,
   DecisionParticipant as DecisionParticipantContract,
@@ -15,7 +14,6 @@ import type {
 } from '@workspace/contracts/decisions';
 import type {
   DecisionDetailRecord,
-  DecisionChatMessageRecord,
   DecisionEventRecord,
   DecisionParticipantCandidateRecord,
   DecisionParticipantRecord,
@@ -25,35 +23,6 @@ import type {
   DecisionUserRecord,
   DecisionVoteRoundRecord,
 } from './types/decision-mapper.types';
-
-/** 将持久化群聊消息转换为共享契约，并隐藏已软删除消息的正文。 */
-export function toDecisionChatMessage(
-  message: DecisionChatMessageRecord,
-): DecisionChatMessage {
-  return {
-    id: message.id,
-    spaceId: message.spaceId,
-    clientMessageId: message.clientMessageId,
-    type: message.type,
-    content: message.deletedAt ? null : message.content,
-    author: message.author ? toDecisionUser(message.author) : null,
-    replyTo: message.replyTo
-      ? {
-          id: message.replyTo.id,
-          author: message.replyTo.author
-            ? toDecisionUser(message.replyTo.author)
-            : null,
-          content: message.replyTo.deletedAt ? null : message.replyTo.content,
-          deletedAt: message.replyTo.deletedAt?.toISOString() ?? null,
-        }
-      : null,
-    meetingId: message.meetingId,
-    pinnedAt: message.pinnedAt?.toISOString() ?? null,
-    editedAt: message.editedAt?.toISOString() ?? null,
-    deletedAt: message.deletedAt?.toISOString() ?? null,
-    createdAt: message.createdAt.toISOString(),
-  };
-}
 
 /** 标准决策投票选项使用的稳定代码。 */
 type StandardDecisionVoteOptionCode = 'APPROVE' | 'REJECT' | 'ABSTAIN';
@@ -67,6 +36,8 @@ export function toDecisionSummary(
     title: decision.title,
     description: decision.description,
     status: decision.status,
+    matterId: decision.matterId,
+    matter: decision.matter,
     department: {
       id: decision.department.id,
       code: decision.department.code,

@@ -1,36 +1,38 @@
 /**
- * 本文件使用独立密钥签发和验证只绑定单个决策的短期 Socket Ticket。
+ * 本文件使用独立密钥签发和验证绑定议事、分区、用户及登录会话的短期 Socket Ticket。
  */
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { DecisionChatTicket } from '@workspace/contracts/decisions';
+import type { MatterChatTicket } from '@workspace/contracts/matters';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
-import type { DecisionChatTicketPayload } from '../types/decision-chat-ticket.types';
+import type { MatterChatTicketPayload } from '../types/matter-chat-ticket.types';
 
 /** 未显式配置时使用的 Ticket 有效时长。 */
 const DEFAULT_TICKET_TTL_SECONDS = 5 * 60;
 
-/** 开发环境使用的独立 Ticket 密钥；生产环境由环境变量校验保证必须显式配置。 */
+/** 开发环境使用的独立 Ticket 密钥。 */
 const DEVELOPMENT_TICKET_SECRET =
   'nextnest-development-chat-ticket-secret-change-me';
 
-/** 签发 Ticket 时所需的最小身份和房间范围。 */
-type IssueDecisionChatTicketInput = {
+/** 签发分区 Ticket 所需的可信输入。 */
+type IssueMatterChatTicketInput = {
   /** 当前用户主键。 */
   userId: number;
   /** 当前登录会话主键。 */
   sessionId: string;
-  /** Ticket 唯一允许加入的决策主键。 */
-  decisionId: number;
+  /** 目标议事主键。 */
+  matterId: number;
+  /** 目标讨论分区主键。 */
+  areaId: number;
 };
 
 @Injectable()
-export class DecisionChatTicketService {
-  private readonly logger = new Logger(DecisionChatTicketService.name);
+export class MatterChatTicketService {
+  private readonly logger = new Logger(MatterChatTicketService.name);
   private readonly secret: string;
   private readonly ttlSeconds: number;
 
-  /** 读取独立 Ticket 密钥和有效期配置。 */
+  /** 读取 Ticket 专用密钥和有效期配置。 */
   constructor(private readonly configService: ConfigService) {
     this.secret = this.readSecret();
     this.ttlSeconds = this.readPositiveInteger(
@@ -39,17 +41,18 @@ export class DecisionChatTicketService {
     );
   }
 
-  /** 签发只允许连接指定决策房间的短期 Ticket。 */
-  issue(input: IssueDecisionChatTicketInput): DecisionChatTicket {
+  /** 签发只允许连接指定议事分区的短期 Ticket。 */
+  issue(input: IssueMatterChatTicketInput): MatterChatTicket {
     const now = Math.floor(Date.now() / 1000);
-    const payload: DecisionChatTicketPayload = {
+    const payload: MatterChatTicketPayload = {
       sub: input.userId,
       sid: input.sessionId,
-      decisionId: input.decisionId,
+      matterId: input.matterId,
+      areaId: input.areaId,
       jti: randomUUID(),
       iat: now,
       exp: now + this.ttlSeconds,
-      type: 'decision-chat',
+      type: 'matter-chat',
     };
     const header = this.encodeJson({ alg: 'HS256', typ: 'JWT' });
     const body = this.encodeJson(payload);
@@ -58,48 +61,47 @@ export class DecisionChatTicketService {
     return {
       ticket: `${header}.${body}.${signature}`,
       expiresAt: new Date(payload.exp * 1000).toISOString(),
-      namespace: '/decision-chat',
+      namespace: '/matter-chat',
     };
   }
 
-  /** 校验 Ticket 的签名、类型、房间范围和过期时间。 */
-  verify(ticket: string): DecisionChatTicketPayload {
+  /** 校验 Ticket 签名、类型、身份、分区范围和过期时间。 */
+  verify(ticket: string): MatterChatTicketPayload {
     const parts = ticket.split('.');
-
     if (parts.length !== 3) {
-      throw new UnauthorizedException('Invalid decision chat ticket');
+      throw new UnauthorizedException('Invalid matter chat ticket');
     }
 
     const [rawHeader, rawPayload, rawSignature] = parts;
     const expectedSignature = this.sign(`${rawHeader}.${rawPayload}`);
-
     if (!this.safeEqual(rawSignature, expectedSignature)) {
-      throw new UnauthorizedException('Invalid decision chat ticket');
+      throw new UnauthorizedException('Invalid matter chat ticket');
     }
 
     const header = this.decodeJson<{ alg?: string; typ?: string }>(rawHeader);
-    const payload = this.decodeJson<DecisionChatTicketPayload>(rawPayload);
-
+    const payload = this.decodeJson<MatterChatTicketPayload>(rawPayload);
     if (
       header.alg !== 'HS256' ||
       header.typ !== 'JWT' ||
-      payload.type !== 'decision-chat' ||
+      payload.type !== 'matter-chat' ||
       !Number.isInteger(payload.sub) ||
       payload.sub < 1 ||
       typeof payload.sid !== 'string' ||
       payload.sid.length === 0 ||
-      !Number.isInteger(payload.decisionId) ||
-      payload.decisionId < 1 ||
+      !Number.isInteger(payload.matterId) ||
+      payload.matterId < 1 ||
+      !Number.isInteger(payload.areaId) ||
+      payload.areaId < 1 ||
       typeof payload.jti !== 'string' ||
       payload.jti.length === 0 ||
       !Number.isInteger(payload.iat) ||
       !Number.isInteger(payload.exp)
     ) {
-      throw new UnauthorizedException('Invalid decision chat ticket');
+      throw new UnauthorizedException('Invalid matter chat ticket');
     }
 
     if (payload.exp <= Math.floor(Date.now() / 1000)) {
-      throw new UnauthorizedException('Decision chat ticket expired');
+      throw new UnauthorizedException('Matter chat ticket expired');
     }
 
     return payload;
@@ -110,7 +112,6 @@ export class DecisionChatTicketService {
     const configuredSecret = this.configService.get<string>(
       'CHAT_SOCKET_TICKET_SECRET',
     );
-
     if (configuredSecret && configuredSecret.length >= 32) {
       return configuredSecret;
     }
@@ -121,25 +122,24 @@ export class DecisionChatTicketService {
     return DEVELOPMENT_TICKET_SECRET;
   }
 
-  /** 读取正整数配置，非法值回退到已验证的默认值。 */
+  /** 读取正整数配置，非法值回退到默认值。 */
   private readPositiveInteger(key: string, fallback: number): number {
     const rawValue = this.configService.get<string | number>(key);
     const value = rawValue === undefined ? fallback : Number(rawValue);
-
     return Number.isInteger(value) && value > 0 ? value : fallback;
   }
 
-  /** 将 JSON 数据编码为 JWT 使用的 base64url 字符串。 */
+  /** 将 JSON 编码为 JWT 使用的 base64url 字符串。 */
   private encodeJson(value: unknown): string {
     return Buffer.from(JSON.stringify(value)).toString('base64url');
   }
 
-  /** 解码并解析 JWT 中的 base64url JSON，格式错误统一视为无效 Ticket。 */
+  /** 解码 Ticket JSON，格式错误统一视为无效凭证。 */
   private decodeJson<T>(value: string): T {
     try {
       return JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as T;
     } catch {
-      throw new UnauthorizedException('Invalid decision chat ticket');
+      throw new UnauthorizedException('Invalid matter chat ticket');
     }
   }
 
@@ -148,15 +148,13 @@ export class DecisionChatTicketService {
     return createHmac('sha256', this.secret).update(value).digest('base64url');
   }
 
-  /** 使用固定时间比较校验签名，减少签名值的时序侧信道。 */
+  /** 使用固定时间比较校验签名。 */
   private safeEqual(actual: string, expected: string): boolean {
     const actualBuffer = Buffer.from(actual);
     const expectedBuffer = Buffer.from(expected);
-
-    if (actualBuffer.length !== expectedBuffer.length) {
-      return false;
-    }
-
-    return timingSafeEqual(actualBuffer, expectedBuffer);
+    return (
+      actualBuffer.length === expectedBuffer.length &&
+      timingSafeEqual(actualBuffer, expectedBuffer)
+    );
   }
 }

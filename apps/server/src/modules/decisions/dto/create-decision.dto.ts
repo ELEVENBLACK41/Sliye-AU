@@ -40,4 +40,11 @@ export class CreateDecisionDto implements CreateDecisionRequestPayload {
   @IsInt()
   @Min(1)
   departmentId!: number;
+
+  /** 可选的来源会议；服务端会校验会议属于当前议事且正在进行。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  meetingId?: number;
 }

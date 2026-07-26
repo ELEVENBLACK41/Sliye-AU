@@ -4,11 +4,10 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { MeetingsModule } from '../meetings/meetings.module';
+import { MattersModule } from '../matters/matters.module';
 import { DecisionsController } from './decisions.controller';
+import { MatterDecisionsController } from './matter-decisions.controller';
 import { DecisionsService } from './decisions.service';
-import { DecisionChatGateway } from './gateways/decision-chat.gateway';
-import { DecisionChatService } from './services/decision-chat.service';
-import { DecisionChatTicketService } from './services/decision-chat-ticket.service';
 import { DecisionCoreService } from './services/decision-core.service';
 import { DecisionParticipantService } from './services/decision-participant.service';
 import { DecisionProposalService } from './services/decision-proposal.service';
@@ -16,13 +15,10 @@ import { DecisionResolutionService } from './services/decision-resolution.servic
 import { DecisionVoteService } from './services/decision-vote.service';
 
 @Module({
-  imports: [AuthModule, MeetingsModule],
-  controllers: [DecisionsController],
+  imports: [AuthModule, MeetingsModule, MattersModule],
+  controllers: [DecisionsController, MatterDecisionsController],
   providers: [
     DecisionsService,
-    DecisionChatGateway,
-    DecisionChatService,
-    DecisionChatTicketService,
     DecisionCoreService,
     DecisionParticipantService,
     DecisionProposalService,

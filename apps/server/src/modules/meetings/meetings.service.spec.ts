@@ -1,17 +1,22 @@
 /**
- * 本文件验证无音视频会议的创建、授权和生命周期流转边界。
+ * 本文件验证议事分区会议的创建、可见性、参会人边界和多决策时间线。
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { PrismaService } from '../../database/prisma.service';
 import {
-  DataScope,
-  DecisionStatus,
+  DiscussionAreaMemberRole,
+  DiscussionAreaStatus,
+  DiscussionAreaType,
+  MatterMemberRole,
+  MatterStatus,
   MeetingParticipantRole,
   MeetingStatus,
-  ParticipantRole,
 } from '../../generated/prisma';
-import type { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
+import type {
+  DiscussionAreaAccessContext,
+  MatterAccessService,
+} from '../matters/services/matter-access.service';
 import type { MeetingDetailRecord } from './meetings.mapper';
 import { MeetingsService } from './meetings.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
@@ -28,7 +33,7 @@ function createAuthorization(userId = 7): AuthorizationContext {
   };
 }
 
-/** 创建可由 Mapper 消费的完整会议查询结果。 */
+/** 创建可由会议 Mapper 消费的完整数据库记录。 */
 function createMeetingRecord(
   overrides: Partial<MeetingDetailRecord> = {},
 ): MeetingDetailRecord {
@@ -36,7 +41,7 @@ function createMeetingRecord(
 
   return {
     id: 30,
-    spaceId: 40,
+    areaId: 40,
     createdById: 7,
     title: '权限模块重构方案评审会',
     description: '讨论候选方案并决定是否进入投票。',
@@ -50,13 +55,34 @@ function createMeetingRecord(
     createdAt,
     updatedAt: createdAt,
     createdBy: { id: 7, name: '负责人', avatarUrl: null },
-    space: {
-      decision: {
-        id: 20,
-        ownerId: 7,
-        status: DecisionStatus.DISCUSSING,
-      },
+    area: {
+      id: 40,
+      matterId: 10,
+      name: '公共讨论',
+      type: DiscussionAreaType.PUBLIC,
     },
+    decisionLinks: [
+      {
+        meetingId: 30,
+        decisionId: 20,
+        createdAt,
+        decision: {
+          id: 20,
+          title: '是否重构权限模块',
+          status: 'DISCUSSING',
+        },
+      },
+      {
+        meetingId: 30,
+        decisionId: 21,
+        createdAt,
+        decision: {
+          id: 21,
+          title: '是否迁移审计日志',
+          status: 'DRAFT',
+        },
+      },
+    ],
     _count: { participants: 2 },
     participants: [
       {
@@ -84,35 +110,40 @@ function createMeetingRecord(
   };
 }
 
-/** 从 Jest Mock 中安全读取第一次调用的第一个参数。 */
-function getFirstCallArgument(mockFunction: {
-  /** Jest 记录的调用信息。 */
-  mock: { calls: unknown[][] };
-}): unknown {
-  return mockFunction.mock.calls[0]?.[0];
+/** 创建公共分区的授权上下文。 */
+function createAreaContext(
+  type: DiscussionAreaType = DiscussionAreaType.PUBLIC,
+): DiscussionAreaAccessContext {
+  return {
+    id: 40,
+    matterId: 10,
+    type,
+    status: DiscussionAreaStatus.ACTIVE,
+    matterStatus: MatterStatus.ACTIVE,
+    matterMemberRole: MatterMemberRole.OWNER,
+    areaMemberRole:
+      type === DiscussionAreaType.PRIVATE
+        ? DiscussionAreaMemberRole.MANAGER
+        : null,
+  };
 }
 
-/** 创建会议服务使用的最小 Prisma 与授权服务 Mock。 */
-function createServiceHarness(options?: { allScope?: boolean }) {
+/** 创建会议服务与生命周期服务的共享测试替身。 */
+function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
   const transaction = {
-    decision: {
-      update: jest.fn(),
-    },
     meetingSession: {
-      count: jest.fn().mockResolvedValue(0),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findUnique: jest.fn(),
     },
-    decisionEvent: {
-      create: jest.fn(),
-    },
+    decisionEvent: { createMany: jest.fn().mockResolvedValue({ count: 2 }) },
   };
   const prisma = {
-    decision: {
-      findFirst: jest.fn(),
-    },
+    decision: { count: jest.fn().mockResolvedValue(2) },
+    matterMember: { count: jest.fn().mockResolvedValue(2) },
+    discussionAreaMember: { count: jest.fn().mockResolvedValue(2) },
     meetingSession: {
       create: jest.fn(),
+      findMany: jest.fn(),
       findFirst: jest.fn(),
     },
     $transaction: jest.fn(
@@ -120,205 +151,157 @@ function createServiceHarness(options?: { allScope?: boolean }) {
         callback(transaction),
     ),
   };
-  const authorizationService = {
-    buildDecisionWhere: jest.fn().mockResolvedValue({ deptId: 3 }),
-    getScopes: jest
-      .fn()
-      .mockReturnValue(
-        options?.allScope
-          ? new Set([DataScope.ALL])
-          : new Set([DataScope.PARTICIPATED]),
-      ),
+  const areaContext = createAreaContext(type);
+  const matterAccessService = {
+    findMatter: jest.fn().mockResolvedValue({
+      id: 10,
+      status: MatterStatus.ACTIVE,
+      memberRole: MatterMemberRole.OWNER,
+    }),
+    findArea: jest.fn().mockResolvedValue(areaContext),
+    buildVisibleAreaWhere: jest.fn((userId: number, matterId?: number) => ({
+      ...(matterId === undefined ? {} : { matterId }),
+      visibleToUserId: userId,
+    })),
+    assertAreaMeetingManager: jest.fn(),
+    assertAreaWritable: jest.fn(),
   };
 
   return {
+    prisma,
+    transaction,
+    matterAccessService,
     service: new MeetingsService(
       prisma as unknown as PrismaService,
-      authorizationService as unknown as AuthorizationService,
+      matterAccessService as unknown as MatterAccessService,
     ),
     lifecycleService: new MeetingLifecycleService(
       prisma as unknown as PrismaService,
-      authorizationService as unknown as AuthorizationService,
+      matterAccessService as unknown as MatterAccessService,
     ),
-    prisma,
-    transaction,
-    authorizationService,
   };
 }
 
 describe('MeetingsService', () => {
-  it('负责人创建会议时应同步决策参与者并把负责人设为主持人', async () => {
-    const { service, prisma } = createServiceHarness();
-    const meeting = createMeetingRecord();
-    prisma.decision.findFirst.mockResolvedValue({
-      id: 20,
-      ownerId: 7,
-      spaceId: 40,
-      status: DecisionStatus.DRAFT,
-      participants: [
-        { userId: 7, role: ParticipantRole.OWNER },
-        { userId: 8, role: ParticipantRole.APPROVER },
-      ],
-    });
-    prisma.meetingSession.create.mockResolvedValue(meeting);
+  it('公共分区应能创建关联多项决策的会议', async () => {
+    const { service, prisma, matterAccessService } = createHarness();
+    prisma.meetingSession.create.mockResolvedValue(createMeetingRecord());
 
     await expect(
-      service.create(createAuthorization(), 20, {
+      service.create(createAuthorization(), 10, {
+        areaId: 40,
         title: '权限模块重构方案评审会',
         description: '讨论候选方案并决定是否进入投票。',
         scheduledAt: '2026-07-25T06:00:00.000Z',
+        decisionIds: [20, 21],
+        participantIds: [8],
       }),
     ).resolves.toMatchObject({
       id: 30,
-      decisionId: 20,
-      status: MeetingStatus.SCHEDULED,
+      matterId: 10,
+      areaId: 40,
       participantCount: 2,
+      decisions: [{ id: 20 }, { id: 21 }],
     });
-    const createArgument = getFirstCallArgument(prisma.meetingSession.create);
-    expect(createArgument).toMatchObject({
-      data: {
-        spaceId: 40,
-        participants: {
-          createMany: {
-            data: [
-              { userId: 7, role: MeetingParticipantRole.HOST },
-              { userId: 8, role: MeetingParticipantRole.ATTENDEE },
-            ],
+    expect(matterAccessService.assertAreaMeetingManager).toHaveBeenCalled();
+    expect(prisma.decision.count).toHaveBeenCalledWith({
+      where: { id: { in: [20, 21] }, matterId: 10 },
+    });
+    expect(prisma.meetingSession.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        // Jest 非对称匹配器在类型层会退化为 any，仅用于断言调用载荷。
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: expect.objectContaining({
+          areaId: 40,
+          participants: {
+            createMany: {
+              data: [
+                { userId: 7, role: MeetingParticipantRole.HOST },
+                { userId: 8, role: MeetingParticipantRole.ATTENDEE },
+              ],
+            },
           },
-        },
-      },
-    });
+          decisionLinks: {
+            createMany: {
+              data: [{ decisionId: 20 }, { decisionId: 21 }],
+            },
+          },
+        }),
+      }),
+    );
   });
 
-  it('非负责人且没有 ALL 范围时不能创建会议', async () => {
-    const { service, prisma } = createServiceHarness();
-    prisma.decision.findFirst.mockResolvedValue({
-      id: 20,
-      ownerId: 9,
-      spaceId: 40,
-      status: DecisionStatus.DISCUSSING,
-      participants: [{ userId: 7, role: ParticipantRole.EDITOR }],
-    });
+  it('私有分区会议不得邀请分区外成员', async () => {
+    const { service, prisma } = createHarness(DiscussionAreaType.PRIVATE);
+    prisma.decision.count.mockResolvedValue(0);
+    prisma.discussionAreaMember.count.mockResolvedValue(1);
 
     await expect(
-      service.create(createAuthorization(), 20, {
-        title: '方案评审会',
+      service.create(createAuthorization(), 10, {
+        areaId: 40,
+        title: '私有评审会',
+        decisionIds: [],
+        participantIds: [8],
       }),
     ).rejects.toMatchObject({
-      code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
+      code: API_ERROR_CODES.MEETING_PARTICIPANT_INVALID,
+      status: 400,
     });
     expect(prisma.meetingSession.create).not.toHaveBeenCalled();
   });
 
-  it('主持人开始会议时应原子更新状态并写入会议开始事件', async () => {
-    const { lifecycleService, prisma, transaction } = createServiceHarness();
-    const scheduledMeeting = createMeetingRecord();
-    const liveMeeting = createMeetingRecord({
-      status: MeetingStatus.LIVE,
-      startedAt: new Date('2026-07-24T02:30:00.000Z'),
-    });
-    prisma.meetingSession.findFirst.mockResolvedValue(scheduledMeeting);
-    transaction.meetingSession.findUnique.mockResolvedValue(liveMeeting);
+  it('会议列表应复用当前用户可见分区条件', async () => {
+    const { service, prisma, matterAccessService } = createHarness();
+    prisma.meetingSession.findMany.mockResolvedValue([]);
 
-    await expect(
-      lifecycleService.start(createAuthorization(), 30),
-    ).resolves.toMatchObject({
-      id: 30,
-      status: MeetingStatus.LIVE,
-    });
-    const startUpdateArgument = getFirstCallArgument(
-      transaction.meetingSession.updateMany,
+    await expect(service.list(createAuthorization(), 10)).resolves.toEqual([]);
+    expect(matterAccessService.buildVisibleAreaWhere).toHaveBeenCalledWith(
+      7,
+      10,
     );
-    const startEventArgument = getFirstCallArgument(
-      transaction.decisionEvent.create,
-    );
-    expect(startUpdateArgument).toMatchObject({
-      where: { id: 30, status: MeetingStatus.SCHEDULED },
-      data: { status: MeetingStatus.LIVE },
-    });
-    expect(startEventArgument).toMatchObject({
-      data: {
-        decisionId: 20,
-        meetingId: 30,
-        actorId: 7,
-        type: 'MEETING_STARTED',
-      },
-    });
-  });
-
-  it('同一决策已有进行中会议时不得开始第二场会议', async () => {
-    const { lifecycleService, prisma, transaction } = createServiceHarness();
-    prisma.meetingSession.findFirst.mockResolvedValue(createMeetingRecord());
-    transaction.meetingSession.count.mockResolvedValue(1);
-
-    await expect(
-      lifecycleService.start(createAuthorization(), 30),
-    ).rejects.toMatchObject({
-      code: API_ERROR_CODES.MEETING_LIVE_CONFLICT,
-    });
-    expect(transaction.meetingSession.updateMany).not.toHaveBeenCalled();
-    expect(transaction.decisionEvent.create).not.toHaveBeenCalled();
-  });
-
-  it('非主持人不能开始会议', async () => {
-    const { lifecycleService, prisma } = createServiceHarness();
-    prisma.meetingSession.findFirst.mockResolvedValue(
-      createMeetingRecord({
-        space: {
-          decision: {
-            id: 20,
-            ownerId: 9,
-            status: DecisionStatus.DISCUSSING,
-          },
-        },
+    expect(prisma.meetingSession.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { area: { matterId: 10, visibleToUserId: 7 } },
       }),
     );
-
-    await expect(
-      lifecycleService.start(createAuthorization(8), 30),
-    ).rejects.toMatchObject({
-      code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
-    });
   });
 
-  it('主持人结束会议时应原子更新状态并写入会议结束事件', async () => {
-    const { lifecycleService, prisma, transaction } = createServiceHarness();
-    const liveMeeting = createMeetingRecord({
+  it('开始多决策会议时应为每项决策写入独立事件', async () => {
+    const { lifecycleService, prisma, transaction } = createHarness();
+    const scheduled = createMeetingRecord();
+    const live = createMeetingRecord({
       status: MeetingStatus.LIVE,
       startedAt: new Date('2026-07-24T02:30:00.000Z'),
     });
-    const endedMeeting = createMeetingRecord({
-      status: MeetingStatus.ENDED,
-      startedAt: new Date('2026-07-24T02:30:00.000Z'),
-      endedAt: new Date('2026-07-24T03:30:00.000Z'),
-    });
-    prisma.meetingSession.findFirst.mockResolvedValue(liveMeeting);
-    transaction.meetingSession.findUnique.mockResolvedValue(endedMeeting);
+    prisma.meetingSession.findFirst.mockResolvedValue(scheduled);
+    transaction.meetingSession.findUnique.mockResolvedValue(live);
 
     await expect(
-      lifecycleService.end(createAuthorization(), 30),
-    ).resolves.toMatchObject({
-      id: 30,
-      status: MeetingStatus.ENDED,
+      lifecycleService.start(createAuthorization(), 30),
+    ).resolves.toMatchObject({ id: 30, status: MeetingStatus.LIVE });
+    expect(transaction.decisionEvent.createMany).toHaveBeenCalledWith({
+      // Jest 非对称匹配器在类型层会退化为 any，仅用于断言事件集合。
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      data: expect.arrayContaining([
+        expect.objectContaining({ decisionId: 20, meetingId: 30 }),
+        expect.objectContaining({ decisionId: 21, meetingId: 30 }),
+      ]),
     });
-    const endUpdateArgument = getFirstCallArgument(
-      transaction.meetingSession.updateMany,
-    );
-    const endEventArgument = getFirstCallArgument(
-      transaction.decisionEvent.create,
-    );
-    expect(endUpdateArgument).toMatchObject({
-      where: { id: 30, status: MeetingStatus.LIVE },
-      data: { status: MeetingStatus.ENDED },
+  });
+
+  it('普通议事会议不应写入决策时间线', async () => {
+    const { lifecycleService, prisma, transaction } = createHarness();
+    const scheduled = createMeetingRecord({ decisionLinks: [] });
+    const live = createMeetingRecord({
+      decisionLinks: [],
+      status: MeetingStatus.LIVE,
+      startedAt: new Date('2026-07-24T02:30:00.000Z'),
     });
-    expect(endEventArgument).toMatchObject({
-      data: {
-        decisionId: 20,
-        meetingId: 30,
-        actorId: 7,
-        type: 'MEETING_ENDED',
-        payload: { reason: 'HOST_ENDED' },
-      },
-    });
+    prisma.meetingSession.findFirst.mockResolvedValue(scheduled);
+    transaction.meetingSession.findUnique.mockResolvedValue(live);
+
+    await lifecycleService.start(createAuthorization(), 30);
+
+    expect(transaction.decisionEvent.createMany).not.toHaveBeenCalled();
   });
 });

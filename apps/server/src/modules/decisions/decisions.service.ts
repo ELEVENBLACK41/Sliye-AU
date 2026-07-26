@@ -48,12 +48,29 @@ export class DecisionsService {
     return this.coreService.list(authorization);
   }
 
+  /** 返回指定议事下当前成员可见的决策列表。 */
+  async listMatter(
+    authorization: AuthorizationContext,
+    matterId: number,
+  ): Promise<DecisionListResponse> {
+    return this.coreService.listMatter(authorization, matterId);
+  }
+
   /** 查询当前用户可访问的单个决策详情。 */
   async get(
     authorization: AuthorizationContext,
     decisionId: number,
   ): Promise<DecisionDetail> {
     return this.coreService.get(authorization, decisionId);
+  }
+
+  /** 查询指定议事中的单项决策详情。 */
+  async getMatterDecision(
+    authorization: AuthorizationContext,
+    matterId: number,
+    decisionId: number,
+  ): Promise<DecisionDetail> {
+    return this.coreService.get(authorization, decisionId, matterId);
   }
 
   /** 查询当前用户可访问决策的完整事件时间线。 */
@@ -76,9 +93,10 @@ export class DecisionsService {
   /** 创建决策并返回完整详情。 */
   async create(
     authorization: AuthorizationContext,
+    matterId: number,
     dto: CreateDecisionDto,
   ): Promise<DecisionDetail> {
-    return this.coreService.create(authorization, dto);
+    return this.coreService.create(authorization, matterId, dto);
   }
 
   /** 向决策中添加参与者。 */

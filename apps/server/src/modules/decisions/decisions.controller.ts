@@ -9,38 +9,26 @@ import {
   ParseIntPipe,
   Patch,
   Post,
-  Query,
-  Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuthorization } from '../auth/decorators/current-authorization.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import type {
-  AuthenticatedRequest,
-  AuthorizationContext,
-} from '../auth/types/auth.types';
+import type { AuthorizationContext } from '../auth/types/auth.types';
 import { AddDecisionParticipantDto } from './dto/add-decision-participant.dto';
-import { CreateDecisionChatMessageDto } from './dto/create-decision-chat-message.dto';
-import { CreateDecisionDto } from './dto/create-decision.dto';
 import { CreateDecisionProposalDto } from './dto/create-decision-proposal.dto';
 import { CloseDecisionProposalDto } from './dto/close-decision-proposal.dto';
 import { CreateDecisionResolutionDto } from './dto/create-decision-resolution.dto';
 import { CreateDecisionVoteRoundDto } from './dto/create-decision-vote-round.dto';
-import { ListDecisionChatMessagesDto } from './dto/list-decision-chat-messages.dto';
 import { SubmitDecisionBallotDto } from './dto/submit-decision-ballot.dto';
 import { UpdateDecisionStatusDto } from './dto/update-decision-status.dto';
 import { DecisionsService } from './decisions.service';
-import { DecisionChatService } from './services/decision-chat.service';
 
 @ApiTags('decisions')
 @ApiBearerAuth()
 @Controller('decisions')
 export class DecisionsController {
   /** 注入决策业务服务。 */
-  constructor(
-    private readonly decisionsService: DecisionsService,
-    private readonly decisionChatService: DecisionChatService,
-  ) {}
+  constructor(private readonly decisionsService: DecisionsService) {}
 
   /** 查询当前用户可见的决策列表。 */
   @Get()
@@ -48,57 +36,6 @@ export class DecisionsController {
   @ApiOperation({ summary: '查询授权范围内的决策列表' })
   list(@CurrentAuthorization() authorization: AuthorizationContext) {
     return this.decisionsService.list(authorization);
-  }
-
-  /** 创建当前用户有权使用目标部门的新决策。 */
-  @Post()
-  @RequirePermissions('decision:create')
-  @ApiOperation({ summary: '创建决策并写入创建事件' })
-  create(
-    @CurrentAuthorization() authorization: AuthorizationContext,
-    @Body() body: CreateDecisionDto,
-  ) {
-    return this.decisionsService.create(authorization, body);
-  }
-
-  /** 查询当前账号可见的决策群聊消息，支持向前分页和断线后向后补齐。 */
-  @Get(':decisionId/messages')
-  @RequirePermissions('decision:read')
-  @ApiOperation({ summary: '查询决策群聊消息' })
-  listMessages(
-    @CurrentAuthorization() authorization: AuthorizationContext,
-    @Param('decisionId', ParseIntPipe) decisionId: number,
-    @Query() query: ListDecisionChatMessagesDto,
-  ) {
-    return this.decisionChatService.list(authorization, decisionId, query);
-  }
-
-  /** 由当前决策参与者幂等发送一条文字消息。 */
-  @Post(':decisionId/messages')
-  @RequirePermissions('decision:read')
-  @ApiOperation({ summary: '发送决策群聊文字消息' })
-  createMessage(
-    @CurrentAuthorization() authorization: AuthorizationContext,
-    @Param('decisionId', ParseIntPipe) decisionId: number,
-    @Body() body: CreateDecisionChatMessageDto,
-  ) {
-    return this.decisionChatService.create(authorization, decisionId, body);
-  }
-
-  /** 为当前登录会话签发只绑定指定决策的短期 Socket 连接凭证。 */
-  @Post(':decisionId/chat-ticket')
-  @RequirePermissions('decision:read')
-  @ApiOperation({ summary: '签发决策群聊 Socket Ticket' })
-  createChatTicket(
-    @CurrentAuthorization() authorization: AuthorizationContext,
-    @Req() request: AuthenticatedRequest,
-    @Param('decisionId', ParseIntPipe) decisionId: number,
-  ) {
-    return this.decisionChatService.issueTicket(
-      authorization,
-      request.auth!.sessionId,
-      decisionId,
-    );
   }
 
   /** 查询单个授权范围内决策的事件时间线。 */

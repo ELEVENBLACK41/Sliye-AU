@@ -8,7 +8,6 @@ import type {
 import type {
   DecisionEventType,
   DecisionStatus,
-  DiscussionMessageType,
   ParticipantRole,
   ProposalStatus,
   ResolutionKind,
@@ -45,6 +44,10 @@ export type DecisionSummaryRecord = {
   description: string | null;
   /** 决策当前状态。 */
   status: DecisionStatus;
+  /** 决策所属议事主键。 */
+  matterId: number;
+  /** 决策所属议事摘要。 */
+  matter: { id: number; title: string };
   /** 决策所属部门。 */
   department: DecisionDepartmentRecord;
   /** 决策创建人。 */
@@ -85,45 +88,6 @@ export type DecisionDetailRecord = DecisionSummaryRecord & {
 export type DecisionParticipantCandidateRecord = DecisionUserRecord & {
   /** 候选用户所属部门。 */
   department: DecisionDepartmentRecord | null;
-};
-
-/** 决策群聊消息映射实际读取的查询结果。 */
-export type DecisionChatMessageRecord = {
-  /** 消息主键。 */
-  id: number;
-  /** 所属讨论空间主键。 */
-  spaceId: number;
-  /** 浏览器生成的消息幂等标识。 */
-  clientMessageId: string | null;
-  /** 消息内容类型。 */
-  type: DiscussionMessageType;
-  /** 数据库中保留的消息正文。 */
-  content: string;
-  /** 消息发送人。 */
-  author: DecisionUserRecord | null;
-  /** 可选的一级回复目标。 */
-  replyTo: {
-    /** 被回复消息主键。 */
-    id: number;
-    /** 被回复消息发送人。 */
-    author: DecisionUserRecord | null;
-    /** 被回复消息正文。 */
-    content: string;
-    /** 被回复消息软删除时间。 */
-    deletedAt: Date | null;
-  } | null;
-  /** 来源会议主键。 */
-  meetingId: number | null;
-  /** 被回复消息主键。 */
-  replyToId: number | null;
-  /** 消息固定时间。 */
-  pinnedAt: Date | null;
-  /** 消息编辑时间。 */
-  editedAt: Date | null;
-  /** 消息软删除时间。 */
-  deletedAt: Date | null;
-  /** 消息创建时间。 */
-  createdAt: Date;
 };
 
 /** 决策提案映射实际读取的查询结果。 */

@@ -8,6 +8,7 @@
     "./auth": "./src/auth/index.ts",
     "./common": "./src/common/index.ts",
     "./decisions": "./src/decisions/index.ts",
+    "./matters": "./src/matters/index.ts",
     "./meetings": "./src/meetings/index.ts"
   },
   "scripts": {

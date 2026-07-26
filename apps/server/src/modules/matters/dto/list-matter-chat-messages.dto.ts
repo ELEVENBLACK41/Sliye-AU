@@ -1,23 +1,23 @@
 /**
- * 本文件定义决策群聊消息列表的游标分页查询 DTO。
+ * 本文件定义分区聊天消息游标分页查询的运行时校验 DTO。
  */
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import type {
-  DecisionChatMessageListQuery,
-  DecisionChatPageDirection,
-} from '@workspace/contracts/decisions';
+  MatterChatMessageListQuery,
+  MatterChatPageDirection,
+} from '@workspace/contracts/matters';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
-/** 校验群聊历史加载和断线补偿使用的查询参数。 */
-export class ListDecisionChatMessagesDto implements DecisionChatMessageListQuery {
-  /** 相对游标向前加载历史或向后补齐新消息。 */
+/** 校验分区消息历史、会议筛选和决策筛选参数。 */
+export class ListMatterChatMessagesDto implements MatterChatMessageListQuery {
+  /** 相对游标加载消息的方向。 */
   @ApiPropertyOptional({ enum: ['before', 'after'], default: 'before' })
   @IsOptional()
   @IsIn(['before', 'after'])
-  direction?: DecisionChatPageDirection;
+  direction?: MatterChatPageDirection;
 
-  /** 消息数据库主键游标；首次加载最新消息时省略。 */
+  /** 消息数据库主键游标。 */
   @ApiPropertyOptional({ minimum: 1 })
   @IsOptional()
   @Type(() => Number)
@@ -25,7 +25,7 @@ export class ListDecisionChatMessagesDto implements DecisionChatMessageListQuery
   @Min(1)
   cursor?: number;
 
-  /** 单页消息数量，默认 30，最大 50。 */
+  /** 单页消息数量。 */
   @ApiPropertyOptional({ minimum: 1, maximum: 50, default: 30 })
   @IsOptional()
   @Type(() => Number)
@@ -34,11 +34,19 @@ export class ListDecisionChatMessagesDto implements DecisionChatMessageListQuery
   @Max(50)
   limit?: number;
 
-  /** 可选的会议消息筛选条件。 */
+  /** 可选的会议筛选条件。 */
   @ApiPropertyOptional({ minimum: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   meetingId?: number;
+
+  /** 可选的决策筛选条件。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  decisionId?: number;
 }
