@@ -89,6 +89,8 @@ enum PermissionKind {
 }
 
 enum ResourceType {
+  MATTER
+  DISCUSSION_AREA
   DECISION
   MEETING
   AUDIT
@@ -145,8 +147,35 @@ enum ResolutionStatus {
   REVOKED
 }
 
-/// 讨论空间的生命周期状态。
-enum DiscussionSpaceStatus {
+/// 一项议事从协作中到关闭、归档的生命周期状态。
+enum MatterStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+/// 用户在议事成员列表中承担的资源级角色。
+enum MatterMemberRole {
+  OWNER
+  MANAGER
+  MEMBER
+  VIEWER
+}
+
+/// 讨论分区决定消息、会议及录像的默认可见边界。
+enum DiscussionAreaType {
+  PUBLIC
+  PRIVATE
+}
+
+/// 私有讨论分区中的成员角色；公共区直接继承议事成员关系。
+enum DiscussionAreaMemberRole {
+  MANAGER
+  MEMBER
+}
+
+/// 讨论分区的独立生命周期状态。
+enum DiscussionAreaStatus {
   ACTIVE
   READ_ONLY
   ARCHIVED
@@ -156,6 +185,7 @@ enum DiscussionSpaceStatus {
 enum DiscussionMessageType {
   TEXT
   SYSTEM
+  PUBLICATION
 }
 
 enum TaskStatus {
@@ -172,7 +202,6 @@ enum MeetingStatus {
   CANCELLED
 }
 
-/// 会议使用的实时沟通模式。
 /// 用户在单次会议中的实际参会角色。
 enum MeetingParticipantRole {
   HOST
@@ -241,26 +270,33 @@ model User {
 
   /// 该用户作为操作人产生的访问控制审计日志。
   accessControlAuditLogs AccessControlAuditLog[] @relation("AccessControlAuditActor")
+  /// 该用户通过审计入口读取私有协作内容时产生的日志。
+  collaborationAuditLogs CollaborationAuditLog[] @relation("CollaborationAuditActor")
 
   requestsMade     PermissionRequest[] @relation("RequestsMade")
   requestsReviewed PermissionRequest[] @relation("RequestsReviewed")
 
   posts Post[]
 
-  createdDecisions           Decision[]            @relation("DecisionCreator")
-  ownedDecisions             Decision[]            @relation("DecisionOwner")
+  mattersCreated             Matter[]                @relation("MatterCreator")
+  mattersOwned               Matter[]                @relation("MatterOwner")
+  matterMemberships          MatterMember[]
+  discussionAreasCreated     DiscussionArea[]        @relation("DiscussionAreaCreator")
+  discussionAreaMemberships  DiscussionAreaMember[]
+  createdDecisions           Decision[]              @relation("DecisionCreator")
+  ownedDecisions             Decision[]              @relation("DecisionOwner")
   decisionParticipants       DecisionParticipant[]
-  proposalsCreated           DecisionProposal[]    @relation("ProposalCreator")
-  voteRoundsCreated          DecisionVoteRound[]   @relation("DecisionVoteRoundCreator")
+  proposalsCreated           DecisionProposal[]      @relation("ProposalCreator")
+  voteRoundsCreated          DecisionVoteRound[]     @relation("DecisionVoteRoundCreator")
   decisionBallots            DecisionBallot[]
-  resolutionsDecided         DecisionResolution[]  @relation("DecisionResolutionDecider")
-  assignedTasks              DecisionTask[]        @relation("TaskAssignee")
-  createdTasks               DecisionTask[]        @relation("TaskCreator")
-  decisionEvents             DecisionEvent[]       @relation("DecisionEventActor")
-  discussionSpacesCreated    DiscussionSpace[]     @relation("DiscussionSpaceCreator")
-  discussionMessagesAuthored DiscussionMessage[]   @relation("DiscussionMessageAuthor")
-  discussionMessagesPinned   DiscussionMessage[]   @relation("DiscussionMessagePinner")
-  meetingsCreated            MeetingSession[]      @relation("MeetingSessionCreator")
+  resolutionsDecided         DecisionResolution[]    @relation("DecisionResolutionDecider")
+  assignedTasks              DecisionTask[]          @relation("TaskAssignee")
+  createdTasks               DecisionTask[]          @relation("TaskCreator")
+  decisionEvents             DecisionEvent[]         @relation("DecisionEventActor")
+  discussionMessagesAuthored DiscussionMessage[]     @relation("DiscussionMessageAuthor")
+  discussionMessagesPinned   DiscussionMessage[]     @relation("DiscussionMessagePinner")
+  discussionPublications     DiscussionPublication[] @relation("DiscussionPublicationPublisher")
+  meetingsCreated            MeetingSession[]        @relation("MeetingSessionCreator")
   meetingParticipants        MeetingParticipant[]
 
   @@index([deptId])
@@ -597,6 +633,7 @@ model Department {
   children Department[] @relation("DeptTree")
 
   users     User[]
+  matters   Matter[]
   decisions Decision[]
 
   @@index([parentId])
@@ -643,42 +680,123 @@ model AccessControlAuditLog {
   @@index([createdAt])
 }
 
-/// 与一项决策一对一绑定的协作群组，承载普通聊天和多场音视频会议。
-model DiscussionSpace {
+/// 一项议事是多项正式决策、公开讨论和私有分区的顶层协作容器。
+model Matter {
   id Int @id @default(autoincrement())
 
-  name        String
+  title       String
   description String?
-  status      DiscussionSpaceStatus @default(ACTIVE)
-  createdById Int
+  status      MatterStatus @default(ACTIVE)
 
-  /// 决策形成正式结论或被取消后进入只读状态的时间。
+  createdById Int
+  ownerId     Int?
+  deptId      Int
+
   closedAt   DateTime?
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  createdBy User @relation("DiscussionSpaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  department Department @relation(fields: [deptId], references: [id], onDelete: Restrict)
+  createdBy  User       @relation("MatterCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  owner      User?      @relation("MatterOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
-  /// 一个群组最多只能被一项决策引用；决策参与者同时作为群成员来源。
-  decision Decision?
-  messages DiscussionMessage[]
-  meetings MeetingSession[]
+  members   MatterMember[]
+  areas     DiscussionArea[]
+  decisions Decision[]
+  auditLogs CollaborationAuditLog[]
 
+  @@index([createdById])
+  @@index([ownerId])
+  @@index([deptId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// 用户与议事之间的显式成员关系；正式决策可见性以该关系为基础。
+model MatterMember {
+  id Int @id @default(autoincrement())
+
+  matterId Int
+  userId   Int
+  role     MatterMemberRole @default(MEMBER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matterId, userId])
+  @@index([userId])
+  @@index([role])
+}
+
+/// 议事内的公开或私有讨论边界；消息和会议均必须归属于一个分区。
+model DiscussionArea {
+  id Int @id @default(autoincrement())
+
+  matterId    Int
+  createdById Int
+
+  name        String
+  description String?
+  type        DiscussionAreaType   @default(PRIVATE)
+  status      DiscussionAreaStatus @default(ACTIVE)
+  /// 公共区固定写入 PUBLIC，私有区为空；复合唯一键保证每项议事至多一个公共区。
+  publicKey   String?
+
+  closedAt   DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  matter    Matter @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  createdBy User   @relation("DiscussionAreaCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  members          DiscussionAreaMember[]
+  messages         DiscussionMessage[]
+  meetings         MeetingSession[]
+  publicationsFrom DiscussionPublication[] @relation("DiscussionPublicationSourceArea")
+  publicationsTo   DiscussionPublication[] @relation("DiscussionPublicationTargetArea")
+  auditLogs        CollaborationAuditLog[]
+
+  @@unique([matterId, publicKey])
+  @@index([matterId, type])
   @@index([createdById])
   @@index([status])
   @@index([createdAt])
 }
 
-/// 讨论空间中的持久化消息；普通消息不重复写入决策时间线，重要消息可被事件引用。
+/// 私有讨论分区的显式成员关系；公共区不重复保存成员。
+model DiscussionAreaMember {
+  id Int @id @default(autoincrement())
+
+  areaId Int
+  userId Int
+  role   DiscussionAreaMemberRole @default(MEMBER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  area DiscussionArea @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([areaId, userId])
+  @@index([userId])
+  @@index([role])
+}
+
+/// 分区中的持久化消息；普通消息不重复写入决策时间线，重要消息可被事件引用。
 model DiscussionMessage {
   id Int @id @default(autoincrement())
 
-  spaceId         Int
+  areaId          Int
   authorId        Int?
   /// 浏览器生成的消息幂等标识；系统消息不经过浏览器发送时允许为空。
   clientMessageId String? @db.Uuid
   meetingId       Int?
+  decisionId      Int?
   replyToId       Int?
   pinnedById      Int?
 
@@ -691,23 +809,100 @@ model DiscussionMessage {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @default(now()) @updatedAt
 
-  space    DiscussionSpace     @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  area     DiscussionArea      @relation(fields: [areaId], references: [id], onDelete: Restrict)
   author   User?               @relation("DiscussionMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   meeting  MeetingSession?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  decision Decision?           @relation(fields: [decisionId], references: [id], onDelete: SetNull)
   replyTo  DiscussionMessage?  @relation("DiscussionMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies  DiscussionMessage[] @relation("DiscussionMessageReplies")
   pinnedBy User?               @relation("DiscussionMessagePinner", fields: [pinnedById], references: [id], onDelete: SetNull)
 
-  events DecisionEvent[]
+  publishedAs        DiscussionPublication?        @relation("PublishedDiscussionMessage")
+  publicationSources DiscussionPublicationSource[]
+  events             DecisionEvent[]
 
   @@unique([authorId, clientMessageId])
-  @@index([spaceId, createdAt])
-  @@index([spaceId, id])
+  @@index([areaId, createdAt])
+  @@index([areaId, id])
   @@index([authorId])
   @@index([meetingId])
+  @@index([decisionId])
   @@index([replyToId])
   @@index([pinnedById])
   @@index([type])
+}
+
+/// 从私有分区发布到公共分区的不可变摘要及其来源关系。
+model DiscussionPublication {
+  id Int @id @default(autoincrement())
+
+  sourceAreaId       Int
+  targetAreaId       Int
+  publishedMessageId Int  @unique
+  publishedById      Int
+  decisionId         Int?
+
+  title     String
+  createdAt DateTime @default(now())
+
+  sourceArea       DiscussionArea    @relation("DiscussionPublicationSourceArea", fields: [sourceAreaId], references: [id], onDelete: Restrict)
+  targetArea       DiscussionArea    @relation("DiscussionPublicationTargetArea", fields: [targetAreaId], references: [id], onDelete: Restrict)
+  publishedMessage DiscussionMessage @relation("PublishedDiscussionMessage", fields: [publishedMessageId], references: [id], onDelete: Restrict)
+  publishedBy      User              @relation("DiscussionPublicationPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
+  decision         Decision?         @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+
+  sources DiscussionPublicationSource[]
+
+  @@index([sourceAreaId])
+  @@index([targetAreaId])
+  @@index([publishedById])
+  @@index([decisionId])
+  @@index([createdAt])
+}
+
+/// 一次公开摘要引用的一条私有原始消息；读取原文仍需通过来源分区授权。
+model DiscussionPublicationSource {
+  publicationId Int
+  messageId     Int
+
+  createdAt DateTime @default(now())
+
+  publication DiscussionPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  message     DiscussionMessage     @relation(fields: [messageId], references: [id], onDelete: Restrict)
+
+  @@id([publicationId, messageId])
+  @@index([messageId])
+}
+
+/// 管理员通过独立审计入口读取私有协作内容时写入的不可变日志。
+model CollaborationAuditLog {
+  id Int @id @default(autoincrement())
+
+  actorId   Int
+  matterId  Int
+  areaId    Int?
+  meetingId Int?
+
+  action String
+  reason String
+
+  requestId String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  actor   User            @relation("CollaborationAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  matter  Matter          @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  area    DiscussionArea? @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  meeting MeetingSession? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([matterId])
+  @@index([areaId])
+  @@index([meetingId])
+  @@index([action])
+  @@index([requestId])
+  @@index([createdAt])
 }
 
 model Decision {
@@ -717,21 +912,21 @@ model Decision {
   description String?
   status      DecisionStatus @default(DRAFT)
 
+  matterId  Int
   creatorId Int
   ownerId   Int?
+  /// 牵头部门只表达业务责任归属，不决定议事聊天可见性。
   deptId    Int
-  /// 决策创建时同步创建的唯一协作群组；禁止删除仍被决策引用的群组。
-  spaceId   Int  @unique
 
   decidedAt  DateTime?
   archivedAt DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  department Department      @relation(fields: [deptId], references: [id], onDelete: Restrict)
-  creator    User            @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  owner      User?           @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  space      DiscussionSpace @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  matter     Matter     @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  department Department @relation(fields: [deptId], references: [id], onDelete: Restrict)
+  creator    User       @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  owner      User?      @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   participants DecisionParticipant[]
   proposals    DecisionProposal[]
@@ -739,7 +934,11 @@ model Decision {
   resolutions  DecisionResolution[]
   tasks        DecisionTask[]
   events       DecisionEvent[]
+  messages     DiscussionMessage[]
+  meetingLinks MeetingDecision[]
+  publications DiscussionPublication[]
 
+  @@index([matterId])
   @@index([deptId])
   @@index([creatorId])
   @@index([ownerId])
@@ -1028,14 +1227,14 @@ model DecisionTask {
 model MeetingSession {
   id Int @id @default(autoincrement())
 
-  spaceId     Int
+  areaId      Int
   createdById Int
 
   title       String
   description String?
   status      MeetingStatus @default(SCHEDULED)
 
-  /// 项目内部稳定且不可重复的房间代码，不保存临时加入令牌。
+  /// 议事内部稳定且不可重复的房间代码，不保存临时加入令牌。
   roomKey        String  @unique @default(cuid())
   /// 外部音视频服务商标识，例如 LiveKit；为空表示尚未分配服务商。
   provider       String?
@@ -1048,23 +1247,39 @@ model MeetingSession {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
 
-  space     DiscussionSpace @relation(fields: [spaceId], references: [id], onDelete: Restrict)
-  createdBy User            @relation("MeetingSessionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  area      DiscussionArea @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  createdBy User           @relation("MeetingSessionCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
-  participants MeetingParticipant[]
-  messages     DiscussionMessage[]
-  proposals    DecisionProposal[]
-  voteRounds   DecisionVoteRound[]
-  recordings   MeetingRecording[]
-  resolutions  DecisionResolution[]
-  events       DecisionEvent[]
+  participants  MeetingParticipant[]
+  decisionLinks MeetingDecision[]
+  messages      DiscussionMessage[]
+  proposals     DecisionProposal[]
+  voteRounds    DecisionVoteRound[]
+  recordings    MeetingRecording[]
+  resolutions   DecisionResolution[]
+  events        DecisionEvent[]
+  auditLogs     CollaborationAuditLog[]
 
   @@unique([provider, providerRoomId])
-  @@index([spaceId])
+  @@index([areaId])
   @@index([createdById])
   @@index([status])
   @@index([scheduledAt])
   @@index([createdAt])
+}
+
+/// 会议与决策之间的多对多关联；一场会议可以讨论同一议事中的多项决策。
+model MeetingDecision {
+  meetingId  Int
+  decisionId Int
+
+  createdAt DateTime @default(now())
+
+  meeting  MeetingSession @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  decision Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  @@id([meetingId, decisionId])
+  @@index([decisionId])
 }
 
 model MeetingParticipant {
