@@ -6,11 +6,9 @@ import { cookies } from 'next/headers';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import type {
   DecisionDetail,
-  DecisionChatMessagePage,
   DecisionEventTimelineResponse,
   DecisionProposalListResponse,
   DecisionResolutionListResponse,
-  DecisionSummary,
   DecisionVoteRoundListResponse,
   UpdateDecisionStatusRequestPayload,
 } from '@workspace/contracts/decisions';
@@ -18,14 +16,12 @@ import type {
 import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
 import type { NestResponse } from '@/services/bff-request';
 import {
-  requestDecisionChatMessagesFromNest,
   requestDecisionDetailFromNest,
   requestDecisionEventsFromNest,
   requestDecisionProposalsFromNest,
   requestDecisionResolutionsFromNest,
   requestDecisionStatusUpdateFromNest,
   requestDecisionVoteRoundsFromNest,
-  requestDecisionsFromNest,
 } from './decisions-nest-client';
 
 /** Server Component 调用 NestJS 时抛出的结构化业务错误。 */
@@ -47,34 +43,12 @@ export class DecisionServerError extends Error {
   }
 }
 
-/** 读取当前用户经过数据范围裁剪后的决策列表。 */
-export const getDecisionSummaries = cache(async (): Promise<DecisionSummary[]> => {
-  const accessToken = await getAccessToken();
-
-  return unwrapResponse(await requestDecisionsFromNest(accessToken));
-});
-
 /** 按资源 ID 读取决策详情；越权与不存在均由后端返回相同 404。 */
 export const getDecisionDetail = cache(async (decisionId: number): Promise<DecisionDetail> => {
   const accessToken = await getAccessToken();
 
   return unwrapResponse(await requestDecisionDetailFromNest(accessToken, decisionId));
 });
-
-/** 读取决策详情页首屏最新 30 条群聊消息。 */
-export const getDecisionChatMessagePage = cache(
-  async (decisionId: number, meetingId?: number): Promise<DecisionChatMessagePage> => {
-    const accessToken = await getAccessToken();
-
-    return unwrapResponse(
-      await requestDecisionChatMessagesFromNest(accessToken, decisionId, {
-        direction: 'before',
-        limit: 30,
-        meetingId,
-      }),
-    );
-  },
-);
 
 /** 按资源 ID 读取决策事件时间线；越权与不存在均由后端返回相同 404。 */
 export const getDecisionEvents = cache(async (decisionId: number): Promise<DecisionEventTimelineResponse> => {

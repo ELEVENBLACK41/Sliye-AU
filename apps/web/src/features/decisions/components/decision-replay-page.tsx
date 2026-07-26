@@ -58,13 +58,7 @@ const eventTypeText: Record<DecisionEventType, string> = {
 };
 
 /** 渲染决策结论摘要和按发生时间排列的全过程事件。 */
-export function DecisionReplayPage({
-  decision,
-  events,
-  proposals,
-  voteRounds,
-  resolutions,
-}: DecisionReplayPageProps) {
+export function DecisionReplayPage({ decision, events, proposals, voteRounds, resolutions }: DecisionReplayPageProps) {
   const activeResolution = resolutions.find((resolution) => resolution.status === 'ACTIVE');
   const orderedEvents = [...events].sort(
     (left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime(),
@@ -74,7 +68,7 @@ export function DecisionReplayPage({
     <main className="flex flex-col gap-4">
       <div>
         <Button asChild variant="ghost" size="sm">
-          <Link href={`/dashboard/decisions/${decision.id}`}>
+          <Link href={`/dashboard/matters/${decision.matterId}/decisions/${decision.id}`}>
             <ArrowLeft aria-hidden />
             返回决策详情
           </Link>
@@ -207,7 +201,9 @@ type RelatedItemProps = {
 function RelatedItem({ icon, label, value }: RelatedItemProps) {
   return (
     <p className="flex items-center gap-2 text-sm text-muted-foreground">
-      <span className="[&>svg]:size-4" aria-hidden>{icon}</span>
+      <span className="[&>svg]:size-4" aria-hidden>
+        {icon}
+      </span>
       {label}：<span className="font-medium text-foreground">{value}</span>
     </p>
   );

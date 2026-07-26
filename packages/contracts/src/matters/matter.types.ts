@@ -97,6 +97,20 @@ export type MatterMember = {
   createdAt: string;
 };
 
+/** 可以被议事管理员加入当前议事的用户候选摘要。 */
+export type MatterMemberCandidate = {
+  /** 候选用户数据库主键，仅在提交成员关系时由客户端使用。 */
+  id: number;
+  /** 候选用户显示名称。 */
+  name: string | null;
+  /** 候选用户登录邮箱，用于同名用户辨识。 */
+  email: string;
+  /** 候选用户头像地址。 */
+  avatarUrl: string | null;
+  /** 候选用户当前所属部门。 */
+  department: MatterDepartmentSummary;
+};
+
 /** 当前用户可见的一个讨论分区摘要。 */
 export type DiscussionAreaSummary = {
   /** 分区数据库主键。 */
@@ -233,6 +247,12 @@ export type AddMatterMemberRequestPayload = {
   role: Exclude<MatterMemberRole, 'OWNER'>;
 };
 
+/** 查询当前议事可加入成员的筛选条件。 */
+export type MatterMemberCandidateListQuery = {
+  /** 可选的姓名、邮箱或部门模糊搜索词。 */
+  q?: string;
+};
+
 /** 更新议事成员角色的请求体。 */
 export type UpdateMatterMemberRequestPayload = {
   /** 更新后的非负责人角色。 */
@@ -358,6 +378,9 @@ export type MatterListResponse = MatterSummary[];
 
 /** 议事成员列表接口返回数据。 */
 export type MatterMemberListResponse = MatterMember[];
+
+/** 当前议事可加入成员候选列表接口返回数据。 */
+export type MatterMemberCandidateListResponse = MatterMemberCandidate[];
 
 /** 当前用户可见分区列表接口返回数据。 */
 export type DiscussionAreaListResponse = DiscussionAreaSummary[];

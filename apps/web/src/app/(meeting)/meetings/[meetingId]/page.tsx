@@ -1,86 +1,122 @@
 /**
- * 本文件是独立会议房间入口，服务端并行读取决策协作数据并计算展示权限。
+ * 本文件是议事分区会议房间入口，支持普通会议与多决策会议目标切换。
  */
 import { notFound } from 'next/navigation';
-import { SYSTEM_PERMISSIONS, SYSTEM_ROLES } from '@workspace/contracts/access';
+import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 import type {
-  DecisionChatMessagePage,
   DecisionDetail,
   DecisionProposal,
   DecisionResolution,
+  DecisionSummary,
   DecisionVoteRound,
 } from '@workspace/contracts/decisions';
+import type { DiscussionAreaSummary, MatterChatMessagePage, MatterDetail } from '@workspace/contracts/matters';
 import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
 import {
   DecisionServerError,
-  getDecisionChatMessagePage,
   getDecisionDetail,
   getDecisionProposals,
   getDecisionResolutions,
   getDecisionVoteRounds,
 } from '@/features/decisions';
+import {
+  getMatter,
+  getMatterAreas,
+  getMatterDecisions,
+  getMatterMessages,
+  MatterServerError,
+} from '@/features/matters/services/matters-server.service';
 import { MeetingRoomPage } from '@/features/meetings/components/meeting-room-page';
 import { getMeetingDetail, MeetingServerError } from '@/features/meetings/services/meetings-server.service';
 
-/** 会议房间动态路由参数。 */
+/** 会议房间动态路由与目标决策查询参数。 */
 type MeetingRoomRouteProps = {
   /** Next.js 16 异步动态参数。 */
   params: Promise<{ meetingId: string }>;
+  /** 多决策会议当前选择的正式操作目标。 */
+  searchParams: Promise<{ decisionId?: string }>;
 };
 
-/** 渲染授权范围内的独立会议房间。 */
-export default async function MeetingRoomRoutePage({ params }: MeetingRoomRouteProps) {
-  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.decision.read);
-  const { meetingId: rawMeetingId } = await params;
-  const meetingId = Number(rawMeetingId);
+/** 渲染当前用户可见的分区会议，并为正式操作准备单项决策上下文。 */
+export default async function MeetingRoomRoutePage({ params, searchParams }: MeetingRoomRouteProps) {
+  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.matter.read);
+  const meetingId = Number((await params).meetingId);
+  const requestedDecisionId = Number((await searchParams).decisionId);
 
   if (!Number.isInteger(meetingId) || meetingId < 1) {
     notFound();
   }
 
   let meeting: MeetingDetail;
-  let decision: DecisionDetail;
-  let initialChatPage: DecisionChatMessagePage;
-  let proposals: DecisionProposal[];
-  let voteRounds: DecisionVoteRound[];
-  let resolutions: DecisionResolution[];
+  let matter: MatterDetail;
+  let area: DiscussionAreaSummary;
+  let matterDecisions: DecisionSummary[];
+  let initialChatPage: MatterChatMessagePage;
 
   try {
     meeting = await getMeetingDetail(meetingId);
-    [decision, initialChatPage, proposals, voteRounds, resolutions] = await Promise.all([
-      getDecisionDetail(meeting.decisionId),
-      getDecisionChatMessagePage(meeting.decisionId),
-      getDecisionProposals(meeting.decisionId),
-      getDecisionVoteRounds(meeting.decisionId),
-      getDecisionResolutions(meeting.decisionId),
+    const [matterResult, areas, decisions, chatPage] = await Promise.all([
+      getMatter(meeting.matterId),
+      getMatterAreas(meeting.matterId),
+      getMatterDecisions(meeting.matterId),
+      getMatterMessages(meeting.matterId, meeting.areaId, { meetingId }),
     ]);
+    matter = matterResult;
+    matterDecisions = decisions;
+    initialChatPage = chatPage;
+    const visibleArea = areas.find((item) => item.id === meeting.areaId);
+    if (!visibleArea) notFound();
+    area = visibleArea;
   } catch (error) {
-    if ((error instanceof MeetingServerError || error instanceof DecisionServerError) && error.status === 404) {
+    if ((error instanceof MeetingServerError || error instanceof MatterServerError) && error.status === 404) {
       notFound();
     }
-
     throw error;
   }
 
-  const hasAllScopeSystemRole =
-    currentUser.isSuperAdmin || currentUser.roles.some((role) => role.code === SYSTEM_ROLES.admin);
-  const participantRole = decision.participants.find((item) => item.user.id === currentUser.id)?.role;
+  const selectedSummary =
+    meeting.decisions.find((item) => item.id === requestedDecisionId) ?? meeting.decisions.at(0) ?? null;
+  let selectedDecision: DecisionDetail | null = null;
+  let proposals: DecisionProposal[] = [];
+  let voteRounds: DecisionVoteRound[] = [];
+  let resolutions: DecisionResolution[] = [];
+
+  if (selectedSummary) {
+    try {
+      [selectedDecision, proposals, voteRounds, resolutions] = await Promise.all([
+        getDecisionDetail(selectedSummary.id),
+        getDecisionProposals(selectedSummary.id),
+        getDecisionVoteRounds(selectedSummary.id),
+        getDecisionResolutions(selectedSummary.id),
+      ]);
+    } catch (error) {
+      if (error instanceof DecisionServerError && error.status === 404) notFound();
+      throw error;
+    }
+  }
+
   const meetingRole = meeting.participants.find((item) => item.user.id === currentUser.id)?.role;
+  const participantRole = selectedDecision?.participants.find((item) => item.user.id === currentUser.id)?.role;
   const canUpdateDecision = hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update);
+  const isLive = meeting.status === 'LIVE';
   const canManageMeeting =
-    canUpdateDecision && (hasAllScopeSystemRole || meetingRole === 'HOST' || meetingRole === 'CO_HOST');
+    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.matter.update) &&
+    (meetingRole === 'HOST' || meetingRole === 'CO_HOST');
   const canCreateProposal =
-    canUpdateDecision && (hasAllScopeSystemRole || participantRole === 'OWNER' || participantRole === 'EDITOR');
-  const canManageVoteRounds = canUpdateDecision && (hasAllScopeSystemRole || decision.owner?.id === currentUser.id);
-  const canVote = participantRole === 'OWNER' || participantRole === 'APPROVER';
-  const canSendChat = meeting.status === 'LIVE' && participantRole !== undefined;
+    isLive && canUpdateDecision && (participantRole === 'OWNER' || participantRole === 'EDITOR');
+  const canManageConclusion = isLive && canUpdateDecision && selectedDecision?.owner?.id === currentUser.id;
+  const canVote = isLive && (participantRole === 'OWNER' || participantRole === 'APPROVER');
+  const canSendChat = matter.status === 'ACTIVE' && area.status === 'ACTIVE' && isLive && meetingRole !== undefined;
 
   return (
     <MeetingRoomPage
       meeting={meeting}
-      decision={decision}
+      matter={matter}
+      area={area}
+      decisions={matterDecisions}
+      selectedDecision={selectedDecision}
       initialChatPage={initialChatPage}
       currentChatUser={{ id: currentUser.id, name: currentUser.name, avatarUrl: currentUser.avatarUrl }}
       proposals={proposals}
@@ -88,8 +124,8 @@ export default async function MeetingRoomRoutePage({ params }: MeetingRoomRouteP
       resolutions={resolutions}
       canManageMeeting={canManageMeeting}
       canCreateProposal={canCreateProposal}
-      canManageVoteRounds={canManageVoteRounds}
-      canManageConclusion={canManageVoteRounds}
+      canManageVoteRounds={canManageConclusion}
+      canManageConclusion={canManageConclusion}
       canVote={canVote}
       canSendChat={canSendChat}
     />

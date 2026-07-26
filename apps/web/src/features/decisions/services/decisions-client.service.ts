@@ -5,7 +5,6 @@ import type {
   AddDecisionParticipantRequestPayload,
   CloseDecisionProposalRequestPayload,
   CreateDecisionProposalRequestPayload,
-  CreateDecisionRequestPayload,
   CreateDecisionResolutionRequestPayload,
   CreateDecisionVoteRoundRequestPayload,
   DecisionBallotReceipt,
@@ -20,15 +19,6 @@ import type {
 } from '@workspace/contracts/decisions';
 
 import { requestData } from '@/services/request';
-
-/** 创建决策，成功后返回包含创建人参与关系的完整详情。 */
-export function createDecision(payload: CreateDecisionRequestPayload): Promise<DecisionDetail> {
-  return requestData<DecisionDetail, CreateDecisionRequestPayload>('/api/decisions', {
-    method: 'POST',
-    body: payload,
-    errorMessage: '决策创建失败，请稍后重试',
-  });
-}
 
 /** 更新决策状态，当前共享契约仅允许提交开始讨论状态。 */
 export function updateDecisionStatus(

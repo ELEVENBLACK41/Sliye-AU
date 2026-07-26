@@ -3,4 +3,3 @@
  */
 
 export type * from './decision.types.ts';
-export type * from './decision-chat.types.ts';

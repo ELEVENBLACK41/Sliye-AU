@@ -1,20 +1,9 @@
 /**
  * 本文件封装会议模块在 Next.js 服务端调用 NestJS 的类型化请求。
  */
-import type { CreateMeetingRequestPayload, MeetingDetail, MeetingListResponse } from '@workspace/contracts/meetings';
+import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { requestNest, type NestResponse } from '@/services/bff-request';
-
-/** 查询指定决策下的会议列表。 */
-export function requestDecisionMeetingsFromNest(
-  accessToken: string,
-  decisionId: number,
-): Promise<NestResponse<MeetingListResponse>> {
-  return requestNest<MeetingListResponse>(`/decisions/${decisionId}/meetings`, {
-    method: 'GET',
-    headers: createAuthHeaders(accessToken),
-  });
-}
 
 /** 查询一场会议的详情与受邀成员。 */
 export function requestMeetingDetailFromNest(
@@ -24,19 +13,6 @@ export function requestMeetingDetailFromNest(
   return requestNest<MeetingDetail>(`/meetings/${meetingId}`, {
     method: 'GET',
     headers: createAuthHeaders(accessToken),
-  });
-}
-
-/** 创建一场决策会议。 */
-export function requestMeetingCreateFromNest(
-  accessToken: string,
-  decisionId: number,
-  payload: CreateMeetingRequestPayload,
-): Promise<NestResponse<MeetingDetail>> {
-  return requestNest<MeetingDetail, CreateMeetingRequestPayload>(`/decisions/${decisionId}/meetings`, {
-    method: 'POST',
-    headers: createAuthHeaders(accessToken),
-    body: payload,
   });
 }
 

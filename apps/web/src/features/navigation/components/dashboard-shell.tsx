@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bot, ClipboardList, Home, ShieldCheck } from 'lucide-react';
+import { Bot, Home, MessagesSquare, ShieldCheck } from 'lucide-react';
 import { SYSTEM_PERMISSIONS, type SystemPermissionCode } from '@workspace/contracts/access';
 import type { AuthUser } from '@workspace/contracts/auth';
 
@@ -45,8 +45,8 @@ type DashboardMenuItem = {
   href: string;
   /** 菜单图标。 */
   icon: typeof Home;
-  /** 展示菜单所需的系统权限码。 */
-  permission: SystemPermissionCode;
+  /** 展示菜单所需的任一系统权限码。 */
+  permissions: SystemPermissionCode[];
 };
 
 /** 目前已经接入真实功能权限的 Dashboard 菜单。 */
@@ -55,25 +55,25 @@ const dashboardMenus: DashboardMenuItem[] = [
     title: '工作台',
     href: '/dashboard',
     icon: Home,
-    permission: SYSTEM_PERMISSIONS.dashboard.access,
+    permissions: [SYSTEM_PERMISSIONS.dashboard.access],
   },
   {
-    title: '决策记录',
-    href: '/dashboard/decisions',
-    icon: ClipboardList,
-    permission: SYSTEM_PERMISSIONS.decision.read,
+    title: '议事空间',
+    href: '/dashboard/matters',
+    icon: MessagesSquare,
+    permissions: [SYSTEM_PERMISSIONS.matter.read],
   },
   {
     title: '权限管理',
     href: '/dashboard/users',
     icon: ShieldCheck,
-    permission: SYSTEM_PERMISSIONS.access.user.read,
+    permissions: [SYSTEM_PERMISSIONS.access.user.read, SYSTEM_PERMISSIONS.matter.auditRead],
   },
   {
     title: 'AI 对话',
     href: '/dashboard/ai',
     icon: Bot,
-    permission: SYSTEM_PERMISSIONS.ai.chatUse,
+    permissions: [SYSTEM_PERMISSIONS.ai.chatUse],
   },
 ];
 
@@ -83,7 +83,7 @@ export function DashboardShell({ children, currentUser }: DashboardShellProps) {
   const visibleMenus = dashboardMenus.filter(
     (item) =>
       currentUser.accessState === 'READY' &&
-      (currentUser.isSuperAdmin || currentUser.permissions.includes(item.permission)),
+      (currentUser.isSuperAdmin || item.permissions.some((permission) => currentUser.permissions.includes(permission))),
   );
 
   return (

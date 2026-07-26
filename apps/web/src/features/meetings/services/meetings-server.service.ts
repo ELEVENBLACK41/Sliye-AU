@@ -4,11 +4,11 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import type { ApiErrorCode } from '@workspace/contracts/common';
-import type { MeetingDetail, MeetingListResponse } from '@workspace/contracts/meetings';
+import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
 import type { NestResponse } from '@/services/bff-request';
-import { requestDecisionMeetingsFromNest, requestMeetingDetailFromNest } from './meetings-nest-client';
+import { requestMeetingDetailFromNest } from './meetings-nest-client';
 
 /** Server Component 调用会议接口时使用的结构化异常。 */
 export class MeetingServerError extends Error {
@@ -28,13 +28,6 @@ export class MeetingServerError extends Error {
     this.requestId = requestId;
   }
 }
-
-/** 查询指定决策下的会议列表。 */
-export const getDecisionMeetings = cache(async (decisionId: number): Promise<MeetingListResponse> => {
-  const accessToken = await getAccessToken();
-
-  return unwrapResponse(await requestDecisionMeetingsFromNest(accessToken, decisionId));
-});
 
 /** 查询一场授权范围内的会议详情。 */
 export const getMeetingDetail = cache(async (meetingId: number): Promise<MeetingDetail> => {

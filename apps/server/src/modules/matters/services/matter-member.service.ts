@@ -5,6 +5,8 @@ import { Injectable } from '@nestjs/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type {
   MatterMember,
+  MatterMemberCandidateListQuery,
+  MatterMemberCandidateListResponse,
   MatterMemberListResponse,
 } from '@workspace/contracts/matters';
 import { BusinessException } from '../../../common/exceptions/business.exception';
@@ -20,6 +22,14 @@ import { UpdateMatterMemberDto } from '../dto/update-matter-member.dto';
 import { toMatterMember } from '../matters.mapper';
 import { MatterChatGateway } from '../gateways/matter-chat.gateway';
 import { MatterAccessService } from './matter-access.service';
+
+/** 可加入议事的用户必须完成认证、组织和角色准备。 */
+const availableMatterMemberUserWhere = {
+  status: UserStatus.ACTIVE,
+  emailVerifiedAt: { not: null },
+  department: { is: { status: 'ACTIVE' as const } },
+  roles: { some: {} },
+} as const;
 
 /** 议事成员响应统一加载的用户摘要。 */
 const matterMemberInclude = {
@@ -50,6 +60,59 @@ export class MatterMemberService {
     return members.map(toMatterMember);
   }
 
+  /** 查询议事管理员可添加的用户，并排除当前议事已有成员。 */
+  async listCandidates(
+    authorization: AuthorizationContext,
+    matterId: number,
+    query: MatterMemberCandidateListQuery,
+  ): Promise<MatterMemberCandidateListResponse> {
+    const context = await this.accessService.findMatter(
+      authorization,
+      matterId,
+    );
+    this.accessService.assertMatterManager(context);
+    this.assertMemberMutable(context.status);
+    const search = query.q?.trim();
+    const users = await this.prisma.user.findMany({
+      where: {
+        ...availableMatterMemberUserWhere,
+        matterMemberships: { none: { matterId } },
+        ...(search
+          ? {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' as const } },
+                { email: { contains: search, mode: 'insensitive' as const } },
+                {
+                  department: {
+                    is: {
+                      name: { contains: search, mode: 'insensitive' as const },
+                    },
+                  },
+                },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatarUrl: true,
+        department: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: [{ name: 'asc' }, { email: 'asc' }, { id: 'asc' }],
+      take: 50,
+    });
+
+    return users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+      department: user.department!,
+    }));
+  }
+
   /** 由议事管理员添加一个启用用户作为议事成员。 */
   async add(
     authorization: AuthorizationContext,
@@ -64,7 +127,7 @@ export class MatterMemberService {
     this.assertMemberMutable(context.status);
 
     const targetUser = await this.prisma.user.findFirst({
-      where: { id: dto.userId, status: UserStatus.ACTIVE },
+      where: { id: dto.userId, ...availableMatterMemberUserWhere },
       select: { id: true },
     });
     if (!targetUser) {

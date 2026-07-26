@@ -6,17 +6,12 @@ import Link from 'next/link';
 import { ArrowLeft, Building2, UserRound } from 'lucide-react';
 import type {
   DecisionDetail,
-  DecisionChatMessagePage,
   DecisionEventTimelineItem,
   DecisionProposal,
   DecisionResolution,
   DecisionVoteRound,
-  DecisionUserSummary,
 } from '@workspace/contracts/decisions';
-import type { MeetingSummary } from '@workspace/contracts/meetings';
 
-import { DecisionChatSection } from '../chat/components/decision-chat-section';
-import { DecisionMeetingSection } from '@/features/meetings/components/decision-meeting-section';
 import { DecisionEventTimeline } from './decision-event-timeline';
 import { DecisionParticipantActions } from './decision-participant-actions';
 import { DecisionProposalSection } from './decision-proposal-section';
@@ -31,10 +26,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/componen
 type DecisionDetailPageProps = {
   /** 已经过权限与数据范围校验的决策详情。 */
   decision: DecisionDetail;
-  /** 服务端预取的决策群聊最新消息页。 */
-  initialChatPage: DecisionChatMessagePage;
-  /** 当前登录用户的群聊公开摘要。 */
-  currentChatUser: DecisionUserSummary;
   /** 已经过权限与数据范围校验的决策事件时间线。 */
   events: DecisionEventTimelineItem[];
   /** 已经过权限与数据范围校验的决策提案列表。 */
@@ -43,8 +34,6 @@ type DecisionDetailPageProps = {
   voteRounds: DecisionVoteRound[];
   /** 已经形成的正式决议列表。 */
   resolutions: DecisionResolution[];
-  /** 当前决策的会议摘要列表。 */
-  meetings: MeetingSummary[];
   /** 当前用户是否具备开始讨论的展示条件；最终权限仍由 NestJS 校验。 */
   canStartDiscussion: boolean;
   /** 当前用户是否具备新增参与者的展示条件；最终权限仍由 NestJS 校验。 */
@@ -57,12 +46,6 @@ type DecisionDetailPageProps = {
   canManageConclusion: boolean;
   /** 当前用户是否具备提交选票的参与身份；最终资格仍由 NestJS 校验。 */
   canVote: boolean;
-  /** 当前用户是否具备发送群聊消息的页面条件。 */
-  canSendChat: boolean;
-  /** 当前用户是否具备创建会议的展示条件。 */
-  canCreateMeeting: boolean;
-  /** 群聊不可发送时展示的具体原因。 */
-  chatReadOnlyReason?: string;
 };
 
 /** 参与者身份对应的中文文案。 */
@@ -76,30 +59,24 @@ const participantRoleText: Record<DecisionDetail['participants'][number]['role']
 /** 渲染决策基本资料、参与者列表和只读事件时间线。 */
 export function DecisionDetailPage({
   decision,
-  initialChatPage,
-  currentChatUser,
   events,
   proposals,
   voteRounds,
   resolutions,
-  meetings,
   canStartDiscussion,
   canManageParticipants,
   canCreateProposal,
   canManageVoteRounds,
   canManageConclusion,
   canVote,
-  canSendChat,
-  canCreateMeeting,
-  chatReadOnlyReason,
 }: DecisionDetailPageProps) {
   return (
     <main className="flex flex-col gap-4">
       <div>
         <Button asChild variant="ghost" size="sm">
-          <Link href="/dashboard/decisions">
+          <Link href={`/dashboard/matters/${decision.matterId}`}>
             <ArrowLeft aria-hidden />
-            返回决策列表
+            返回议事：{decision.matter.title}
           </Link>
         </Button>
       </div>
@@ -131,15 +108,19 @@ export function DecisionDetailPage({
 
       {canStartDiscussion ? <DecisionStatusActions decisionId={decision.id} /> : null}
 
-      <DecisionMeetingSection decisionId={decision.id} meetings={meetings} canCreateMeeting={canCreateMeeting} />
-
-      <DecisionChatSection
-        decisionId={decision.id}
-        initialPage={initialChatPage}
-        currentUser={currentChatUser}
-        canSend={canSendChat}
-        readOnlyReason={chatReadOnlyReason}
-      />
+      <Card className="rounded-md shadow-none">
+        <CardHeader>
+          <CardTitle className="text-base">相关讨论</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            决策不再维护独立群聊，相关消息统一沉淀在所属议事的公共区或私有分区中。
+          </p>
+          <Button asChild variant="outline">
+            <Link href={`/dashboard/matters/${decision.matterId}?decisionId=${decision.id}`}>查看相关讨论</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card className="rounded-md shadow-none">
         <CardHeader className="flex-row items-center justify-between gap-3">
@@ -183,6 +164,7 @@ export function DecisionDetailPage({
       />
 
       <DecisionResolutionSection
+        matterId={decision.matterId}
         decisionId={decision.id}
         proposals={proposals}
         voteRounds={voteRounds}

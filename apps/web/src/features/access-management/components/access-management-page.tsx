@@ -28,6 +28,7 @@ import {
   type AccessManagementDashboardData,
 } from '@/features/access-management/services/access-management-server.service';
 import { AccessManagementActions } from './access-management-actions';
+import { MatterPrivateAuditAction } from './matter-private-audit-action';
 
 /** 权限管理页面属性。 */
 type AccessManagementPageProps = {
@@ -73,6 +74,8 @@ export type AccessManagementCapabilities = {
   canAssignUserPermission: boolean;
   /** 是否允许读取访问控制审计。 */
   canReadAudit: boolean;
+  /** 是否允许通过独立入口审计读取私有议事内容。 */
+  canReadMatterAudit: boolean;
 };
 
 /** 用户状态对应的中文文案。 */
@@ -176,6 +179,7 @@ async function AccessManagementWorkspace({
       {capabilities.canReadRoles ? <RolesTable roles={roles} /> : null}
       {capabilities.canReadPermissions ? <PermissionsTable permissions={permissions} /> : null}
       {capabilities.canReadAudit ? <AuditTable logs={auditLogs.items} /> : null}
+      {capabilities.canReadMatterAudit ? <MatterPrivateAuditAction /> : null}
     </div>
   );
 }
@@ -200,6 +204,7 @@ function buildCapabilities(permissions: SystemPermissionCode[]): AccessManagemen
     canAssignRolePermission: has(SYSTEM_PERMISSIONS.access.rolePermission.assign),
     canAssignUserPermission: has(SYSTEM_PERMISSIONS.access.userPermission.assign),
     canReadAudit: has(SYSTEM_PERMISSIONS.access.audit.read),
+    canReadMatterAudit: has(SYSTEM_PERMISSIONS.matter.auditRead),
   };
 }
 

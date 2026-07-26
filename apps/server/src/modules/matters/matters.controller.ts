@@ -28,6 +28,7 @@ import { CreateDiscussionPublicationDto } from './dto/create-discussion-publicat
 import { CreateMatterChatMessageDto } from './dto/create-matter-chat-message.dto';
 import { CreateMatterDto } from './dto/create-matter.dto';
 import { ListMatterChatMessagesDto } from './dto/list-matter-chat-messages.dto';
+import { ListMatterMemberCandidatesDto } from './dto/list-matter-member-candidates.dto';
 import { UpdateDiscussionAreaDto } from './dto/update-discussion-area.dto';
 import { UpdateMatterMemberDto } from './dto/update-matter-member.dto';
 import { UpdateMatterStatusDto } from './dto/update-matter-status.dto';
@@ -99,6 +100,18 @@ export class MattersController {
     @Param('matterId', ParseIntPipe) matterId: number,
   ) {
     return this.memberService.list(authorization, matterId);
+  }
+
+  /** 查询尚未加入当前议事的可用用户候选列表。 */
+  @Get(':matterId/member-candidates')
+  @RequirePermissions('matter:update')
+  @ApiOperation({ summary: '查询议事可加入成员候选' })
+  listMemberCandidates(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('matterId', ParseIntPipe) matterId: number,
+    @Query() query: ListMatterMemberCandidatesDto,
+  ) {
+    return this.memberService.listCandidates(authorization, matterId, query);
   }
 
   /** 向议事添加成员。 */

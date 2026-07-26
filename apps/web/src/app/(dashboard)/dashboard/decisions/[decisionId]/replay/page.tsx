@@ -1,26 +1,11 @@
 /**
- * 本文件是决策全过程回放页入口，服务端并行读取决策、事件、提案、投票和正式决议。
+ * 本文件保留旧决策回放地址，并重定向到所属议事下的新回放地址。
  */
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
-import type {
-  DecisionDetail,
-  DecisionEventTimelineItem,
-  DecisionProposal,
-  DecisionResolution,
-  DecisionVoteRound,
-} from '@workspace/contracts/decisions';
 
 import { requireServerPermission } from '@/features/auth/services/auth-server.service';
-import { DecisionReplayPage } from '@/features/decisions/components/decision-replay-page';
-import {
-  DecisionServerError,
-  getDecisionDetail,
-  getDecisionEvents,
-  getDecisionProposals,
-  getDecisionResolutions,
-  getDecisionVoteRounds,
-} from '@/features/decisions';
+import { DecisionServerError, getDecisionDetail } from '@/features/decisions';
 
 /** 决策回放动态路由参数。 */
 type DecisionReplayRouteProps = {
@@ -28,7 +13,7 @@ type DecisionReplayRouteProps = {
   params: Promise<{ decisionId: string }>;
 };
 
-/** 渲染授权范围内的决策全过程回放，越权和不存在统一显示 404。 */
+/** 读取所属议事后跳转到新的嵌套回放地址。 */
 export default async function DecisionReplayRoutePage({ params }: DecisionReplayRouteProps) {
   await requireServerPermission(SYSTEM_PERMISSIONS.decision.read);
   const { decisionId: rawDecisionId } = await params;
@@ -38,20 +23,9 @@ export default async function DecisionReplayRoutePage({ params }: DecisionReplay
     notFound();
   }
 
-  let decision: DecisionDetail;
-  let events: DecisionEventTimelineItem[];
-  let proposals: DecisionProposal[];
-  let voteRounds: DecisionVoteRound[];
-  let resolutions: DecisionResolution[];
-
   try {
-    [decision, events, proposals, voteRounds, resolutions] = await Promise.all([
-      getDecisionDetail(decisionId),
-      getDecisionEvents(decisionId),
-      getDecisionProposals(decisionId),
-      getDecisionVoteRounds(decisionId),
-      getDecisionResolutions(decisionId),
-    ]);
+    const decision = await getDecisionDetail(decisionId);
+    redirect(`/dashboard/matters/${decision.matterId}/decisions/${decision.id}/replay`);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
       notFound();
@@ -59,14 +33,4 @@ export default async function DecisionReplayRoutePage({ params }: DecisionReplay
 
     throw error;
   }
-
-  return (
-    <DecisionReplayPage
-      decision={decision}
-      events={events}
-      proposals={proposals}
-      voteRounds={voteRounds}
-      resolutions={resolutions}
-    />
-  );
 }

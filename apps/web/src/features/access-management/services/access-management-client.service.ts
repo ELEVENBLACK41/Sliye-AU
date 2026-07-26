@@ -14,8 +14,17 @@ import type {
   UpdateRoleRequestPayload,
   UpdateUserDepartmentRequestPayload,
 } from '@workspace/contracts/access';
+import type { MatterAuditReadRequestPayload, MatterAuditReadResponse } from '@workspace/contracts/matters';
 
 import { requestData } from '@/services/request';
+
+/** 通过独立权限管理入口审计读取私有议事快照。 */
+export function readPrivateMatterContent(payload: MatterAuditReadRequestPayload): Promise<MatterAuditReadResponse> {
+  return requestData<MatterAuditReadResponse, MatterAuditReadRequestPayload>(
+    '/api/access-management/matter-audits/private-content',
+    { method: 'POST', body: payload, errorMessage: '私有议事内容审计读取失败' },
+  );
+}
 
 /** 创建一个部门。 */
 export function createDepartment(payload: CreateDepartmentRequestPayload): Promise<void> {

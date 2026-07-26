@@ -7,15 +7,12 @@ import type {
   CreateDecisionResolutionRequestPayload,
   CreateDecisionVoteRoundRequestPayload,
   DecisionBallotReceipt,
-  DecisionChatMessageListQuery,
-  DecisionChatMessagePage,
   DecisionDetail,
   DecisionEventTimelineResponse,
   DecisionProposal,
   DecisionProposalListResponse,
   DecisionResolution,
   DecisionResolutionListResponse,
-  DecisionSummary,
   DecisionVoteRound,
   DecisionVoteRoundListResponse,
   SubmitDecisionBallotRequestPayload,
@@ -24,49 +21,12 @@ import type {
 
 import { requestNest, type NestResponse } from '@/services/bff-request';
 
-/** 查询当前用户数据范围内的决策列表。 */
-export function requestDecisionsFromNest(accessToken: string): Promise<NestResponse<DecisionSummary[]>> {
-  return requestNest<DecisionSummary[]>('/decisions', {
-    method: 'GET',
-    headers: createAuthHeaders(accessToken),
-  });
-}
-
 /** 按资源 ID 查询授权范围内的决策详情。 */
 export function requestDecisionDetailFromNest(
   accessToken: string,
   decisionId: number,
 ): Promise<NestResponse<DecisionDetail>> {
   return requestNest<DecisionDetail>(`/decisions/${decisionId}`, {
-    method: 'GET',
-    headers: createAuthHeaders(accessToken),
-  });
-}
-
-/** 按资源 ID 查询授权范围内的决策群聊消息页。 */
-export function requestDecisionChatMessagesFromNest(
-  accessToken: string,
-  decisionId: number,
-  query: DecisionChatMessageListQuery = {},
-): Promise<NestResponse<DecisionChatMessagePage>> {
-  const searchParams = new URLSearchParams();
-
-  if (query.direction) {
-    searchParams.set('direction', query.direction);
-  }
-  if (query.cursor !== undefined) {
-    searchParams.set('cursor', String(query.cursor));
-  }
-  if (query.limit !== undefined) {
-    searchParams.set('limit', String(query.limit));
-  }
-  if (query.meetingId !== undefined) {
-    searchParams.set('meetingId', String(query.meetingId));
-  }
-
-  const queryString = searchParams.size > 0 ? `?${searchParams}` : '';
-
-  return requestNest<DecisionChatMessagePage>(`/decisions/${decisionId}/messages${queryString}`, {
     method: 'GET',
     headers: createAuthHeaders(accessToken),
   });

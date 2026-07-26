@@ -1,30 +1,11 @@
 /**
- * 本文件是决策详情页面入口，使用“资源 ID + 授权范围”的后端联合查询防止 IDOR。
+ * 本文件保留旧决策详情地址，并把合法资源重定向到所属议事的嵌套路由。
  */
-import { notFound } from 'next/navigation';
-import { SYSTEM_PERMISSIONS, SYSTEM_ROLES } from '@workspace/contracts/access';
+import { notFound, redirect } from 'next/navigation';
+import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 
-import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
-import type {
-  DecisionDetail,
-  DecisionChatMessagePage,
-  DecisionEventTimelineItem,
-  DecisionProposal,
-  DecisionResolution,
-  DecisionVoteRound,
-} from '@workspace/contracts/decisions';
-import type { MeetingSummary } from '@workspace/contracts/meetings';
-import {
-  DecisionDetailPage,
-  DecisionServerError,
-  getDecisionChatMessagePage,
-  getDecisionDetail,
-  getDecisionEvents,
-  getDecisionProposals,
-  getDecisionResolutions,
-  getDecisionVoteRounds,
-} from '@/features/decisions';
-import { getDecisionMeetings } from '@/features/meetings/services/meetings-server.service';
+import { requireServerPermission } from '@/features/auth/services/auth-server.service';
+import { DecisionServerError, getDecisionDetail } from '@/features/decisions';
 
 /** 动态决策详情路由参数。 */
 type DecisionDetailRouteProps = {
@@ -32,9 +13,9 @@ type DecisionDetailRouteProps = {
   params: Promise<{ decisionId: string }>;
 };
 
-/** 渲染授权范围内的决策详情，越权和不存在统一显示 404。 */
+/** 读取决策所属议事后跳转到新的嵌套详情地址。 */
 export default async function DecisionDetailRoutePage({ params }: DecisionDetailRouteProps) {
-  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.decision.read);
+  await requireServerPermission(SYSTEM_PERMISSIONS.decision.read);
   const { decisionId: rawDecisionId } = await params;
   const decisionId = Number(rawDecisionId);
 
@@ -42,24 +23,9 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
     notFound();
   }
 
-  let decision: DecisionDetail;
-  let chatMessages: DecisionChatMessagePage;
-  let events: DecisionEventTimelineItem[];
-  let proposals: DecisionProposal[];
-  let voteRounds: DecisionVoteRound[];
-  let resolutions: DecisionResolution[];
-  let meetings: MeetingSummary[];
-
   try {
-    [decision, chatMessages, events, proposals, voteRounds, resolutions, meetings] = await Promise.all([
-      getDecisionDetail(decisionId),
-      getDecisionChatMessagePage(decisionId),
-      getDecisionEvents(decisionId),
-      getDecisionProposals(decisionId),
-      getDecisionVoteRounds(decisionId),
-      getDecisionResolutions(decisionId),
-      getDecisionMeetings(decisionId),
-    ]);
+    const decision = await getDecisionDetail(decisionId);
+    redirect(`/dashboard/matters/${decision.matterId}/decisions/${decision.id}`);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
       notFound();
@@ -67,66 +33,4 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
 
     throw error;
   }
-
-  const hasAllScopeSystemRole =
-    currentUser.isSuperAdmin || currentUser.roles.some((role) => role.code === SYSTEM_ROLES.admin);
-  const canStartDiscussion =
-    decision.status === 'DRAFT' &&
-    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
-    (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
-  const canManageParticipants =
-    (decision.status === 'DRAFT' || decision.status === 'DISCUSSING') &&
-    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
-    (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
-  const currentParticipantRole = decision.participants.find(
-    (participant) => participant.user.id === currentUser.id,
-  )?.role;
-  const canCreateProposal =
-    (decision.status === 'DRAFT' || decision.status === 'DISCUSSING') &&
-    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
-    (hasAllScopeSystemRole || currentParticipantRole === 'OWNER' || currentParticipantRole === 'EDITOR');
-  const canManageVoteRounds =
-    decision.status === 'DISCUSSING' &&
-    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
-    (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
-  const canManageConclusion = canManageVoteRounds;
-  const canCreateMeeting =
-    (decision.status === 'DRAFT' || decision.status === 'DISCUSSING') &&
-    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update) &&
-    (decision.owner?.id === currentUser.id || hasAllScopeSystemRole);
-  const canVote =
-    decision.status === 'DISCUSSING' && (currentParticipantRole === 'OWNER' || currentParticipantRole === 'APPROVER');
-  const isChatLifecycleWritable = decision.status === 'DRAFT' || decision.status === 'DISCUSSING';
-  const canSendChat = isChatLifecycleWritable && currentParticipantRole !== undefined;
-  const chatReadOnlyReason = !isChatLifecycleWritable
-    ? '决策已经结束，群聊历史仅供查看。'
-    : currentParticipantRole === undefined
-      ? '你不在当前决策的参与者名单中，可以查看历史消息，但不能发送。'
-      : undefined;
-
-  return (
-    <DecisionDetailPage
-      decision={decision}
-      initialChatPage={chatMessages}
-      currentChatUser={{
-        id: currentUser.id,
-        name: currentUser.name,
-        avatarUrl: currentUser.avatarUrl,
-      }}
-      events={events}
-      proposals={proposals}
-      voteRounds={voteRounds}
-      resolutions={resolutions}
-      meetings={meetings}
-      canStartDiscussion={canStartDiscussion}
-      canManageParticipants={canManageParticipants}
-      canCreateProposal={canCreateProposal}
-      canManageVoteRounds={canManageVoteRounds}
-      canManageConclusion={canManageConclusion}
-      canVote={canVote}
-      canSendChat={canSendChat}
-      canCreateMeeting={canCreateMeeting}
-      chatReadOnlyReason={chatReadOnlyReason}
-    />
-  );
 }

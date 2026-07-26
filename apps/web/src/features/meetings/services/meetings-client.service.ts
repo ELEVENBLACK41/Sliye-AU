@@ -1,18 +1,9 @@
 /**
  * 本文件封装浏览器侧会议 BFF 请求。
  */
-import type { CreateMeetingRequestPayload, MeetingDetail } from '@workspace/contracts/meetings';
+import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { requestData } from '@/services/request';
-
-/** 在指定决策中创建会议。 */
-export function createMeeting(decisionId: number, payload: CreateMeetingRequestPayload): Promise<MeetingDetail> {
-  return requestData<MeetingDetail, CreateMeetingRequestPayload>(`/api/decisions/${decisionId}/meetings`, {
-    method: 'POST',
-    body: payload,
-    errorMessage: '会议创建失败，请稍后重试',
-  });
-}
 
 /** 开始指定会议。 */
 export function startMeeting(meetingId: number): Promise<MeetingDetail> {
