@@ -7,22 +7,13 @@ import { useState } from 'react';
 import { LiveKitRoom } from '@livekit/components-react';
 import type { MeetingLiveKitCredentials, MeetingParticipant } from '@workspace/contracts/meetings';
 import { Loader2, UsersRound, Video } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { DisconnectReason } from 'livekit-client';
 
 import { MeetingLiveKitConference } from './meeting-livekit-conference';
 import { getMeetingLiveKitCredentials } from '../services/meetings-client.service';
+import { presentNotification } from '@/features/notifications/services/present-notification';
 import { ApiClientError } from '@/services/request';
 import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@workspace/ui/components/alert-dialog';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
 
@@ -30,6 +21,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/componen
 type MeetingLiveKitRoomProps = {
   /** 当前会议数据库主键。 */
   meetingId: number;
+  /** 当前会议标题，用于服务端关闭房间时的全局通知。 */
+  meetingTitle: string;
   /** 当前用户是否属于会议受邀成员。 */
   canJoin: boolean;
   /** 当前会议全部受邀成员及其历史进入、退出时间。 */
@@ -37,12 +30,10 @@ type MeetingLiveKitRoomProps = {
 };
 
 /** 渲染按需申请权限并连接 LiveKit Cloud 的会议音视频区域。 */
-export function MeetingLiveKitRoom({ meetingId, canJoin, participants }: MeetingLiveKitRoomProps) {
-  const router = useRouter();
+export function MeetingLiveKitRoom({ meetingId, meetingTitle, canJoin, participants }: MeetingLiveKitRoomProps) {
   const [credentials, setCredentials] = useState<MeetingLiveKitCredentials | null>(null);
   const [isJoining, setIsJoining] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [meetingEnded, setMeetingEnded] = useState(false);
 
   /** 在明确的用户操作后申请短期凭证并开始连接房间。 */
   async function handleJoin(): Promise<void> {
@@ -64,7 +55,14 @@ export function MeetingLiveKitRoom({ meetingId, canJoin, participants }: Meeting
   function handleDisconnected(reason?: DisconnectReason): void {
     setCredentials(null);
     if (reason === DisconnectReason.ROOM_DELETED) {
-      setMeetingEnded(true);
+      presentNotification({
+        id: `meeting-ended:${meetingId}`,
+        type: 'MEETING_ENDED',
+        title: '当前会议已结束',
+        message: `“${meetingTitle}”已结束，你可以继续查看本场会议记录`,
+        occurredAt: new Date().toISOString(),
+        meeting: { id: meetingId, title: meetingTitle },
+      });
     }
   }
 
@@ -82,13 +80,6 @@ export function MeetingLiveKitRoom({ meetingId, canJoin, participants }: Meeting
   function handleRetry(): void {
     setErrorMessage('');
     setCredentials(null);
-  }
-
-  /** 确认会议结束提示并刷新为只读会议记录页面。 */
-  function handleMeetingEndedAcknowledged(): void {
-    setMeetingEnded(false);
-    setCredentials(null);
-    router.refresh();
   }
 
   return (
@@ -176,20 +167,6 @@ export function MeetingLiveKitRoom({ meetingId, canJoin, participants }: Meeting
           </CardContent>
         </Card>
       )}
-
-      <AlertDialog open={meetingEnded}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>当前会议已结束</AlertDialogTitle>
-            <AlertDialogDescription>
-              主持人已经结束会议，音视频房间已关闭。你可以继续查看本场会议记录。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={handleMeetingEndedAcknowledged}>查看会议记录</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

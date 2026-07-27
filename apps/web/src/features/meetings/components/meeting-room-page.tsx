@@ -107,7 +107,12 @@ export function MeetingRoomPage({
 
       <div className="mx-auto max-w-[1600px] p-4 lg:p-6">
         <section className="min-w-0 space-y-4" aria-label="会议协作区">
-          <MeetingLiveKitRoom meetingId={meeting.id} canJoin={canJoinMeeting} participants={meeting.participants} />
+          <MeetingLiveKitRoom
+            meetingId={meeting.id}
+            meetingTitle={meeting.title}
+            canJoin={canJoinMeeting}
+            participants={meeting.participants}
+          />
 
           <Card className="rounded-md shadow-none">
             <CardContent className="grid gap-4 p-4 sm:grid-cols-3">

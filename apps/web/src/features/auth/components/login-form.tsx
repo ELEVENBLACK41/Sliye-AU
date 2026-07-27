@@ -16,6 +16,7 @@ import type {
   LoginFormValues,
   RegisterFormValues,
 } from '@/features/auth/types/auth.type';
+import { AUTH_SESSION_CHANGED_EVENT } from '@/features/notifications/constants';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -106,6 +107,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
         ...current,
         password: '',
       }));
+      window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
       router.replace(redirectTo);
       router.refresh();
     } catch (error) {
@@ -184,6 +186,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
         ...current,
         code: '',
       }));
+      window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
       router.replace(redirectTo);
       router.refresh();
     } catch (error) {

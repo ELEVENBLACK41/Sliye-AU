@@ -14,6 +14,7 @@ import {
 } from '../../../generated/prisma';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 import { MatterAccessService } from '../../matters/services/matter-access.service';
+import { NotificationService } from '../../notifications/services/notification.service';
 import {
   meetingDetailInclude,
   toMeetingDetail,
@@ -23,11 +24,12 @@ import { MeetingLiveKitService } from './meeting-livekit.service';
 
 @Injectable()
 export class MeetingLifecycleService {
-  /** 注入数据库、议事分区授权和 LiveKit 房间管理服务。 */
+  /** 注入数据库、议事分区授权、LiveKit 房间管理和全站通知服务。 */
   constructor(
     private readonly prisma: PrismaService,
     private readonly matterAccessService: MatterAccessService,
     private readonly liveKitService: MeetingLiveKitService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /** 开始一场计划会议，并为每项关联决策分别写入开始事件。 */
@@ -79,7 +81,7 @@ export class MeetingLifecycleService {
 
   /** LiveKit 房间已无在线参与者时，以系统事件自动结束仍在进行的业务会议。 */
   async endIfEmpty(meetingId: number, endedAt: Date): Promise<boolean> {
-    return this.prisma.$transaction(async (tx) => {
+    const endedMeeting = await this.prisma.$transaction(async (tx) => {
       const joinedParticipantCount = await tx.meetingParticipant.count({
         where: {
           meetingId,
@@ -87,7 +89,7 @@ export class MeetingLifecycleService {
         },
       });
       if (joinedParticipantCount === 0) {
-        return false;
+        return null;
       }
 
       const activeParticipantCount = await tx.meetingParticipant.count({
@@ -98,7 +100,7 @@ export class MeetingLifecycleService {
         },
       });
       if (activeParticipantCount > 0) {
-        return false;
+        return null;
       }
 
       const result = await tx.meetingSession.updateMany({
@@ -106,7 +108,7 @@ export class MeetingLifecycleService {
         data: { status: MeetingStatus.ENDED, endedAt },
       });
       if (result.count !== 1) {
-        return false;
+        return null;
       }
 
       const meeting = await this.findMeetingInTransaction(tx, meetingId);
@@ -120,8 +122,21 @@ export class MeetingLifecycleService {
         MeetingStatus.ENDED,
         endedAt,
       );
-      return true;
+      return meeting;
     });
+
+    if (!endedMeeting) {
+      return false;
+    }
+    this.notificationService.notifyMeetingEnded({
+      recipientIds: endedMeeting.participants.map(
+        (participant) => participant.userId,
+      ),
+      meetingId: endedMeeting.id,
+      meetingTitle: endedMeeting.title,
+      occurredAt: endedAt,
+    });
+    return true;
   }
 
   /** 结束一场进行中的会议，并为每项关联决策分别写入结束事件。 */
@@ -163,6 +178,21 @@ export class MeetingLifecycleService {
     });
 
     await this.liveKitService.closeRoom(meeting.id);
+    this.notificationService.notifyMeetingEnded({
+      recipientIds: meeting.participants
+        .map((participant) => participant.userId)
+        .filter((userId) => userId !== authorization.userId),
+      meetingId: meeting.id,
+      meetingTitle: meeting.title,
+      actor: {
+        id: authorization.userId,
+        name:
+          meeting.participants.find(
+            (participant) => participant.userId === authorization.userId,
+          )?.user.name ?? '会议主持人',
+      },
+      occurredAt: endedAt,
+    });
 
     return toMeetingDetail(updated);
   }

@@ -15,6 +15,7 @@ import {
 } from '../../generated/prisma';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import { MatterAccessService } from '../matters/services/matter-access.service';
+import { NotificationService } from '../notifications/services/notification.service';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import {
   meetingDetailInclude,
@@ -25,10 +26,11 @@ import {
 
 @Injectable()
 export class MeetingsService {
-  /** 注入数据库和统一议事分区授权服务。 */
+  /** 注入数据库、统一议事分区授权和全站通知服务。 */
   constructor(
     private readonly prisma: PrismaService,
     private readonly matterAccessService: MatterAccessService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /** 在当前用户可管理的议事分区中创建会议和多决策关联。 */
@@ -84,6 +86,19 @@ export class MeetingsService {
             }),
       },
       include: meetingDetailInclude,
+    });
+
+    this.notificationService.notifyMeetingInvited({
+      recipientIds: participantIds.filter(
+        (userId) => userId !== authorization.userId,
+      ),
+      meetingId: meeting.id,
+      meetingTitle: meeting.title,
+      actor: {
+        id: meeting.createdBy.id,
+        name: meeting.createdBy.name ?? '会议主持人',
+      },
+      occurredAt: meeting.createdAt,
     });
 
     return toMeetingDetail(meeting);

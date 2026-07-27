@@ -20,6 +20,8 @@ export interface ServerEnvConfig {
   AUTH_EMAIL_CODE_MAX_ATTEMPTS: number;
   CHAT_SOCKET_TICKET_SECRET?: string;
   CHAT_SOCKET_TICKET_TTL_SECONDS: number;
+  NOTIFICATION_SOCKET_TICKET_SECRET?: string;
+  NOTIFICATION_SOCKET_TICKET_TTL_SECONDS: number;
   LIVEKIT_URL?: string;
   LIVEKIT_API_KEY?: string;
   LIVEKIT_API_SECRET?: string;
@@ -36,6 +38,7 @@ const DEFAULT_EMAIL_CODE_TTL_SECONDS = 10 * 60;
 const DEFAULT_EMAIL_CODE_COOLDOWN_SECONDS = 60;
 const DEFAULT_EMAIL_CODE_MAX_ATTEMPTS = 5;
 const DEFAULT_CHAT_SOCKET_TICKET_TTL_SECONDS = 5 * 60;
+const DEFAULT_NOTIFICATION_SOCKET_TICKET_TTL_SECONDS = 5 * 60;
 const DEFAULT_LIVEKIT_TOKEN_TTL_SECONDS = 10 * 60;
 const DEFAULT_AVATAR_UPLOAD_DIR = './uploads/avatars';
 const DEFAULT_WEB_ORIGINS = ['http://localhost:3000'];
@@ -61,6 +64,12 @@ export function validateEnvConfig(
   const chatSocketTicketSecret = readOptionalSecret(
     config.CHAT_SOCKET_TICKET_SECRET,
     'CHAT_SOCKET_TICKET_SECRET',
+    nodeEnv,
+    errors,
+  );
+  const notificationSocketTicketSecret = readOptionalSecret(
+    config.NOTIFICATION_SOCKET_TICKET_SECRET,
+    'NOTIFICATION_SOCKET_TICKET_SECRET',
     nodeEnv,
     errors,
   );
@@ -118,6 +127,13 @@ export function validateEnvConfig(
       config.CHAT_SOCKET_TICKET_TTL_SECONDS,
       'CHAT_SOCKET_TICKET_TTL_SECONDS',
       DEFAULT_CHAT_SOCKET_TICKET_TTL_SECONDS,
+      errors,
+    ),
+    NOTIFICATION_SOCKET_TICKET_SECRET: notificationSocketTicketSecret,
+    NOTIFICATION_SOCKET_TICKET_TTL_SECONDS: readPositiveInteger(
+      config.NOTIFICATION_SOCKET_TICKET_TTL_SECONDS,
+      'NOTIFICATION_SOCKET_TICKET_TTL_SECONDS',
+      DEFAULT_NOTIFICATION_SOCKET_TICKET_TTL_SECONDS,
       errors,
     ),
     LIVEKIT_URL: readOptionalValue(config.LIVEKIT_URL, 'LIVEKIT_URL', errors),

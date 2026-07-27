@@ -21,6 +21,7 @@ import type { MeetingDetailRecord } from './meetings.mapper';
 import { MeetingsService } from './meetings.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
 import type { MeetingLiveKitService } from './services/meeting-livekit.service';
+import type { NotificationService } from '../notifications/services/notification.service';
 
 /** 创建会议测试使用的请求级授权上下文。 */
 function createAuthorization(userId = 7): AuthorizationContext {
@@ -171,6 +172,10 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
     assertAreaWritable: jest.fn(),
   };
   const liveKitService = { closeRoom: jest.fn().mockResolvedValue(undefined) };
+  const notificationService = {
+    notifyMeetingInvited: jest.fn(),
+    notifyMeetingEnded: jest.fn(),
+  };
 
   return {
     prisma,
@@ -179,20 +184,24 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
     service: new MeetingsService(
       prisma as unknown as PrismaService,
       matterAccessService as unknown as MatterAccessService,
+      notificationService as unknown as NotificationService,
       liveKitService,
     ),
     lifecycleService: new MeetingLifecycleService(
       prisma as unknown as PrismaService,
       matterAccessService as unknown as MatterAccessService,
       liveKitService as unknown as MeetingLiveKitService,
+      notificationService as unknown as NotificationService,
     ),
     liveKitService,
+    notificationService,
   };
 }
 
 describe('MeetingsService', () => {
   it('公共分区应能创建关联多项决策的会议', async () => {
-    const { service, prisma, matterAccessService } = createHarness();
+    const { service, prisma, matterAccessService, notificationService } =
+      createHarness();
     prisma.meetingSession.create.mockResolvedValue(createMeetingRecord());
 
     await expect(
@@ -212,6 +221,13 @@ describe('MeetingsService', () => {
       decisions: [{ id: 20 }, { id: 21 }],
     });
     expect(matterAccessService.assertAreaMeetingManager).toHaveBeenCalled();
+    expect(notificationService.notifyMeetingInvited).toHaveBeenCalledWith({
+      recipientIds: [8],
+      meetingId: 30,
+      meetingTitle: '权限模块重构方案评审会',
+      actor: { id: 7, name: '负责人' },
+      occurredAt: createMeetingRecord().createdAt,
+    });
     expect(prisma.decision.count).toHaveBeenCalledWith({
       where: {
         id: { in: [20, 21] },
@@ -318,7 +334,8 @@ describe('MeetingsService', () => {
   });
 
   it('最后一位已进入的参会人退出后应自动结束会议', async () => {
-    const { lifecycleService, transaction } = createHarness();
+    const { lifecycleService, transaction, notificationService } =
+      createHarness();
     const live = createMeetingRecord({ status: MeetingStatus.LIVE });
     transaction.meetingSession.findUnique.mockResolvedValue(live);
     const endedAt = new Date('2026-07-24T03:00:00.000Z');
@@ -328,6 +345,12 @@ describe('MeetingsService', () => {
     expect(transaction.meetingSession.updateMany).toHaveBeenCalledWith({
       where: { id: 30, status: MeetingStatus.LIVE },
       data: { status: MeetingStatus.ENDED, endedAt },
+    });
+    expect(notificationService.notifyMeetingEnded).toHaveBeenCalledWith({
+      recipientIds: [7, 8],
+      meetingId: 30,
+      meetingTitle: '权限模块重构方案评审会',
+      occurredAt: endedAt,
     });
   });
 
@@ -340,5 +363,31 @@ describe('MeetingsService', () => {
     ).resolves.toBe(false);
 
     expect(transaction.meetingSession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('主持人结束会议时应关闭房间并通知其他参会人', async () => {
+    const {
+      lifecycleService,
+      prisma,
+      transaction,
+      liveKitService,
+      notificationService,
+    } = createHarness();
+    const live = createMeetingRecord({ status: MeetingStatus.LIVE });
+    const ended = createMeetingRecord({ status: MeetingStatus.ENDED });
+    prisma.meetingSession.findFirst.mockResolvedValue(live);
+    transaction.meetingSession.findUnique.mockResolvedValue(ended);
+
+    await lifecycleService.end(createAuthorization(), 30);
+
+    expect(liveKitService.closeRoom).toHaveBeenCalledWith(30);
+    expect(notificationService.notifyMeetingEnded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientIds: [8],
+        meetingId: 30,
+        meetingTitle: '权限模块重构方案评审会',
+        actor: { id: 7, name: '负责人' },
+      }),
+    );
   });
 });

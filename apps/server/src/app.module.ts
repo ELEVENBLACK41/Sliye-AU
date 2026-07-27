@@ -21,6 +21,7 @@ import { PermissionGuard } from './modules/auth/guards/permission.guard';
 import { DecisionsModule } from './modules/decisions/decisions.module';
 import { MeetingsModule } from './modules/meetings/meetings.module';
 import { MattersModule } from './modules/matters/matters.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 // import { AppController } from './app.controller';
 // import { AppService } from './app.service';
@@ -39,6 +40,7 @@ import { RequestContextMiddleware } from './common/middleware/request-context.mi
     MattersModule,
     DecisionsModule,
     MeetingsModule,
+    NotificationsModule,
   ],
   providers: [
     {
