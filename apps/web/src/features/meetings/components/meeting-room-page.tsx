@@ -2,7 +2,7 @@
  * 本文件组合议事分区会议房间、会议聊天、多决策目标选择和正式决策操作。
  */
 import Link from 'next/link';
-import { ArrowLeft, CalendarClock, CircleDot, MessageSquareText, UsersRound } from 'lucide-react';
+import { ArrowLeft, CircleDot, UsersRound } from 'lucide-react';
 import type {
   DecisionDetail,
   DecisionProposal,
@@ -18,6 +18,7 @@ import type {
 import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { MeetingLifecycleActions } from './meeting-lifecycle-actions';
+import { MeetingLiveKitRoom } from './meeting-livekit-room';
 import { MeetingRecordPage } from './meeting-record-page';
 import { DecisionProposalSection } from '@/features/decisions/components/decision-proposal-section';
 import { DecisionResolutionSection } from '@/features/decisions/components/decision-resolution-section';
@@ -48,6 +49,7 @@ type MeetingRoomPageProps = {
   canManageConclusion: boolean;
   canVote: boolean;
   canSendChat: boolean;
+  canJoinMeeting: boolean;
 };
 
 /** 渲染不依赖 dashboard 外壳的公共或私有会议协作空间。 */
@@ -68,6 +70,7 @@ export function MeetingRoomPage({
   canManageConclusion,
   canVote,
   canSendChat,
+  canJoinMeeting,
 }: MeetingRoomPageProps) {
   const isLive = meeting.status === 'LIVE';
 
@@ -104,6 +107,8 @@ export function MeetingRoomPage({
 
       <div className="mx-auto grid max-w-[1600px] gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:p-6">
         <section className="min-w-0 space-y-4" aria-label="会议协作区">
+          <MeetingLiveKitRoom meetingId={meeting.id} canJoin={canJoinMeeting} />
+
           <Card className="rounded-md shadow-none">
             <CardContent className="grid gap-4 p-4 sm:grid-cols-3">
               <RoomSummary label="会议说明" value={meeting.description || '暂无会议说明'} />
@@ -225,22 +230,6 @@ export function MeetingRoomPage({
                   </li>
                 ))}
               </ul>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-md border-dashed shadow-none">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <MessageSquareText className="size-4" aria-hidden />
-                音视频接入位
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>当前阶段只完成会议领域和权限改造，不申请麦克风、摄像头或供应商 Token。</p>
-              <p className="flex items-center gap-2">
-                <CalendarClock className="size-4" aria-hidden />
-                实时进退会状态将在音视频供应商接入阶段实现。
-              </p>
             </CardContent>
           </Card>
         </aside>

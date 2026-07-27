@@ -106,5 +106,13 @@ export type CreateMeetingRequestPayload = {
   participantIds: number[];
 };
 
+/** 浏览器加入 LiveKit 会议房间所需的短期凭证。 */
+export type MeetingLiveKitCredentials = {
+  /** LiveKit Cloud 或自托管服务的安全 WebSocket 地址。 */
+  serverUrl: string;
+  /** 仅允许当前用户加入当前会议房间的短期参与者令牌。 */
+  participantToken: string;
+};
+
 /** 指定议事下当前用户可见的会议列表。 */
 export type MeetingListResponse = MeetingSummary[];

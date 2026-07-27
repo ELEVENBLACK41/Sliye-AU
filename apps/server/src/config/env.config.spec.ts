@@ -18,7 +18,23 @@ describe('validateEnvConfig', () => {
     expect(config.AUTH_ACCESS_TOKEN_TTL_SECONDS).toBe(900);
     expect(config.AUTH_REFRESH_TOKEN_TTL_SECONDS).toBe(2592000);
     expect(config.CHAT_SOCKET_TICKET_TTL_SECONDS).toBe(300);
+    expect(config.LIVEKIT_TOKEN_TTL_SECONDS).toBe(600);
     expect(config.WEB_ORIGINS).toEqual(['http://localhost:3000']);
+  });
+
+  it('preserves optional LiveKit Cloud credentials', () => {
+    const config = validateEnvConfig({
+      DATABASE_URL: 'postgresql://user:pass@localhost:5432/app',
+      LIVEKIT_URL: 'wss://nextnest.livekit.cloud',
+      LIVEKIT_API_KEY: 'API-test',
+      LIVEKIT_API_SECRET: 'secret-test',
+      LIVEKIT_TOKEN_TTL_SECONDS: '900',
+    });
+
+    expect(config.LIVEKIT_URL).toBe('wss://nextnest.livekit.cloud');
+    expect(config.LIVEKIT_API_KEY).toBe('API-test');
+    expect(config.LIVEKIT_API_SECRET).toBe('secret-test');
+    expect(config.LIVEKIT_TOKEN_TTL_SECONDS).toBe(900);
   });
 
   it('normalizes api prefix slashes', () => {

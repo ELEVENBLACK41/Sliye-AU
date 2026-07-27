@@ -1,5 +1,5 @@
 /**
- * 本文件提供无音视频会议的创建、查询、开始和结束接口。
+ * 本文件提供会议创建、查询、生命周期和 LiveKit 音视频凭证接口。
  */
 import {
   Body,
@@ -16,6 +16,7 @@ import type { AuthorizationContext } from '../auth/types/auth.types';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import { MeetingsService } from './meetings.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
+import { MeetingLiveKitService } from './services/meeting-livekit.service';
 
 @ApiTags('meetings')
 @ApiBearerAuth()
@@ -25,6 +26,7 @@ export class MeetingsController {
   constructor(
     private readonly meetingsService: MeetingsService,
     private readonly lifecycleService: MeetingLifecycleService,
+    private readonly liveKitService: MeetingLiveKitService,
   ) {}
 
   /** 在议事的当前分区中创建一场计划会议。 */
@@ -59,6 +61,17 @@ export class MeetingsController {
     @Param('meetingId', ParseIntPipe) meetingId: number,
   ) {
     return this.meetingsService.get(authorization, meetingId);
+  }
+
+  /** 为当前受邀用户签发进行中会议的 LiveKit 加入凭证。 */
+  @Post('meetings/:meetingId/livekit-token')
+  @RequirePermissions('matter:read')
+  @ApiOperation({ summary: '获取会议 LiveKit 音视频加入凭证' })
+  issueLiveKitToken(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+  ) {
+    return this.liveKitService.issueCredentials(authorization, meetingId);
   }
 
   /** 由会议主持人开始一场计划会议。 */

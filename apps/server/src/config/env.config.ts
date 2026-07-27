@@ -20,6 +20,10 @@ export interface ServerEnvConfig {
   AUTH_EMAIL_CODE_MAX_ATTEMPTS: number;
   CHAT_SOCKET_TICKET_SECRET?: string;
   CHAT_SOCKET_TICKET_TTL_SECONDS: number;
+  LIVEKIT_URL?: string;
+  LIVEKIT_API_KEY?: string;
+  LIVEKIT_API_SECRET?: string;
+  LIVEKIT_TOKEN_TTL_SECONDS: number;
   AVATAR_UPLOAD_DIR: string;
   WEB_ORIGINS: string[];
 }
@@ -32,6 +36,7 @@ const DEFAULT_EMAIL_CODE_TTL_SECONDS = 10 * 60;
 const DEFAULT_EMAIL_CODE_COOLDOWN_SECONDS = 60;
 const DEFAULT_EMAIL_CODE_MAX_ATTEMPTS = 5;
 const DEFAULT_CHAT_SOCKET_TICKET_TTL_SECONDS = 5 * 60;
+const DEFAULT_LIVEKIT_TOKEN_TTL_SECONDS = 10 * 60;
 const DEFAULT_AVATAR_UPLOAD_DIR = './uploads/avatars';
 const DEFAULT_WEB_ORIGINS = ['http://localhost:3000'];
 
@@ -115,6 +120,23 @@ export function validateEnvConfig(
       DEFAULT_CHAT_SOCKET_TICKET_TTL_SECONDS,
       errors,
     ),
+    LIVEKIT_URL: readOptionalValue(config.LIVEKIT_URL, 'LIVEKIT_URL', errors),
+    LIVEKIT_API_KEY: readOptionalValue(
+      config.LIVEKIT_API_KEY,
+      'LIVEKIT_API_KEY',
+      errors,
+    ),
+    LIVEKIT_API_SECRET: readOptionalValue(
+      config.LIVEKIT_API_SECRET,
+      'LIVEKIT_API_SECRET',
+      errors,
+    ),
+    LIVEKIT_TOKEN_TTL_SECONDS: readPositiveInteger(
+      config.LIVEKIT_TOKEN_TTL_SECONDS,
+      'LIVEKIT_TOKEN_TTL_SECONDS',
+      DEFAULT_LIVEKIT_TOKEN_TTL_SECONDS,
+      errors,
+    ),
     AVATAR_UPLOAD_DIR: readOptionalString(
       config.AVATAR_UPLOAD_DIR,
       'AVATAR_UPLOAD_DIR',
@@ -129,6 +151,24 @@ export function validateEnvConfig(
   }
 
   return envConfig;
+}
+
+// 读取可选的非空字符串配置；未配置时由对应业务能力在使用时返回明确错误。
+function readOptionalValue(
+  value: unknown,
+  key: string,
+  errors: string[],
+): string | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    errors.push(`${key} must be a non-empty string`);
+    return undefined;
+  }
+
+  return value.trim();
 }
 
 // 读取逗号分隔的 Web Origin 白名单，并标准化为不带路径的 HTTP(S) Origin。

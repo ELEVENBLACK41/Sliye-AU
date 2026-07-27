@@ -132,6 +132,7 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
       canManageConclusion={canManageConclusion}
       canVote={canVote}
       canSendChat={canSendChat}
+      canJoinMeeting={isLive && meetingRole !== undefined}
     />
   );
 }
