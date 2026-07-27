@@ -325,7 +325,7 @@ export type DecisionDetail = DecisionSummary & {
   participants: DecisionParticipant[];
 };
 
-/** 创建决策的请求体。 */
+/** 创建决策的请求体；参与者由服务端按照议事或私有分区成员自动继承。 */
 export type CreateDecisionRequestPayload = {
   /** 决策标题。 */
   title: string;
@@ -333,7 +333,7 @@ export type CreateDecisionRequestPayload = {
   description?: string;
   /** 可选的来源会议；创建成功后会自动建立会议决策关联。 */
   meetingId?: number;
-  /** 私有讨论分区主键；省略时创建议事级决策。 */
+  /** 私有讨论分区主键；传入时继承分区成员，省略时创建议事级决策并继承议事成员。 */
   areaId?: number;
   /** 决策所属的启用部门主键。 */
   departmentId: number;

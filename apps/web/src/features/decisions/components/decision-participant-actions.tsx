@@ -153,13 +153,15 @@ export function DecisionParticipantActions({ decisionId }: DecisionParticipantAc
       <SheetTrigger asChild>
         <Button>
           <UserPlus aria-hidden />
-          添加参与者
+          补充参与人
         </Button>
       </SheetTrigger>
       <SheetContent>
         <SheetHeader>
-          <SheetTitle>添加参与者</SheetTitle>
-          <SheetDescription>选择尚未参与当前决策的可用用户，并分配决策内身份。</SheetDescription>
+          <SheetTitle>补充参与人</SheetTitle>
+          <SheetDescription>
+            创建决策时已自动继承当时的议事或小组成员；这里只需补充后来加入协作范围的成员，并分配决策身份。
+          </SheetDescription>
         </SheetHeader>
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
@@ -196,7 +198,7 @@ export function DecisionParticipantActions({ decisionId }: DecisionParticipantAc
 
             {!isLoading && !errorMessage && !candidates.length ? (
               <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                当前没有可以继续添加的用户。
+                当前协作范围内的成员已经全部加入该决策。
               </p>
             ) : null}
 

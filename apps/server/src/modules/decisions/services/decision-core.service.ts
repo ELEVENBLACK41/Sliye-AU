@@ -13,7 +13,9 @@ import { PrismaService } from '../../../database/prisma.service';
 import {
   DecisionEventType,
   DecisionStatus,
+  DiscussionAreaMemberRole,
   DiscussionAreaType,
+  MatterMemberRole,
   MatterStatus,
   MeetingStatus,
   ParticipantRole,
@@ -44,6 +46,50 @@ const decisionSummaryInclude = {
     select: { participants: true },
   },
 } as const;
+
+/** 创建决策时写入的一条初始参与关系。 */
+type InitialDecisionParticipant = {
+  /** 被继承的议事或分区成员主键。 */
+  userId: number;
+  /** 成员在决策中的初始协作角色。 */
+  role: ParticipantRole;
+};
+
+/** 把议事成员身份映射为决策中的默认协作角色。 */
+function mapMatterMemberRole(role: MatterMemberRole): ParticipantRole {
+  if (role === MatterMemberRole.OWNER || role === MatterMemberRole.MANAGER) {
+    return ParticipantRole.EDITOR;
+  }
+  if (role === MatterMemberRole.MEMBER) {
+    return ParticipantRole.APPROVER;
+  }
+  return ParticipantRole.VIEWER;
+}
+
+/** 把私有分区成员身份映射为决策中的默认协作角色。 */
+function mapAreaMemberRole(role: DiscussionAreaMemberRole): ParticipantRole {
+  return role === DiscussionAreaMemberRole.MANAGER
+    ? ParticipantRole.EDITOR
+    : ParticipantRole.APPROVER;
+}
+
+/** 去重继承的成员，并确保决策创建者始终是唯一负责人。 */
+function buildInitialParticipants(
+  inheritedParticipants: InitialDecisionParticipant[],
+  ownerId: number,
+): InitialDecisionParticipant[] {
+  const participantsByUserId = new Map(
+    inheritedParticipants.map((participant) => [
+      participant.userId,
+      participant,
+    ]),
+  );
+  participantsByUserId.set(ownerId, {
+    userId: ownerId,
+    role: ParticipantRole.OWNER,
+  });
+  return [...participantsByUserId.values()];
+}
 
 @Injectable()
 export class DecisionCoreService {
@@ -269,7 +315,7 @@ export class DecisionCoreService {
     return toDecisionDetail(updatedDecision);
   }
 
-  /** 在进行中的议事内创建决策、负责人参与关系和时间线事件。 */
+  /** 在进行中的议事内创建决策，并继承当前协作范围成员和时间线事件。 */
   async create(
     authorization: AuthorizationContext,
     matterId: number,
@@ -334,8 +380,33 @@ export class DecisionCoreService {
       }
     }
 
-    const decision = await this.prisma.$transaction(async (tx) =>
-      tx.decision.create({
+    const decision = await this.prisma.$transaction(async (tx) => {
+      const inheritedParticipants =
+        dto.areaId === undefined
+          ? (
+              await tx.matterMember.findMany({
+                where: { matterId },
+                select: { userId: true, role: true },
+              })
+            ).map((member) => ({
+              userId: member.userId,
+              role: mapMatterMemberRole(member.role),
+            }))
+          : (
+              await tx.discussionAreaMember.findMany({
+                where: { areaId: dto.areaId, area: { matterId } },
+                select: { userId: true, role: true },
+              })
+            ).map((member) => ({
+              userId: member.userId,
+              role: mapAreaMemberRole(member.role),
+            }));
+      const initialParticipants = buildInitialParticipants(
+        inheritedParticipants,
+        authorization.userId,
+      );
+
+      return tx.decision.create({
         data: {
           title: dto.title,
           description: dto.description,
@@ -345,10 +416,7 @@ export class DecisionCoreService {
           creatorId: authorization.userId,
           ownerId: authorization.userId,
           participants: {
-            create: {
-              userId: authorization.userId,
-              role: ParticipantRole.OWNER,
-            },
+            create: initialParticipants,
           },
           events: {
             create: {
@@ -361,6 +429,7 @@ export class DecisionCoreService {
                 scope: dto.areaId === undefined ? 'MATTER' : 'AREA',
                 departmentId: dto.departmentId,
                 meetingId: dto.meetingId ?? null,
+                inheritedParticipantCount: initialParticipants.length,
               },
               meetingId: dto.meetingId,
             },
@@ -384,8 +453,8 @@ export class DecisionCoreService {
             orderBy: { createdAt: 'asc' },
           },
         },
-      }),
-    );
+      });
+    });
 
     return toDecisionDetail(decision);
   }

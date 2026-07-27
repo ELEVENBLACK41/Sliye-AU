@@ -975,7 +975,7 @@ describe('DecisionsService', () => {
     expect(createEvent).not.toHaveBeenCalled();
   });
 
-  it('创建决策时应校验部门范围并自动创建 OWNER 参与关系', async () => {
+  it('创建议事级决策时应继承议事成员并映射初始角色', async () => {
     const record = createDecisionRecord();
     let capturedCreateInput: unknown;
     const createDecisionMock = jest.fn((input: unknown) => {
@@ -983,6 +983,15 @@ describe('DecisionsService', () => {
       return Promise.resolve(record);
     });
     const transaction = {
+      matterMember: {
+        findMany: jest.fn().mockResolvedValue([
+          { userId: 7, role: MatterMemberRole.MEMBER },
+          { userId: 8, role: MatterMemberRole.OWNER },
+          { userId: 9, role: MatterMemberRole.MANAGER },
+          { userId: 10, role: MatterMemberRole.MEMBER },
+          { userId: 11, role: MatterMemberRole.VIEWER },
+        ]),
+      },
       decision: { create: createDecisionMock },
     };
     const prisma = {
@@ -1004,7 +1013,7 @@ describe('DecisionsService', () => {
         title: record.title,
         departmentId: 3,
       }),
-    ).resolves.toMatchObject({ id: 20, participantCount: 1 });
+    ).resolves.toMatchObject({ id: 20 });
     expect(authorizationService.assertDepartmentInScope).toHaveBeenCalledWith(
       createAuthorization(),
       'decision:create',
@@ -1016,12 +1025,25 @@ describe('DecisionsService', () => {
         creatorId: 7,
         ownerId: 7,
         matterId: 10,
-        participants: { create: { userId: 7, role: 'OWNER' } },
+        participants: {
+          create: [
+            { userId: 7, role: 'OWNER' },
+            { userId: 8, role: 'EDITOR' },
+            { userId: 9, role: 'EDITOR' },
+            { userId: 10, role: 'APPROVER' },
+            { userId: 11, role: 'VIEWER' },
+          ],
+        },
+        events: {
+          create: {
+            payload: { inheritedParticipantCount: 5 },
+          },
+        },
       },
     });
   });
 
-  it('私有分区成员创建决策时应绑定分区并返回小组范围', async () => {
+  it('私有分区成员创建决策时应绑定分区并继承小组成员', async () => {
     const record = {
       ...createDecisionRecord(),
       areaId: 40,
@@ -1029,6 +1051,13 @@ describe('DecisionsService', () => {
     };
     let capturedCreateInput: unknown;
     const transaction = {
+      discussionAreaMember: {
+        findMany: jest.fn().mockResolvedValue([
+          { userId: 7, role: DiscussionAreaMemberRole.MEMBER },
+          { userId: 8, role: DiscussionAreaMemberRole.MANAGER },
+          { userId: 9, role: DiscussionAreaMemberRole.MEMBER },
+        ]),
+      },
       decision: {
         create: jest.fn((input: unknown) => {
           capturedCreateInput = input;
@@ -1065,12 +1094,20 @@ describe('DecisionsService', () => {
       data: {
         matterId: 10,
         areaId: 40,
+        participants: {
+          create: [
+            { userId: 7, role: 'OWNER' },
+            { userId: 8, role: 'EDITOR' },
+            { userId: 9, role: 'APPROVER' },
+          ],
+        },
         events: {
           create: {
             payload: {
               matterId: 10,
               areaId: 40,
               scope: 'AREA',
+              inheritedParticipantCount: 3,
             },
           },
         },

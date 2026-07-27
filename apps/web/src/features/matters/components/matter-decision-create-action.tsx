@@ -75,8 +75,8 @@ export function MatterDecisionCreateAction({ matterId, departmentId, area }: Mat
           <SheetTitle>{area.type === 'PRIVATE' ? `在“${area.name}”创建小组决策` : '创建议事级决策'}</SheetTitle>
           <SheetDescription>
             {area.type === 'PRIVATE'
-              ? '仅当前小组成员可查看和参与，会议、消息及候选参与者都限制在本分区。'
-              : '面向当前议事全部成员，可在各讨论分区中关联和推进。'}
+              ? '创建后自动继承当前小组成员，无需重复添加参与人；仅本分区成员可以查看和参与。'
+              : '创建后自动继承当前议事成员，无需重复添加参与人，可在各讨论分区中关联和推进。'}
           </SheetDescription>
         </SheetHeader>
         <form className="flex flex-1 flex-col gap-4 overflow-y-auto px-4" onSubmit={handleSubmit}>
