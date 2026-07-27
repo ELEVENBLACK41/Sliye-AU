@@ -6,7 +6,6 @@
 import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { MessageCircleMore, SendHorizontal, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { DiscussionAreaSummary, MatterChatMessagePage, MatterUserSummary } from '@workspace/contracts/matters';
 
 import { MatterChatMessageList } from './matter-chat-message-list';
@@ -15,7 +14,6 @@ import type { MatterChatConnectionStatus } from '../hooks/use-matter-chat-realti
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Textarea } from '@workspace/ui/components/textarea';
 
 /** 分区聊天面板属性。 */
@@ -24,10 +22,10 @@ type MatterChatPanelProps = {
   area: DiscussionAreaSummary;
   initialPage: MatterChatMessagePage;
   currentUser: MatterUserSummary;
-  decisions: DecisionSummary[];
   canSend: boolean;
   initialDecisionId?: number;
-  meetingId?: number;
+  /** 从会议房间发送消息时写入的来源会议主键，不用于筛选分区消息。 */
+  sourceMeetingId?: number;
   readOnlyReason?: string;
 };
 
@@ -49,22 +47,20 @@ export function MatterChatPanel({
   area,
   initialPage,
   currentUser,
-  decisions,
   canSend,
   initialDecisionId,
-  meetingId,
+  sourceMeetingId,
   readOnlyReason,
 }: MatterChatPanelProps) {
   const router = useRouter();
   const [draft, setDraft] = useState('');
-  const [decisionId, setDecisionId] = useState(initialDecisionId ? String(initialDecisionId) : 'none');
   const chat = useMatterChat({
     matterId,
     areaId: area.id,
     initialPage,
     currentUser,
     canSend,
-    meetingId,
+    sourceMeetingId,
     initialDecisionId,
     onAccessRevoked: () => {
       router.replace(`/dashboard/matters/${matterId}`);
@@ -75,7 +71,7 @@ export function MatterChatPanel({
 
   /** 提交当前草稿并带上可选决策关联。 */
   function submitDraft(): void {
-    if (chat.sendMessage(draft, decisionId === 'none' ? undefined : Number(decisionId))) setDraft('');
+    if (chat.sendMessage(draft)) setDraft('');
   }
 
   /** 处理表单提交。 */
@@ -139,20 +135,6 @@ export function MatterChatPanel({
               </div>
             ) : null}
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Select value={decisionId} onValueChange={setDecisionId}>
-                <SelectTrigger className="w-full sm:w-56">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">不关联决策</SelectItem>
-                  {decisions.map((decision) => (
-                    <SelectItem key={decision.id} value={String(decision.id)}>
-                      {decision.scope === 'AREA' ? '【小组】' : '【议事】'}
-                      {decision.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Textarea
                 value={draft}
                 maxLength={2000}

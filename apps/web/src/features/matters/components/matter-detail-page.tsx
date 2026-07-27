@@ -156,7 +156,6 @@ export function MatterDetailPage({
             area={currentArea}
             initialPage={initialMessages}
             currentUser={currentUser}
-            decisions={relatedDecisions}
             canSend={canSend}
             initialDecisionId={decisionFilterId}
             readOnlyReason={

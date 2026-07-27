@@ -7,7 +7,6 @@ import type {
   DecisionDetail,
   DecisionProposal,
   DecisionResolution,
-  DecisionSummary,
   DecisionVoteRound,
 } from '@workspace/contracts/decisions';
 import type { DiscussionAreaSummary, MatterChatMessagePage, MatterDetail } from '@workspace/contracts/matters';
@@ -24,7 +23,6 @@ import {
 import {
   getMatter,
   getMatterAreas,
-  getMatterDecisions,
   getMatterMessages,
   MatterServerError,
 } from '@/features/matters/services/matters-server.service';
@@ -52,25 +50,22 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
   let meeting: MeetingDetail;
   let matter: MatterDetail;
   let area: DiscussionAreaSummary;
-  let matterDecisions: DecisionSummary[];
   let initialChatPage: MatterChatMessagePage;
 
   try {
     meeting = await getMeetingDetail(meetingId);
-    const [matterResult, areas, decisions, chatPage] = await Promise.all([
+    const [matterResult, areas, chatPage] = await Promise.all([
       getMatter(meeting.matterId),
       getMatterAreas(meeting.matterId),
-      getMatterDecisions(meeting.matterId),
-      getMatterMessages(meeting.matterId, meeting.areaId, { meetingId }),
+      meeting.status === 'LIVE'
+        ? getMatterMessages(meeting.matterId, meeting.areaId)
+        : Promise.resolve({ items: [], nextCursor: null, hasMore: false }),
     ]);
     matter = matterResult;
     initialChatPage = chatPage;
     const visibleArea = areas.find((item) => item.id === meeting.areaId);
     if (!visibleArea) notFound();
     area = visibleArea;
-    matterDecisions = decisions.filter(
-      (decision) => decision.scope === 'MATTER' || decision.area?.id === meeting.areaId,
-    );
   } catch (error) {
     if ((error instanceof MeetingServerError || error instanceof MatterServerError) && error.status === 404) {
       notFound();
@@ -85,7 +80,7 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
   let voteRounds: DecisionVoteRound[] = [];
   let resolutions: DecisionResolution[] = [];
 
-  if (selectedSummary) {
+  if (meeting.status === 'LIVE' && selectedSummary) {
     try {
       [selectedDecision, proposals, voteRounds, resolutions] = await Promise.all([
         getDecisionDetail(selectedSummary.id),
@@ -124,7 +119,6 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
       meeting={meeting}
       matter={matter}
       area={area}
-      decisions={matterDecisions}
       selectedDecision={selectedDecision}
       initialChatPage={initialChatPage}
       currentChatUser={{ id: currentUser.id, name: currentUser.name, avatarUrl: currentUser.avatarUrl }}

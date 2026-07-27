@@ -76,6 +76,7 @@ export function MatterChatMessageList(props: MatterChatMessageListProps) {
                   >
                     <span>{authorName}</span>
                     <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+                    {message.meetingId ? <Badge variant="secondary">会议 #{message.meetingId}</Badge> : null}
                     {message.decision ? <Badge variant="outline">{message.decision.title}</Badge> : null}
                   </div>
                   <div

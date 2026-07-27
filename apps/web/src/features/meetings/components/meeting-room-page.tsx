@@ -7,7 +7,6 @@ import type {
   DecisionDetail,
   DecisionProposal,
   DecisionResolution,
-  DecisionSummary,
   DecisionVoteRound,
 } from '@workspace/contracts/decisions';
 import type {
@@ -19,6 +18,7 @@ import type {
 import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { MeetingLifecycleActions } from './meeting-lifecycle-actions';
+import { MeetingRecordPage } from './meeting-record-page';
 import { DecisionProposalSection } from '@/features/decisions/components/decision-proposal-section';
 import { DecisionResolutionSection } from '@/features/decisions/components/decision-resolution-section';
 import { DecisionStatusActions } from '@/features/decisions/components/decision-status-actions';
@@ -35,7 +35,6 @@ type MeetingRoomPageProps = {
   meeting: MeetingDetail;
   matter: MatterDetail;
   area: DiscussionAreaSummary;
-  decisions: DecisionSummary[];
   selectedDecision: DecisionDetail | null;
   initialChatPage: MatterChatMessagePage;
   currentChatUser: MatterUserSummary;
@@ -56,7 +55,6 @@ export function MeetingRoomPage({
   meeting,
   matter,
   area,
-  decisions,
   selectedDecision,
   initialChatPage,
   currentChatUser,
@@ -72,6 +70,10 @@ export function MeetingRoomPage({
   canSendChat,
 }: MeetingRoomPageProps) {
   const isLive = meeting.status === 'LIVE';
+
+  if (!isLive) {
+    return <MeetingRecordPage meeting={meeting} matter={matter} area={area} canManageMeeting={canManageMeeting} />;
+  }
 
   return (
     <main className="min-h-dvh bg-muted/30">
@@ -157,14 +159,11 @@ export function MeetingRoomPage({
               <MatterChatPanel
                 matterId={matter.id}
                 area={area}
-                meetingId={meeting.id}
+                sourceMeetingId={meeting.id}
                 initialPage={initialChatPage}
                 currentUser={currentChatUser}
-                decisions={decisions}
                 canSend={canSendChat}
-                readOnlyReason={
-                  isLive ? '你不在当前会议受邀成员中，不能发送消息。' : '会议未进行或已经结束，内容只读。'
-                }
+                readOnlyReason="你不在当前会议受邀成员中，不能发送消息。"
               />
             </TabsContent>
             {selectedDecision ? (

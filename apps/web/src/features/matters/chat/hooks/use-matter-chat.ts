@@ -30,14 +30,15 @@ type UseMatterChatOptions = {
   initialPage: MatterChatMessagePage;
   currentUser: MatterUserSummary;
   canSend: boolean;
-  meetingId?: number;
+  /** 可选的消息来源会议；只在发送时写入，不改变分区聊天的读取范围。 */
+  sourceMeetingId?: number;
   initialDecisionId?: number;
   onAccessRevoked: () => void;
 };
 
 /** 统一管理 HTTP 真源和 Socket 实时推送。 */
 export function useMatterChat(options: UseMatterChatOptions) {
-  const { matterId, areaId, initialPage, currentUser, canSend, meetingId, initialDecisionId, onAccessRevoked } =
+  const { matterId, areaId, initialPage, currentUser, canSend, sourceMeetingId, initialDecisionId, onAccessRevoked } =
     options;
   const [messages, setMessages] = useState<MatterChatViewMessage[]>(() => initialPage.items.map(toSent));
   const [historyCursor, setHistoryCursor] = useState(initialPage.nextCursor);
@@ -60,7 +61,6 @@ export function useMatterChat(options: UseMatterChatOptions) {
         direction: 'before',
         cursor: historyCursor,
         limit: 30,
-        ...(meetingId ? { meetingId } : {}),
         ...(initialDecisionId ? { decisionId: initialDecisionId } : {}),
       });
       setMessages((current) => mergeMessages(page.items.map(toSent), current));
@@ -75,15 +75,15 @@ export function useMatterChat(options: UseMatterChatOptions) {
   }
 
   /** 乐观入队并发送消息。 */
-  function sendMessage(content: string, decisionId?: number): boolean {
+  function sendMessage(content: string): boolean {
     const trimmed = content.trim();
     if (!canSend || !trimmed || trimmed.length > 2000) return false;
     const payload: CreateMatterChatMessageRequestPayload = {
       clientMessageId: crypto.randomUUID(),
       content: trimmed,
       ...(replyTo ? { replyToId: replyTo.id } : {}),
-      ...(meetingId ? { meetingId } : {}),
-      ...(decisionId ? { decisionId } : {}),
+      ...(sourceMeetingId ? { meetingId: sourceMeetingId } : {}),
+      ...(initialDecisionId ? { decisionId: initialDecisionId } : {}),
     };
     const optimistic = createOptimistic(optimisticIdRef.current--, matterId, areaId, payload, currentUser, replyTo);
     setMessages((current) => [...current, optimistic]);
@@ -114,7 +114,6 @@ export function useMatterChat(options: UseMatterChatOptions) {
 
   /** 合并持久化实时消息或替换乐观记录。 */
   function mergeRealtimeMessage(message: MatterChatMessage): void {
-    if (meetingId !== undefined && message.meetingId !== meetingId) return;
     if (initialDecisionId !== undefined && message.decision?.id !== initialDecisionId) return;
     maxIdRef.current = Math.max(maxIdRef.current, message.id);
     setMessages((current) => mergeMessages(current, [toSent(message)]));
@@ -126,7 +125,6 @@ export function useMatterChat(options: UseMatterChatOptions) {
       direction: 'after',
       cursor: maxIdRef.current || undefined,
       limit: 50,
-      ...(meetingId ? { meetingId } : {}),
       ...(initialDecisionId ? { decisionId: initialDecisionId } : {}),
     });
     page.items.forEach((message) => {
