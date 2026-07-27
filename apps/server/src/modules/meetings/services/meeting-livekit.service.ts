@@ -5,7 +5,11 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { MeetingLiveKitCredentials } from '@workspace/contracts/meetings';
-import { AccessToken } from 'livekit-server-sdk';
+import {
+  AccessToken,
+  RoomServiceClient,
+  ServerError,
+} from 'livekit-server-sdk';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
 import { MeetingStatus } from '../../../generated/prisma';
@@ -58,6 +62,8 @@ export class MeetingLiveKitService {
     }
 
     const configuration = this.readConfiguration();
+    const roomName = `${LIVEKIT_ROOM_PREFIX}:${meetingId}`;
+    await this.ensureRoom(configuration, roomName);
     const participantName =
       meeting.participants[0]?.user.name ?? `用户 ${authorization.userId}`;
     const accessToken = new AccessToken(
@@ -70,7 +76,7 @@ export class MeetingLiveKitService {
       },
     );
     accessToken.addGrant({
-      room: `${LIVEKIT_ROOM_PREFIX}:${meetingId}`,
+      room: roomName,
       roomJoin: true,
       canPublish: true,
       canSubscribe: true,
@@ -83,13 +89,60 @@ export class MeetingLiveKitService {
     };
   }
 
+  /** 主持人结束业务会议时删除对应 LiveKit 房间并断开全部在线参与者。 */
+  async closeRoom(meetingId: number): Promise<void> {
+    const configuration = this.readConfiguration();
+    const client = this.createRoomServiceClient(configuration);
+
+    try {
+      await client.deleteRoom(`${LIVEKIT_ROOM_PREFIX}:${meetingId}`);
+    } catch (error) {
+      if (error instanceof ServerError && error.status === 404) {
+        return;
+      }
+
+      throw new BusinessException({
+        code: API_ERROR_CODES.MEETING_LIVEKIT_ROOM_CLOSE_FAILED,
+        message: '会议状态已结束，但音视频房间关闭失败，请稍后重试',
+        status: 502,
+        cause: error,
+      });
+    }
+  }
+
+  /** 显式创建短暂宽限后关闭的 LiveKit 房间，确保最后一人退出后及时释放房间。 */
+  private async ensureRoom(
+    configuration: LiveKitConfiguration,
+    roomName: string,
+  ): Promise<void> {
+    const client = this.createRoomServiceClient(configuration);
+    await client.createRoom({
+      name: roomName,
+      emptyTimeout: 300,
+      departureTimeout: 1,
+    });
+  }
+
+  /** 使用 HTTP(S) 管理地址创建 LiveKit 服务端房间客户端。 */
+  private createRoomServiceClient(
+    configuration: LiveKitConfiguration,
+  ): RoomServiceClient {
+    return new RoomServiceClient(
+      this.toServerApiUrl(configuration.serverUrl),
+      configuration.apiKey,
+      configuration.apiSecret,
+    );
+  }
+
+  /** 将浏览器使用的 WebSocket 地址转换为服务端 Room API 地址。 */
+  private toServerApiUrl(serverUrl: string): string {
+    const url = new URL(serverUrl);
+    url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
+    return url.toString().replace(/\/$/, '');
+  }
+
   /** 读取完整 LiveKit 配置，缺少任一凭据时返回可诊断的服务不可用错误。 */
-  private readConfiguration(): {
-    serverUrl: string;
-    apiKey: string;
-    apiSecret: string;
-    ttlSeconds: number;
-  } {
+  private readConfiguration(): LiveKitConfiguration {
     const serverUrl = this.configService.get<string>('LIVEKIT_URL');
     const apiKey = this.configService.get<string>('LIVEKIT_API_KEY');
     const apiSecret = this.configService.get<string>('LIVEKIT_API_SECRET');
@@ -109,3 +162,15 @@ export class MeetingLiveKitService {
     return { serverUrl, apiKey, apiSecret, ttlSeconds };
   }
 }
+
+/** 服务端签发令牌和管理房间所需的完整 LiveKit 配置。 */
+type LiveKitConfiguration = {
+  /** 浏览器连接 LiveKit 使用的 WebSocket 地址。 */
+  serverUrl: string;
+  /** LiveKit Cloud 项目 API Key。 */
+  apiKey: string;
+  /** 只允许服务端持有的 LiveKit Cloud API Secret。 */
+  apiSecret: string;
+  /** 参与者加入令牌有效秒数。 */
+  ttlSeconds: number;
+};

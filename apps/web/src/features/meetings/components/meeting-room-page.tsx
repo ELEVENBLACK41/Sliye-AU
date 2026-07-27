@@ -2,7 +2,7 @@
  * 本文件组合议事分区会议房间、会议聊天、多决策目标选择和正式决策操作。
  */
 import Link from 'next/link';
-import { ArrowLeft, CircleDot, UsersRound } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import type {
   DecisionDetail,
   DecisionProposal,
@@ -105,9 +105,9 @@ export function MeetingRoomPage({
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1600px] gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:p-6">
+      <div className="mx-auto max-w-[1600px] p-4 lg:p-6">
         <section className="min-w-0 space-y-4" aria-label="会议协作区">
-          <MeetingLiveKitRoom meetingId={meeting.id} canJoin={canJoinMeeting} />
+          <MeetingLiveKitRoom meetingId={meeting.id} canJoin={canJoinMeeting} participants={meeting.participants} />
 
           <Card className="rounded-md shadow-none">
             <CardContent className="grid gap-4 p-4 sm:grid-cols-3">
@@ -207,32 +207,6 @@ export function MeetingRoomPage({
             ) : null}
           </Tabs>
         </section>
-
-        <aside className="space-y-4" aria-label="会议成员与实时能力">
-          <Card className="rounded-md shadow-none">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <UsersRound className="size-4" aria-hidden />
-                受邀成员（{meeting.participants.length}）
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="grid gap-2">
-                {meeting.participants.map((participant) => (
-                  <li key={participant.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {participant.user.name || `用户 ${participant.user.id}`}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{formatParticipantRole(participant.role)}</p>
-                    </div>
-                    <CircleDot className="size-3 text-muted-foreground" aria-label="实时在线状态尚未接入" />
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        </aside>
       </div>
     </main>
   );
@@ -251,11 +225,6 @@ function RoomSummary({ label, value }: { label: string; value: string }) {
 /** 格式化会议状态。 */
 function formatMeetingStatus(status: MeetingDetail['status']): string {
   return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消' }[status];
-}
-
-/** 格式化会议成员角色。 */
-function formatParticipantRole(role: MeetingDetail['participants'][number]['role']): string {
-  return { HOST: '主持人', CO_HOST: '联席主持', ATTENDEE: '参会成员' }[role];
 }
 
 /** 格式化时间。 */

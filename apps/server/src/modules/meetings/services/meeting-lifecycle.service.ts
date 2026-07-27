@@ -19,13 +19,15 @@ import {
   toMeetingDetail,
   type MeetingDetailRecord,
 } from '../meetings.mapper';
+import { MeetingLiveKitService } from './meeting-livekit.service';
 
 @Injectable()
 export class MeetingLifecycleService {
-  /** 注入数据库和议事分区授权服务。 */
+  /** 注入数据库、议事分区授权和 LiveKit 房间管理服务。 */
   constructor(
     private readonly prisma: PrismaService,
     private readonly matterAccessService: MatterAccessService,
+    private readonly liveKitService: MeetingLiveKitService,
   ) {}
 
   /** 开始一场计划会议，并为每项关联决策分别写入开始事件。 */
@@ -75,6 +77,53 @@ export class MeetingLifecycleService {
     return toMeetingDetail(updated);
   }
 
+  /** LiveKit 房间已无在线参与者时，以系统事件自动结束仍在进行的业务会议。 */
+  async endIfEmpty(meetingId: number, endedAt: Date): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      const joinedParticipantCount = await tx.meetingParticipant.count({
+        where: {
+          meetingId,
+          joinedAt: { not: null },
+        },
+      });
+      if (joinedParticipantCount === 0) {
+        return false;
+      }
+
+      const activeParticipantCount = await tx.meetingParticipant.count({
+        where: {
+          meetingId,
+          joinedAt: { not: null },
+          leftAt: null,
+        },
+      });
+      if (activeParticipantCount > 0) {
+        return false;
+      }
+
+      const result = await tx.meetingSession.updateMany({
+        where: { id: meetingId, status: MeetingStatus.LIVE },
+        data: { status: MeetingStatus.ENDED, endedAt },
+      });
+      if (result.count !== 1) {
+        return false;
+      }
+
+      const meeting = await this.findMeetingInTransaction(tx, meetingId);
+      await this.createLifecycleEvents(
+        tx,
+        meeting,
+        null,
+        DecisionEventType.MEETING_ENDED,
+        '全部参会人已退出，会议自动结束',
+        MeetingStatus.LIVE,
+        MeetingStatus.ENDED,
+        endedAt,
+      );
+      return true;
+    });
+  }
+
   /** 结束一场进行中的会议，并为每项关联决策分别写入结束事件。 */
   async end(
     authorization: AuthorizationContext,
@@ -112,6 +161,8 @@ export class MeetingLifecycleService {
       );
       return this.findMeetingInTransaction(tx, meeting.id);
     });
+
+    await this.liveKitService.closeRoom(meeting.id);
 
     return toMeetingDetail(updated);
   }
@@ -166,7 +217,7 @@ export class MeetingLifecycleService {
   private async createLifecycleEvents(
     tx: Prisma.TransactionClient,
     meeting: MeetingDetailRecord,
-    actorId: number,
+    actorId: number | null,
     type: DecisionEventType,
     title: string,
     beforeStatus: MeetingStatus,

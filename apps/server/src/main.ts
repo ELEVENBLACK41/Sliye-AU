@@ -20,7 +20,7 @@ import { ConfiguredSocketIoAdapter } from './common/websocket/configured-socket-
 
 // 启动 Nest 应用并注册全局中间能力。
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
   const apiPrefix = configService.get<string>('SERVER_API_PREFIX', 'api/v1');

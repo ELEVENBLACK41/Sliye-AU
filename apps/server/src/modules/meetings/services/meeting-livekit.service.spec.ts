@@ -3,7 +3,7 @@
  */
 import type { ConfigService } from '@nestjs/config';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { TokenVerifier } from 'livekit-server-sdk';
+import { RoomServiceClient, TokenVerifier } from 'livekit-server-sdk';
 import type { PrismaService } from '../../../database/prisma.service';
 import { MeetingStatus } from '../../../generated/prisma';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
@@ -49,6 +49,19 @@ function createAuthorization(userId = 7): AuthorizationContext {
 }
 
 describe('MeetingLiveKitService', () => {
+  beforeEach(() => {
+    jest
+      .spyOn(RoomServiceClient.prototype, 'createRoom')
+      .mockResolvedValue({} as never);
+    jest
+      .spyOn(RoomServiceClient.prototype, 'deleteRoom')
+      .mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('应为进行中会议的受邀用户签发限定房间和身份的令牌', async () => {
     const { prisma, service } = createHarness({
       status: MeetingStatus.LIVE,
@@ -73,6 +86,13 @@ describe('MeetingLiveKitService', () => {
       canSubscribe: true,
       canPublishData: true,
     });
+    // 直接断言原型方法上的 Jest spy，不会脱离对象执行该方法。
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(RoomServiceClient.prototype.createRoom).toHaveBeenCalledWith({
+      name: 'meeting:90',
+      emptyTimeout: 300,
+      departureTimeout: 1,
+    });
     expect(prisma.meetingSession.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
@@ -80,6 +100,18 @@ describe('MeetingLiveKitService', () => {
           participants: { some: { userId: 7 } },
         },
       }),
+    );
+  });
+
+  it('主持人结束会议时应删除 LiveKit 房间', async () => {
+    const { service } = createHarness(null);
+
+    await service.closeRoom(90);
+
+    // 直接断言原型方法上的 Jest spy，不会脱离对象执行该方法。
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(RoomServiceClient.prototype.deleteRoom).toHaveBeenCalledWith(
+      'meeting:90',
     );
   });
 

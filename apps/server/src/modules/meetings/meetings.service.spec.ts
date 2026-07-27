@@ -20,6 +20,7 @@ import type {
 import type { MeetingDetailRecord } from './meetings.mapper';
 import { MeetingsService } from './meetings.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
+import type { MeetingLiveKitService } from './services/meeting-livekit.service';
 
 /** 创建会议测试使用的请求级授权上下文。 */
 function createAuthorization(userId = 7): AuthorizationContext {
@@ -131,6 +132,9 @@ function createAreaContext(
 /** 创建会议服务与生命周期服务的共享测试替身。 */
 function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
   const transaction = {
+    meetingParticipant: {
+      count: jest.fn().mockResolvedValueOnce(1).mockResolvedValue(0),
+    },
     meetingSession: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       findUnique: jest.fn(),
@@ -166,6 +170,7 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
     assertAreaMeetingManager: jest.fn(),
     assertAreaWritable: jest.fn(),
   };
+  const liveKitService = { closeRoom: jest.fn().mockResolvedValue(undefined) };
 
   return {
     prisma,
@@ -174,11 +179,14 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
     service: new MeetingsService(
       prisma as unknown as PrismaService,
       matterAccessService as unknown as MatterAccessService,
+      liveKitService,
     ),
     lifecycleService: new MeetingLifecycleService(
       prisma as unknown as PrismaService,
       matterAccessService as unknown as MatterAccessService,
+      liveKitService as unknown as MeetingLiveKitService,
     ),
+    liveKitService,
   };
 }
 
@@ -307,5 +315,30 @@ describe('MeetingsService', () => {
     await lifecycleService.start(createAuthorization(), 30);
 
     expect(transaction.decisionEvent.createMany).not.toHaveBeenCalled();
+  });
+
+  it('最后一位已进入的参会人退出后应自动结束会议', async () => {
+    const { lifecycleService, transaction } = createHarness();
+    const live = createMeetingRecord({ status: MeetingStatus.LIVE });
+    transaction.meetingSession.findUnique.mockResolvedValue(live);
+    const endedAt = new Date('2026-07-24T03:00:00.000Z');
+
+    await expect(lifecycleService.endIfEmpty(30, endedAt)).resolves.toBe(true);
+
+    expect(transaction.meetingSession.updateMany).toHaveBeenCalledWith({
+      where: { id: 30, status: MeetingStatus.LIVE },
+      data: { status: MeetingStatus.ENDED, endedAt },
+    });
+  });
+
+  it('尚无人进入的空房间不应自动结束业务会议', async () => {
+    const { lifecycleService, transaction } = createHarness();
+    transaction.meetingParticipant.count.mockReset().mockResolvedValue(0);
+
+    await expect(
+      lifecycleService.endIfEmpty(30, new Date('2026-07-24T03:00:00.000Z')),
+    ).resolves.toBe(false);
+
+    expect(transaction.meetingSession.updateMany).not.toHaveBeenCalled();
   });
 });
