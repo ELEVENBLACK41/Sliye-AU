@@ -1827,6 +1827,81 @@ describe('DecisionsService', () => {
     });
   });
 
+  it('讨论达成共识后应允许不关联提案直接形成正式决议', async () => {
+    const resolution = {
+      ...createResolutionRecord(),
+      sourceProposalId: null,
+      sourceVoteRoundId: null,
+    };
+    const createEvent = jest.fn().mockResolvedValue({ id: 94 });
+    const transaction = {
+      decision: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      decisionProposal: {
+        findMany: jest.fn().mockResolvedValue([{ id: 50 }]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      decisionVoteRound: {
+        findMany: jest.fn().mockResolvedValue([{ id: 71 }]),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      decisionResolution: {
+        create: jest.fn().mockResolvedValue(resolution),
+      },
+      decisionEvent: { create: createEvent },
+    };
+    const prisma = {
+      decision: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 20,
+          ownerId: 7,
+          status: DecisionStatus.DISCUSSING,
+          proposals: [],
+        }),
+      },
+      $transaction: jest.fn(
+        async (callback: (tx: typeof transaction) => Promise<unknown>) =>
+          callback(transaction),
+      ),
+    };
+    const authorizationService = {
+      buildDecisionWhere: jest.fn().mockResolvedValue({ id: 20 }),
+      getScopes: jest.fn().mockReturnValue(new Set([DataScope.PARTICIPATED])),
+    };
+    const service = createDecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.createResolution(createAuthorization(), 20, {
+        title: resolution.title,
+        content: resolution.content,
+      }),
+    ).resolves.toMatchObject({
+      id: 90,
+      sourceProposalId: null,
+      sourceVoteRoundId: null,
+    });
+
+    expect(transaction.decisionProposal.updateMany).toHaveBeenCalledTimes(1);
+    expect(transaction.decisionResolution.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          sourceProposalId: undefined,
+          sourceVoteRoundId: undefined,
+        }),
+      }),
+    );
+    expect(createEvent).toHaveBeenCalledTimes(4);
+    expect(createEvent.mock.calls[2]?.[0]).toMatchObject({
+      data: {
+        proposalId: undefined,
+        type: DecisionEventType.RESOLUTION_CREATED,
+        payload: { sourceProposalId: null, sourceVoteRoundId: null },
+      },
+    });
+  });
+
   it('来源投票未关闭或未关联来源提案时不得创建正式决议', async () => {
     const prisma = {
       decision: {

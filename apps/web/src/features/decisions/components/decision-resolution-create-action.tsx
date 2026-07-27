@@ -1,5 +1,5 @@
 /**
- * 本文件实现负责人采纳提案并形成最终正式决议的 Sheet 表单与二次确认。
+ * 本文件实现负责人直接确认结论或采纳提案形成最终正式决议的 Sheet 表单与二次确认。
  */
 'use client';
 
@@ -60,7 +60,7 @@ export function DecisionResolutionCreateAction({
   const [isOpen, setIsOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [proposalId, setProposalId] = useState('');
+  const [proposalId, setProposalId] = useState('none');
   const [voteRoundId, setVoteRoundId] = useState('none');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -68,7 +68,7 @@ export function DecisionResolutionCreateAction({
   const [successMessage, setSuccessMessage] = useState('');
 
   const availableVoteRounds = voteRounds.filter(
-    (round) => round.status === 'CLOSED' && round.proposalId === Number(proposalId),
+    (round) => proposalId !== 'none' && round.status === 'CLOSED' && round.proposalId === Number(proposalId),
   );
 
   /** 打开表单时清理上一轮输入和操作反馈。 */
@@ -81,7 +81,7 @@ export function DecisionResolutionCreateAction({
     setSuccessMessage('');
 
     if (nextOpen) {
-      setProposalId(proposals.length === 1 ? String(proposals[0]?.id) : '');
+      setProposalId('none');
       setVoteRoundId('none');
       setTitle('');
       setContent('');
@@ -97,11 +97,6 @@ export function DecisionResolutionCreateAction({
   /** 校验正式结论内容，通过后打开最终确认弹窗。 */
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (!Number.isInteger(Number(proposalId)) || Number(proposalId) < 1) {
-      setErrorMessage('请选择需要采纳的开放提案');
-      return;
-    }
 
     if (title.trim().length < 2) {
       setErrorMessage('正式决议标题至少需要 2 个字符');
@@ -125,7 +120,7 @@ export function DecisionResolutionCreateAction({
 
     try {
       const resolution = await createDecisionResolution(decisionId, {
-        sourceProposalId: Number(proposalId),
+        sourceProposalId: proposalId === 'none' ? undefined : Number(proposalId),
         sourceVoteRoundId: voteRoundId === 'none' ? undefined : Number(voteRoundId),
         title: title.trim(),
         content: content.trim(),
@@ -146,7 +141,7 @@ export function DecisionResolutionCreateAction({
   return (
     <Sheet open={isOpen} onOpenChange={handleOpenChange}>
       <SheetTrigger asChild>
-        <Button disabled={proposals.length === 0} title={proposals.length ? undefined : '暂无可采纳的开放提案'}>
+        <Button>
           <Gavel aria-hidden />
           形成正式决议
         </Button>
@@ -154,7 +149,7 @@ export function DecisionResolutionCreateAction({
       <SheetContent>
         <SheetHeader>
           <SheetTitle>形成正式决议</SheetTitle>
-          <SheetDescription>采纳一条开放提案，记录最终结论与依据，并将当前决策标记为已解决。</SheetDescription>
+          <SheetDescription>记录最终结论并关闭当前决策；讨论已达成共识时无需关联提案。</SheetDescription>
         </SheetHeader>
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
@@ -176,12 +171,13 @@ export function DecisionResolutionCreateAction({
             ) : null}
 
             <div className="grid gap-2">
-              <Label htmlFor="decision-resolution-proposal">采纳提案</Label>
+              <Label htmlFor="decision-resolution-proposal">关联提案（可选）</Label>
               <Select value={proposalId} onValueChange={handleProposalChange} disabled={isSubmitting}>
                 <SelectTrigger id="decision-resolution-proposal">
-                  <SelectValue placeholder="选择一条开放提案" />
+                  <SelectValue placeholder="可选：选择一条开放提案" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">不关联提案，直接形成决议</SelectItem>
                   {proposals.map((proposal) => (
                     <SelectItem key={proposal.id} value={String(proposal.id)}>
                       {proposal.title}
@@ -193,7 +189,11 @@ export function DecisionResolutionCreateAction({
 
             <div className="grid gap-2">
               <Label htmlFor="decision-resolution-vote">来源投票</Label>
-              <Select value={voteRoundId} onValueChange={setVoteRoundId} disabled={isSubmitting || !proposalId}>
+              <Select
+                value={voteRoundId}
+                onValueChange={setVoteRoundId}
+                disabled={isSubmitting || proposalId === 'none'}
+              >
                 <SelectTrigger id="decision-resolution-vote">
                   <SelectValue placeholder="可选：选择已关闭投票" />
                 </SelectTrigger>
@@ -241,10 +241,7 @@ export function DecisionResolutionCreateAction({
           </div>
 
           <SheetFooter>
-            <Button
-              type="submit"
-              disabled={isSubmitting || !proposalId || title.trim().length < 2 || content.trim().length < 2}
-            >
+            <Button type="submit" disabled={isSubmitting || title.trim().length < 2 || content.trim().length < 2}>
               <Gavel aria-hidden />
               检查并确认
             </Button>
@@ -262,7 +259,9 @@ export function DecisionResolutionCreateAction({
           <AlertDialogHeader>
             <AlertDialogTitle>确认形成最终正式决议？</AlertDialogTitle>
             <AlertDialogDescription>
-              确认后将采纳所选提案、取消其他开放提案和投票，并把决策推进为已解决。此操作不能撤销。
+              {proposalId === 'none'
+                ? '确认后将直接记录正式结论、取消仍开放的提案和投票，并把决策推进为已解决。此操作不能撤销。'
+                : '确认后将采纳所选提案、取消其他开放提案和投票，并把决策推进为已解决。此操作不能撤销。'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

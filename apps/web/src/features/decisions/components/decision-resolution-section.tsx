@@ -99,7 +99,13 @@ export function DecisionResolutionSection({
                   <p className="whitespace-pre-wrap text-sm leading-7">{resolution.content}</p>
 
                   <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                    <ResolutionSourceItem label="采纳提案" value={proposal?.title || '来源提案已不可用'} />
+                    <ResolutionSourceItem
+                      label="关联提案"
+                      value={
+                        proposal?.title ||
+                        (resolution.sourceProposalId === null ? '未关联提案，由负责人直接确认' : '来源提案已不可用')
+                      }
+                    />
                     <ResolutionSourceItem label="来源投票" value={voteRound?.title || '未关联投票，由负责人直接确认'} />
                   </dl>
                 </li>
@@ -112,7 +118,7 @@ export function DecisionResolutionSection({
             <p className="text-sm font-medium">尚未形成正式结论</p>
             <p className="max-w-xl text-sm text-muted-foreground">
               {canManageConclusion
-                ? '负责人可以采纳一条开放提案，按需关联已关闭投票，并写下最终结论完成决策闭环。'
+                ? '负责人可以直接写下最终结论，也可以按需关联开放提案和已关闭投票，完成决策闭环。'
                 : '提案和投票是讨论证据，只有形成正式决议后，这项决策才真正闭环。'}
             </p>
           </div>

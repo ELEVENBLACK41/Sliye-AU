@@ -395,10 +395,10 @@ export type CloseDecisionProposalRequestPayload = {
   status: Extract<DecisionProposalStatus, 'REJECTED' | 'CANCELLED'>;
 };
 
-/** 采纳开放提案并形成最终决议的请求体。 */
+/** 直接确认结论或采纳开放提案并形成最终决议的请求体。 */
 export type CreateDecisionResolutionRequestPayload = {
-  /** 被正式采纳的开放提案主键。 */
-  sourceProposalId: number;
+  /** 可选的来源提案主键；讨论已形成共识时可以不关联提案。 */
+  sourceProposalId?: number;
   /** 可选的已关闭来源投票轮次主键。 */
   sourceVoteRoundId?: number;
   /** 正式决议标题。 */

@@ -1,5 +1,5 @@
 /*
- * @Description: 最终决议创建请求 DTO，校验来源提案、可选投票和正式结论正文。
+ * @Description: 最终决议创建请求 DTO，校验可选来源提案、可选投票和正式结论正文。
  */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { CreateDecisionResolutionRequestPayload } from '@workspace/contracts/decisions';
@@ -13,13 +13,14 @@ import {
   MinLength,
 } from 'class-validator';
 
-/** 校验采纳开放提案并形成最终决议的请求。 */
+/** 校验直接确认结论或采纳开放提案并形成最终决议的请求。 */
 export class CreateDecisionResolutionDto implements CreateDecisionResolutionRequestPayload {
-  /** 被正式采纳的开放提案主键。 */
-  @ApiProperty({ example: 50, minimum: 1 })
+  /** 可选的来源提案主键；讨论已形成共识时可以不关联提案。 */
+  @ApiPropertyOptional({ example: 50, minimum: 1 })
+  @IsOptional()
   @IsInt()
   @Min(1)
-  sourceProposalId!: number;
+  sourceProposalId?: number;
 
   /** 可选的已关闭来源投票轮次主键。 */
   @ApiPropertyOptional({ example: 70, minimum: 1 })

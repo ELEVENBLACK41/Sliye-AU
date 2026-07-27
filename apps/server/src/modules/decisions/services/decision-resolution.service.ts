@@ -69,7 +69,7 @@ export class DecisionResolutionService {
     return decision.resolutions.map(toDecisionResolution);
   }
 
-  /** 采纳开放提案、创建最终决议并原子收口其他提案、投票和决策状态。 */
+  /** 直接确认结论或采纳开放提案，并原子收口提案、投票和决策状态。 */
   async create(
     authorization: AuthorizationContext,
     decisionId: number,
@@ -86,7 +86,7 @@ export class DecisionResolutionService {
         ownerId: true,
         status: true,
         proposals: {
-          where: { id: dto.sourceProposalId },
+          where: { id: dto.sourceProposalId ?? -1 },
           select: { id: true, status: true },
           take: 1,
         },
@@ -110,7 +110,7 @@ export class DecisionResolutionService {
     }
 
     const proposal = decision.proposals[0];
-    if (!proposal) {
+    if (dto.sourceProposalId !== undefined && !proposal) {
       throw new BusinessException({
         code: API_ERROR_CODES.DECISION_PROPOSAL_NOT_FOUND,
         message: '来源提案不存在或不属于当前决策',
@@ -118,18 +118,31 @@ export class DecisionResolutionService {
       });
     }
 
-    if (
-      decision.status !== DecisionStatus.DISCUSSING ||
-      proposal.status !== ProposalStatus.OPEN
-    ) {
+    if (decision.status !== DecisionStatus.DISCUSSING) {
       throw new BusinessException({
         code: API_ERROR_CODES.DECISION_RESOLUTION_CHANGE_NOT_ALLOWED,
-        message: '只有讨论中的决策和开放提案可以形成正式决议',
+        message: '只有讨论中的决策可以形成正式决议',
+        status: 409,
+      });
+    }
+
+    if (proposal && proposal.status !== ProposalStatus.OPEN) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.DECISION_RESOLUTION_CHANGE_NOT_ALLOWED,
+        message: '只有开放提案可以被采纳为正式决议',
         status: 409,
       });
     }
 
     if (dto.sourceVoteRoundId !== undefined) {
+      if (!proposal) {
+        throw new BusinessException({
+          code: API_ERROR_CODES.DECISION_RESOLUTION_SOURCE_INVALID,
+          message: '关联来源投票时必须同时关联对应提案',
+          status: 400,
+        });
+      }
+
       const sourceVoteRound = await this.prisma.decisionVoteRound.findFirst({
         where: {
           id: dto.sourceVoteRoundId,
@@ -175,7 +188,7 @@ export class DecisionResolutionService {
         where: {
           decisionId: decision.id,
           status: ProposalStatus.OPEN,
-          id: { not: proposal.id },
+          ...(proposal ? { id: { not: proposal.id } } : {}),
         },
         select: { id: true },
       });
@@ -183,24 +196,26 @@ export class DecisionResolutionService {
         where: { decisionId: decision.id, status: VoteRoundStatus.OPEN },
         select: { id: true },
       });
-      const proposalUpdate = await tx.decisionProposal.updateMany({
-        where: {
-          id: proposal.id,
-          decisionId: decision.id,
-          status: ProposalStatus.OPEN,
-        },
-        data: {
-          status: ProposalStatus.ACCEPTED,
-          acceptedAt: decidedAt,
-          closedAt: decidedAt,
-        },
-      });
-      if (proposalUpdate.count !== 1) {
-        throw new BusinessException({
-          code: API_ERROR_CODES.DECISION_RESOLUTION_CHANGE_NOT_ALLOWED,
-          message: '来源提案状态已经变化，请刷新后重试',
-          status: 409,
+      if (proposal) {
+        const proposalUpdate = await tx.decisionProposal.updateMany({
+          where: {
+            id: proposal.id,
+            decisionId: decision.id,
+            status: ProposalStatus.OPEN,
+          },
+          data: {
+            status: ProposalStatus.ACCEPTED,
+            acceptedAt: decidedAt,
+            closedAt: decidedAt,
+          },
         });
+        if (proposalUpdate.count !== 1) {
+          throw new BusinessException({
+            code: API_ERROR_CODES.DECISION_RESOLUTION_CHANGE_NOT_ALLOWED,
+            message: '来源提案状态已经变化，请刷新后重试',
+            status: 409,
+          });
+        }
       }
 
       if (otherOpenProposals.length > 0) {
@@ -226,7 +241,7 @@ export class DecisionResolutionService {
       const result = await tx.decisionResolution.create({
         data: {
           decisionId: decision.id,
-          sourceProposalId: proposal.id,
+          sourceProposalId: proposal?.id,
           sourceVoteRoundId: dto.sourceVoteRoundId,
           meetingId,
           decidedById: authorization.userId,
@@ -239,21 +254,23 @@ export class DecisionResolutionService {
         include: decisionResolutionInclude,
       });
 
-      await tx.decisionEvent.create({
-        data: {
-          decisionId: decision.id,
-          actorId: authorization.userId,
-          proposalId: proposal.id,
-          meetingId,
-          type: DecisionEventType.PROPOSAL_UPDATED,
-          title: '采纳提案',
-          before: { status: ProposalStatus.OPEN },
-          after: {
-            status: ProposalStatus.ACCEPTED,
-            acceptedAt: decidedAt.toISOString(),
+      if (proposal) {
+        await tx.decisionEvent.create({
+          data: {
+            decisionId: decision.id,
+            actorId: authorization.userId,
+            proposalId: proposal.id,
+            meetingId,
+            type: DecisionEventType.PROPOSAL_UPDATED,
+            title: '采纳提案',
+            before: { status: ProposalStatus.OPEN },
+            after: {
+              status: ProposalStatus.ACCEPTED,
+              acceptedAt: decidedAt.toISOString(),
+            },
           },
-        },
-      });
+        });
+      }
       for (const otherProposal of otherOpenProposals) {
         await tx.decisionEvent.create({
           data: {
@@ -292,14 +309,14 @@ export class DecisionResolutionService {
         data: {
           decisionId: decision.id,
           actorId: authorization.userId,
-          proposalId: proposal.id,
+          proposalId: proposal?.id,
           voteRoundId: dto.sourceVoteRoundId,
           resolutionId: result.id,
           meetingId,
           type: DecisionEventType.RESOLUTION_CREATED,
           title: '形成正式决议',
           payload: {
-            sourceProposalId: proposal.id,
+            sourceProposalId: proposal?.id ?? null,
             sourceVoteRoundId: dto.sourceVoteRoundId ?? null,
           },
           after: {
