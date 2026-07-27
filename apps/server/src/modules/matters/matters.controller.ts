@@ -1,5 +1,5 @@
 /**
- * 本文件提供议事、成员、分区、分区聊天、Ticket 和公开摘要的 HTTP 接口。
+ * 本文件提供议事、成员、分区、分区聊天和 Ticket 的 HTTP 接口。
  */
 import {
   Body,
@@ -24,7 +24,6 @@ import type {
 import { AddDiscussionAreaMemberDto } from './dto/add-discussion-area-member.dto';
 import { AddMatterMemberDto } from './dto/add-matter-member.dto';
 import { CreateDiscussionAreaDto } from './dto/create-discussion-area.dto';
-import { CreateDiscussionPublicationDto } from './dto/create-discussion-publication.dto';
 import { CreateMatterChatMessageDto } from './dto/create-matter-chat-message.dto';
 import { CreateMatterDto } from './dto/create-matter.dto';
 import { ListMatterChatMessagesDto } from './dto/list-matter-chat-messages.dto';
@@ -274,18 +273,5 @@ export class MattersController {
       matterId,
       areaId,
     );
-  }
-
-  /** 将私有分区消息发布为公共区摘要快照。 */
-  @Post(':matterId/areas/:areaId/publications')
-  @RequirePermissions('matter:read')
-  @ApiOperation({ summary: '发布私有分区公共摘要' })
-  publish(
-    @CurrentAuthorization() authorization: AuthorizationContext,
-    @Param('matterId', ParseIntPipe) matterId: number,
-    @Param('areaId', ParseIntPipe) areaId: number,
-    @Body() body: CreateDiscussionPublicationDto,
-  ) {
-    return this.chatService.publish(authorization, matterId, areaId, body);
   }
 }

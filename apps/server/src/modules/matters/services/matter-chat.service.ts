@@ -1,5 +1,5 @@
 /**
- * 本文件负责分区消息可见性、分页、幂等发送、业务关联校验和私有摘要发布。
+ * 本文件负责分区消息可见性、分页、幂等发送和业务关联校验。
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
@@ -12,15 +12,11 @@ import type {
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
 import {
-  DiscussionAreaMemberRole,
-  DiscussionAreaType,
-  DiscussionMessageType,
   MatterMemberRole,
   MeetingStatus,
   type Prisma,
 } from '../../../generated/prisma';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
-import { CreateDiscussionPublicationDto } from '../dto/create-discussion-publication.dto';
 import { CreateMatterChatMessageDto } from '../dto/create-matter-chat-message.dto';
 import { ListMatterChatMessagesDto } from '../dto/list-matter-chat-messages.dto';
 import { MatterChatGateway } from '../gateways/matter-chat.gateway';
@@ -47,9 +43,6 @@ export const matterChatMessageInclude = {
     },
   },
   decision: { select: { id: true, title: true } },
-  publishedAs: {
-    include: { sourceArea: { select: { name: true } } },
-  },
 } as const satisfies Prisma.DiscussionMessageInclude;
 
 @Injectable()
@@ -198,100 +191,6 @@ export class MatterChatService {
       }
       return this.resolveIdempotentMessage(concurrent, areaId, dto);
     }
-  }
-
-  /** 将私有分区的选定消息发布为公共区不可变摘要快照。 */
-  async publish(
-    authorization: AuthorizationContext,
-    matterId: number,
-    sourceAreaId: number,
-    dto: CreateDiscussionPublicationDto,
-  ): Promise<MatterChatMessage> {
-    const sourceArea = await this.accessService.findArea(
-      authorization,
-      matterId,
-      sourceAreaId,
-    );
-    this.accessService.assertAreaWritable(sourceArea);
-    if (
-      sourceArea.type !== DiscussionAreaType.PRIVATE ||
-      sourceArea.areaMemberRole !== DiscussionAreaMemberRole.MANAGER
-    ) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.ACCESS_DATA_SCOPE_DENIED,
-        message: '只有私有分区管理员可以发布公共摘要',
-        status: 403,
-      });
-    }
-
-    await this.assertDecisionInArea(matterId, sourceAreaId, dto.decisionId);
-    const sourceMessages = await this.prisma.discussionMessage.findMany({
-      where: { id: { in: dto.sourceMessageIds }, areaId: sourceAreaId },
-      select: { id: true },
-    });
-    if (sourceMessages.length !== dto.sourceMessageIds.length) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.DISCUSSION_PUBLICATION_SOURCE_INVALID,
-        message: '公开摘要引用的消息必须全部来自当前私有分区',
-        status: 400,
-      });
-    }
-
-    const publicArea = await this.prisma.discussionArea.findFirst({
-      where: { matterId, type: DiscussionAreaType.PUBLIC },
-      select: { id: true },
-    });
-    if (!publicArea) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.COMMON_INTERNAL_ERROR,
-        message: '当前议事缺少公共讨论区',
-        status: 500,
-      });
-    }
-
-    const message = await this.prisma.$transaction(async (tx) => {
-      const publicMessage = await tx.discussionMessage.create({
-        data: {
-          areaId: publicArea.id,
-          authorId: authorization.userId,
-          decisionId: dto.decisionId,
-          type: DiscussionMessageType.PUBLICATION,
-          content: dto.summary,
-        },
-        select: { id: true },
-      });
-      await tx.discussionPublication.create({
-        data: {
-          sourceAreaId,
-          targetAreaId: publicArea.id,
-          publishedMessageId: publicMessage.id,
-          publishedById: authorization.userId,
-          decisionId: dto.decisionId,
-          title: dto.title,
-          sources: {
-            createMany: {
-              data: dto.sourceMessageIds.map((messageId) => ({ messageId })),
-            },
-          },
-        },
-      });
-
-      return tx.discussionMessage.findUnique({
-        where: { id: publicMessage.id },
-        include: matterChatMessageInclude,
-      });
-    });
-    if (!message) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.COMMON_INTERNAL_ERROR,
-        message: '公开摘要发布失败，请稍后重试',
-        status: 500,
-      });
-    }
-
-    const result = toMatterChatMessage(message);
-    this.broadcastCreatedMessage(matterId, publicArea.id, result);
-    return result;
   }
 
   /** 断言当前议事角色允许发送分区消息。 */

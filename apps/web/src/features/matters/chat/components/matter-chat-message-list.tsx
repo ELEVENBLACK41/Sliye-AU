@@ -1,5 +1,5 @@
 /**
- * 本文件展示议事分区消息、业务关联、发布摘要和历史加载状态。
+ * 本文件展示议事分区消息、业务关联和历史加载状态。
  */
 'use client';
 
@@ -19,28 +19,14 @@ type MatterChatMessageListProps = {
   hasMoreHistory: boolean;
   isLoadingHistory: boolean;
   historyError: string | null;
-  selectedSourceIds: number[];
-  canPublish: boolean;
   onLoadOlder: () => void;
   onReply: (message: MatterChatViewMessage) => void;
-  onToggleSource: (messageId: number) => void;
 };
 
-/** 渲染消息列表及可选的摘要来源选择。 */
+/** 渲染消息列表、业务关联和历史加载状态。 */
 export function MatterChatMessageList(props: MatterChatMessageListProps) {
-  const {
-    messages,
-    currentUserId,
-    canSend,
-    hasMoreHistory,
-    isLoadingHistory,
-    historyError,
-    selectedSourceIds,
-    canPublish,
-    onLoadOlder,
-    onReply,
-    onToggleSource,
-  } = props;
+  const { messages, currentUserId, canSend, hasMoreHistory, isLoadingHistory, historyError, onLoadOlder, onReply } =
+    props;
   return (
     <div className="space-y-4 p-4">
       <div className="flex min-h-8 flex-col items-center gap-2">
@@ -91,7 +77,6 @@ export function MatterChatMessageList(props: MatterChatMessageListProps) {
                     <span>{authorName}</span>
                     <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
                     {message.decision ? <Badge variant="outline">{message.decision.title}</Badge> : null}
-                    {message.publication ? <Badge>公开摘要</Badge> : null}
                   </div>
                   <div
                     className={cn(
@@ -100,7 +85,6 @@ export function MatterChatMessageList(props: MatterChatMessageListProps) {
                       message.deliveryStatus === 'failed' && 'ring-1 ring-destructive',
                     )}
                   >
-                    {message.publication ? <p className="mb-1 font-semibold">{message.publication.title}</p> : null}
                     {message.replyTo ? (
                       <div className="mb-2 border-l-2 pl-2 text-xs opacity-75">
                         <p>{message.replyTo.author?.name || '原消息'}</p>
@@ -120,16 +104,6 @@ export function MatterChatMessageList(props: MatterChatMessageListProps) {
                       <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => onReply(message)}>
                         <Reply aria-hidden />
                         回复
-                      </Button>
-                    ) : null}
-                    {canPublish && message.id > 0 && message.type === 'TEXT' ? (
-                      <Button
-                        variant={selectedSourceIds.includes(message.id) ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="h-7 px-2"
-                        onClick={() => onToggleSource(message.id)}
-                      >
-                        {selectedSourceIds.includes(message.id) ? '已选摘要来源' : '选为摘要来源'}
                       </Button>
                     ) : null}
                   </div>

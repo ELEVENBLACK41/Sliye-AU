@@ -26,8 +26,6 @@ type CollaborationDataCounts = {
   decisions: number;
   /** 讨论消息数量。 */
   discussionMessages: number;
-  /** 私有内容公开摘要数量。 */
-  discussionPublications: number;
   /** 会议数量。 */
   meetings: number;
   /** 会议决策关联数量。 */
@@ -135,7 +133,6 @@ async function countCollaborationData(
     discussionAreaMembers,
     decisions,
     discussionMessages,
-    discussionPublications,
     meetings,
     meetingDecisions,
     meetingRecordings,
@@ -152,7 +149,6 @@ async function countCollaborationData(
     prisma.discussionAreaMember.count(),
     prisma.decision.count(),
     prisma.discussionMessage.count(),
-    prisma.discussionPublication.count(),
     prisma.meetingSession.count(),
     prisma.meetingDecision.count(),
     prisma.meetingRecording.count(),
@@ -171,7 +167,6 @@ async function countCollaborationData(
     discussionAreaMembers,
     decisions,
     discussionMessages,
-    discussionPublications,
     meetings,
     meetingDecisions,
     meetingRecordings,
@@ -239,7 +234,6 @@ function printCounts(counts: CollaborationDataCounts): void {
     私有分区成员: counts.discussionAreaMembers,
     决策: counts.decisions,
     讨论消息: counts.discussionMessages,
-    公开摘要: counts.discussionPublications,
     会议: counts.meetings,
     会议决策关联: counts.meetingDecisions,
     会议录像: counts.meetingRecordings,
@@ -304,8 +298,6 @@ async function resetCollaborationData(prisma: PrismaClient): Promise<void> {
   await prisma.$transaction(async (transaction) => {
     await transaction.decisionEvent.deleteMany();
     await transaction.collaborationAuditLog.deleteMany();
-    await transaction.discussionPublicationSource.deleteMany();
-    await transaction.discussionPublication.deleteMany();
     await transaction.meetingRecording.deleteMany();
     await transaction.discussionMessage.deleteMany();
     await transaction.meetingSession.deleteMany();

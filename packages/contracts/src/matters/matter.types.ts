@@ -1,5 +1,5 @@
 /**
- * 本文件定义议事、讨论分区、分区消息、公开摘要和审计读取的跨端共享契约。
+ * 本文件定义议事、讨论分区、分区消息和审计读取的跨端共享契约。
  */
 
 /** 议事从协作中到关闭、归档的生命周期状态。 */
@@ -18,7 +18,7 @@ export type DiscussionAreaMemberRole = 'MANAGER' | 'MEMBER';
 export type DiscussionAreaStatus = 'ACTIVE' | 'READ_ONLY' | 'ARCHIVED';
 
 /** 分区消息的稳定内容类型。 */
-export type MatterChatMessageType = 'TEXT' | 'SYSTEM' | 'PUBLICATION';
+export type MatterChatMessageType = 'TEXT' | 'SYSTEM';
 
 /** 分区消息游标查询的移动方向。 */
 export type MatterChatPageDirection = 'before' | 'after';
@@ -169,16 +169,6 @@ export type MatterChatReplyPreview = {
   deletedAt: string | null;
 };
 
-/** 公开摘要消息携带的安全发布信息。 */
-export type DiscussionPublicationSummary = {
-  /** 摘要发布记录主键。 */
-  id: number;
-  /** 公开标题。 */
-  title: string;
-  /** 来源私有分区名称，仅用于解释来源，不提供原文访问入口。 */
-  sourceAreaName: string;
-};
-
 /** 分区聊天对外返回的一条持久化消息。 */
 export type MatterChatMessage = {
   /** 消息数据库主键，也是稳定分页游标。 */
@@ -201,8 +191,6 @@ export type MatterChatMessage = {
   meetingId: number | null;
   /** 可选的单项关联决策。 */
   decision: MatterMessageDecisionSummary | null;
-  /** 公开摘要的安全发布信息；普通消息为 `null`。 */
-  publication: DiscussionPublicationSummary | null;
   /** 消息固定时间。 */
   pinnedAt: string | null;
   /** 消息编辑时间。 */
@@ -312,18 +300,6 @@ export type CreateMatterChatMessageRequestPayload = {
   /** 可选的来源会议主键。 */
   meetingId?: number;
   /** 可选的议事级决策或当前分区小组决策主键。 */
-  decisionId?: number;
-};
-
-/** 从私有区发布公开摘要的请求体。 */
-export type CreateDiscussionPublicationRequestPayload = {
-  /** 公开摘要标题。 */
-  title: string;
-  /** 将作为公共区快照保存的摘要正文。 */
-  summary: string;
-  /** 被摘要引用的私有原始消息主键。 */
-  sourceMessageIds: number[];
-  /** 可选的议事级决策或来源分区小组决策主键。 */
   decisionId?: number;
 };
 

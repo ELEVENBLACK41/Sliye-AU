@@ -179,7 +179,6 @@ function createOptimistic(
       : null,
     meetingId: payload.meetingId ?? null,
     decision: payload.decisionId ? { id: payload.decisionId, title: '关联决策' } : null,
-    publication: null,
     pinnedAt: null,
     editedAt: null,
     deletedAt: null,

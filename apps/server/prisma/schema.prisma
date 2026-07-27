@@ -185,7 +185,6 @@ enum DiscussionAreaStatus {
 enum DiscussionMessageType {
   TEXT
   SYSTEM
-  PUBLICATION
 }
 
 enum TaskStatus {
@@ -278,25 +277,24 @@ model User {
 
   posts Post[]
 
-  mattersCreated             Matter[]                @relation("MatterCreator")
-  mattersOwned               Matter[]                @relation("MatterOwner")
+  mattersCreated             Matter[]               @relation("MatterCreator")
+  mattersOwned               Matter[]               @relation("MatterOwner")
   matterMemberships          MatterMember[]
-  discussionAreasCreated     DiscussionArea[]        @relation("DiscussionAreaCreator")
+  discussionAreasCreated     DiscussionArea[]       @relation("DiscussionAreaCreator")
   discussionAreaMemberships  DiscussionAreaMember[]
-  createdDecisions           Decision[]              @relation("DecisionCreator")
-  ownedDecisions             Decision[]              @relation("DecisionOwner")
+  createdDecisions           Decision[]             @relation("DecisionCreator")
+  ownedDecisions             Decision[]             @relation("DecisionOwner")
   decisionParticipants       DecisionParticipant[]
-  proposalsCreated           DecisionProposal[]      @relation("ProposalCreator")
-  voteRoundsCreated          DecisionVoteRound[]     @relation("DecisionVoteRoundCreator")
+  proposalsCreated           DecisionProposal[]     @relation("ProposalCreator")
+  voteRoundsCreated          DecisionVoteRound[]    @relation("DecisionVoteRoundCreator")
   decisionBallots            DecisionBallot[]
-  resolutionsDecided         DecisionResolution[]    @relation("DecisionResolutionDecider")
-  assignedTasks              DecisionTask[]          @relation("TaskAssignee")
-  createdTasks               DecisionTask[]          @relation("TaskCreator")
-  decisionEvents             DecisionEvent[]         @relation("DecisionEventActor")
-  discussionMessagesAuthored DiscussionMessage[]     @relation("DiscussionMessageAuthor")
-  discussionMessagesPinned   DiscussionMessage[]     @relation("DiscussionMessagePinner")
-  discussionPublications     DiscussionPublication[] @relation("DiscussionPublicationPublisher")
-  meetingsCreated            MeetingSession[]        @relation("MeetingSessionCreator")
+  resolutionsDecided         DecisionResolution[]   @relation("DecisionResolutionDecider")
+  assignedTasks              DecisionTask[]         @relation("TaskAssignee")
+  createdTasks               DecisionTask[]         @relation("TaskCreator")
+  decisionEvents             DecisionEvent[]        @relation("DecisionEventActor")
+  discussionMessagesAuthored DiscussionMessage[]    @relation("DiscussionMessageAuthor")
+  discussionMessagesPinned   DiscussionMessage[]    @relation("DiscussionMessagePinner")
+  meetingsCreated            MeetingSession[]       @relation("MeetingSessionCreator")
   meetingParticipants        MeetingParticipant[]
 
   @@index([deptId])
@@ -754,13 +752,11 @@ model DiscussionArea {
   matter    Matter @relation(fields: [matterId], references: [id], onDelete: Restrict)
   createdBy User   @relation("DiscussionAreaCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
-  members          DiscussionAreaMember[]
-  messages         DiscussionMessage[]
-  meetings         MeetingSession[]
-  decisions        Decision[]
-  publicationsFrom DiscussionPublication[] @relation("DiscussionPublicationSourceArea")
-  publicationsTo   DiscussionPublication[] @relation("DiscussionPublicationTargetArea")
-  auditLogs        CollaborationAuditLog[]
+  members   DiscussionAreaMember[]
+  messages  DiscussionMessage[]
+  meetings  MeetingSession[]
+  decisions Decision[]
+  auditLogs CollaborationAuditLog[]
 
   @@unique([matterId, publicKey])
   @@index([matterId, type])
@@ -818,9 +814,7 @@ model DiscussionMessage {
   replies  DiscussionMessage[] @relation("DiscussionMessageReplies")
   pinnedBy User?               @relation("DiscussionMessagePinner", fields: [pinnedById], references: [id], onDelete: SetNull)
 
-  publishedAs        DiscussionPublication?        @relation("PublishedDiscussionMessage")
-  publicationSources DiscussionPublicationSource[]
-  events             DecisionEvent[]
+  events DecisionEvent[]
 
   @@unique([authorId, clientMessageId])
   @@index([areaId, createdAt])
@@ -831,48 +825,6 @@ model DiscussionMessage {
   @@index([replyToId])
   @@index([pinnedById])
   @@index([type])
-}
-
-/// 从私有分区发布到公共分区的不可变摘要及其来源关系。
-model DiscussionPublication {
-  id Int @id @default(autoincrement())
-
-  sourceAreaId       Int
-  targetAreaId       Int
-  publishedMessageId Int  @unique
-  publishedById      Int
-  decisionId         Int?
-
-  title     String
-  createdAt DateTime @default(now())
-
-  sourceArea       DiscussionArea    @relation("DiscussionPublicationSourceArea", fields: [sourceAreaId], references: [id], onDelete: Restrict)
-  targetArea       DiscussionArea    @relation("DiscussionPublicationTargetArea", fields: [targetAreaId], references: [id], onDelete: Restrict)
-  publishedMessage DiscussionMessage @relation("PublishedDiscussionMessage", fields: [publishedMessageId], references: [id], onDelete: Restrict)
-  publishedBy      User              @relation("DiscussionPublicationPublisher", fields: [publishedById], references: [id], onDelete: Restrict)
-  decision         Decision?         @relation(fields: [decisionId], references: [id], onDelete: SetNull)
-
-  sources DiscussionPublicationSource[]
-
-  @@index([sourceAreaId])
-  @@index([targetAreaId])
-  @@index([publishedById])
-  @@index([decisionId])
-  @@index([createdAt])
-}
-
-/// 一次公开摘要引用的一条私有原始消息；读取原文仍需通过来源分区授权。
-model DiscussionPublicationSource {
-  publicationId Int
-  messageId     Int
-
-  createdAt DateTime @default(now())
-
-  publication DiscussionPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
-  message     DiscussionMessage     @relation(fields: [messageId], references: [id], onDelete: Restrict)
-
-  @@id([publicationId, messageId])
-  @@index([messageId])
 }
 
 /// 管理员通过独立审计入口读取私有协作内容时写入的不可变日志。
@@ -940,7 +892,6 @@ model Decision {
   events       DecisionEvent[]
   messages     DiscussionMessage[]
   meetingLinks MeetingDecision[]
-  publications DiscussionPublication[]
 
   @@index([matterId])
   @@index([areaId])

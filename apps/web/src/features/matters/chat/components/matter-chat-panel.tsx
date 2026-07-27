@@ -1,5 +1,5 @@
 /**
- * 本文件组合议事分区消息、历史分页、决策关联、实时状态和公开摘要。
+ * 本文件组合议事分区消息、历史分页、决策关联和实时状态。
  */
 'use client';
 
@@ -10,7 +10,6 @@ import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { DiscussionAreaSummary, MatterChatMessagePage, MatterUserSummary } from '@workspace/contracts/matters';
 
 import { MatterChatMessageList } from './matter-chat-message-list';
-import { MatterPublicationAction } from './matter-publication-action';
 import { useMatterChat } from '../hooks/use-matter-chat';
 import type { MatterChatConnectionStatus } from '../hooks/use-matter-chat-realtime';
 import { Badge } from '@workspace/ui/components/badge';
@@ -59,7 +58,6 @@ export function MatterChatPanel({
   const router = useRouter();
   const [draft, setDraft] = useState('');
   const [decisionId, setDecisionId] = useState(initialDecisionId ? String(initialDecisionId) : 'none');
-  const [selectedSourceIds, setSelectedSourceIds] = useState<number[]>([]);
   const chat = useMatterChat({
     matterId,
     areaId: area.id,
@@ -74,7 +72,6 @@ export function MatterChatPanel({
     },
   });
   const status = connectionView[chat.connectionStatus];
-  const canPublish = area.type === 'PRIVATE' && area.currentUserRole === 'MANAGER';
 
   /** 提交当前草稿并带上可选决策关联。 */
   function submitDraft(): void {
@@ -95,13 +92,6 @@ export function MatterChatPanel({
     }
   }
 
-  /** 选中或取消一条私有摘要来源消息。 */
-  function toggleSource(messageId: number): void {
-    setSelectedSourceIds((current) =>
-      current.includes(messageId) ? current.filter((id) => id !== messageId) : [...current, messageId],
-    );
-  }
-
   return (
     <Card className="overflow-hidden rounded-md py-0 shadow-none">
       <CardHeader className="border-b py-4">
@@ -113,7 +103,7 @@ export function MatterChatPanel({
             <div>
               <CardTitle className="text-base">{area.name}</CardTitle>
               <CardDescription className="mt-1">
-                {area.type === 'PUBLIC' ? '议事公共信息与正式摘要' : '只有显式成员可见的私有协作区'}
+                {area.type === 'PUBLIC' ? '议事成员共享的公共讨论区' : '只有显式成员可见的私有协作区'}
               </CardDescription>
             </div>
           </div>
@@ -122,18 +112,6 @@ export function MatterChatPanel({
               {area.type === 'PRIVATE' ? '私有分区' : '公共分区'}
             </Badge>
             <Badge variant={status.variant}>{status.label}</Badge>
-            {canPublish ? (
-              <MatterPublicationAction
-                matterId={matterId}
-                areaId={area.id}
-                sourceMessageIds={selectedSourceIds}
-                decisions={decisions}
-                onPublished={() => {
-                  setSelectedSourceIds([]);
-                  router.refresh();
-                }}
-              />
-            ) : null}
           </div>
         </div>
       </CardHeader>
@@ -146,11 +124,8 @@ export function MatterChatPanel({
             hasMoreHistory={chat.hasMoreHistory}
             isLoadingHistory={chat.isLoadingHistory}
             historyError={chat.historyError}
-            selectedSourceIds={selectedSourceIds}
-            canPublish={canPublish}
             onLoadOlder={() => void chat.loadOlderMessages()}
             onReply={chat.setReplyTo}
-            onToggleSource={toggleSource}
           />
         </div>
         {canSend ? (

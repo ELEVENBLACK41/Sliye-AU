@@ -98,7 +98,7 @@ export class MatterCoreService {
             create: {
               createdById: authorization.userId,
               name: '公共讨论',
-              description: '议事成员统一同步信息、结论和公开摘要的公共区域。',
+              description: '议事成员统一同步信息和结论的公共讨论区域。',
               type: DiscussionAreaType.PUBLIC,
               status: DiscussionAreaStatus.ACTIVE,
               publicKey: 'PUBLIC',

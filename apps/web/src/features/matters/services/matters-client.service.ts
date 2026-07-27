@@ -5,7 +5,6 @@ import type {
   AddDiscussionAreaMemberRequestPayload,
   AddMatterMemberRequestPayload,
   CreateDiscussionAreaRequestPayload,
-  CreateDiscussionPublicationRequestPayload,
   CreateMatterChatMessageRequestPayload,
   CreateMatterRequestPayload,
   DiscussionAreaMember,
@@ -170,16 +169,4 @@ export function getMatterChatTicket(matterId: number, areaId: number): Promise<M
     method: 'POST',
     errorMessage: '实时连接凭证获取失败',
   });
-}
-
-/** 把私有分区消息发布为公共摘要。 */
-export function publishMatterSummary(
-  matterId: number,
-  areaId: number,
-  payload: CreateDiscussionPublicationRequestPayload,
-): Promise<MatterChatMessage> {
-  return requestData<MatterChatMessage, CreateDiscussionPublicationRequestPayload>(
-    `/api/matters/${matterId}/areas/${areaId}/publications`,
-    { method: 'POST', body: payload, errorMessage: '公共摘要发布失败' },
-  );
 }

@@ -102,11 +102,6 @@ export type MatterChatMessageRecord = {
   } | null;
   meetingId: number | null;
   decision: { id: number; title: string } | null;
-  publishedAs: {
-    id: number;
-    title: string;
-    sourceArea: { name: string };
-  } | null;
   pinnedAt: Date | null;
   editedAt: Date | null;
   deletedAt: Date | null;
@@ -225,13 +220,6 @@ export function toMatterChatMessage(
       : null,
     meetingId: message.meetingId,
     decision: message.decision,
-    publication: message.publishedAs
-      ? {
-          id: message.publishedAs.id,
-          title: message.publishedAs.title,
-          sourceAreaName: message.publishedAs.sourceArea.name,
-        }
-      : null,
     pinnedAt: message.pinnedAt?.toISOString() ?? null,
     editedAt: message.editedAt?.toISOString() ?? null,
     deletedAt: message.deletedAt?.toISOString() ?? null,
