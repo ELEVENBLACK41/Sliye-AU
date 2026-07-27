@@ -44,8 +44,9 @@ type MatterPageData = {
   members: MatterMember[];
   memberCandidates: MatterMemberCandidate[];
   areaMembers: DiscussionAreaMember[];
-  decisions: DecisionSummary[];
-  meetings: MeetingSummary[];
+  relatedDecisions: DecisionSummary[];
+  contextDecisions: DecisionSummary[];
+  contextMeetings: MeetingSummary[];
   meetingCandidates: MatterUserSummary[];
   decisionFilterId?: number;
 };
@@ -70,13 +71,17 @@ export default async function MatterRoutePage({ params, searchParams }: MatterRo
     const currentArea = areas.find((area) => area.id === requestedAreaId);
     if (!currentArea) redirect(`/dashboard/matters/${matterId}?areaId=${matter.publicAreaId}`);
 
+    const relatedDecisions = decisions.filter(
+      (decision) => decision.scope === 'MATTER' || decision.area?.id === currentArea.id,
+    );
+    const contextDecisions = decisions.filter((decision) =>
+      currentArea.type === 'PUBLIC' ? decision.scope === 'MATTER' : decision.area?.id === currentArea.id,
+    );
+    const contextMeetings = meetings.filter((meeting) => meeting.areaId === currentArea.id);
+
     const requestedDecisionId = query.decisionId ? Number(query.decisionId) : undefined;
     const decisionFilterId =
-      requestedDecisionId &&
-      decisions.some(
-        (decision) =>
-          decision.id === requestedDecisionId && (decision.scope === 'MATTER' || decision.area?.id === currentArea.id),
-      )
+      requestedDecisionId && relatedDecisions.some((decision) => decision.id === requestedDecisionId)
         ? requestedDecisionId
         : undefined;
     const canManageMatter =
@@ -97,8 +102,9 @@ export default async function MatterRoutePage({ params, searchParams }: MatterRo
       members,
       memberCandidates,
       areaMembers,
-      decisions,
-      meetings,
+      relatedDecisions,
+      contextDecisions,
+      contextMeetings,
       meetingCandidates,
       decisionFilterId,
     };

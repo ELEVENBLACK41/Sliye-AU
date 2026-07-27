@@ -35,8 +35,9 @@ type MatterDetailPageProps = {
   members: MatterMember[];
   memberCandidates: MatterMemberCandidate[];
   areaMembers: DiscussionAreaMember[];
-  decisions: DecisionSummary[];
-  meetings: MeetingSummary[];
+  relatedDecisions: DecisionSummary[];
+  contextDecisions: DecisionSummary[];
+  contextMeetings: MeetingSummary[];
   meetingCandidates: MatterUserSummary[];
   currentUser: MatterUserSummary;
   canCreateDecision: boolean;
@@ -61,8 +62,9 @@ export function MatterDetailPage({
   members,
   memberCandidates,
   areaMembers,
-  decisions,
-  meetings,
+  relatedDecisions,
+  contextDecisions,
+  contextMeetings,
   meetingCandidates,
   currentUser,
   canCreateDecision,
@@ -71,9 +73,7 @@ export function MatterDetailPage({
   decisionFilterId,
 }: MatterDetailPageProps) {
   const canSend = matter.status === 'ACTIVE' && currentArea.status === 'ACTIVE' && matter.currentUserRole !== 'VIEWER';
-  const currentAreaDecisions = decisions.filter(
-    (decision) => decision.scope === 'MATTER' || decision.area?.id === currentArea.id,
-  );
+  const contextMembers = currentArea.type === 'PRIVATE' ? areaMembers : members;
 
   return (
     <main className="space-y-4">
@@ -105,7 +105,7 @@ export function MatterDetailPage({
                 <MatterMeetingCreateAction
                   matterId={matter.id}
                   area={currentArea}
-                  decisions={currentAreaDecisions}
+                  decisions={relatedDecisions}
                   candidates={meetingCandidates}
                 />
               ) : null}
@@ -156,7 +156,7 @@ export function MatterDetailPage({
             area={currentArea}
             initialPage={initialMessages}
             currentUser={currentUser}
-            decisions={currentAreaDecisions}
+            decisions={relatedDecisions}
             canSend={canSend}
             initialDecisionId={decisionFilterId}
             readOnlyReason={
@@ -177,22 +177,26 @@ export function MatterDetailPage({
               <TabsTrigger value="members">成员</TabsTrigger>
             </TabsList>
             <TabsContent value="decisions">
-              <ResourceCard title={`决策（${decisions.length}）`}>
-                {decisions.length ? (
-                  <DecisionList matter={matter} decisions={decisions} />
+              <ResourceCard title={`${currentArea.name} · 决策（${contextDecisions.length}）`}>
+                {contextDecisions.length ? (
+                  <DecisionList matter={matter} decisions={contextDecisions} />
                 ) : (
-                  <EmptyText text="当前议事暂无决策" />
+                  <EmptyText text="当前分区暂无决策" />
                 )}
               </ResourceCard>
             </TabsContent>
             <TabsContent value="meetings">
-              <ResourceCard title={`会议（${meetings.length}）`}>
-                {meetings.length ? <MeetingList meetings={meetings} /> : <EmptyText text="当前可见分区暂无会议" />}
+              <ResourceCard title={`${currentArea.name} · 会议（${contextMeetings.length}）`}>
+                {contextMeetings.length ? (
+                  <MeetingList meetings={contextMeetings} />
+                ) : (
+                  <EmptyText text="当前分区暂无会议" />
+                )}
               </ResourceCard>
             </TabsContent>
             <TabsContent value="members">
-              <ResourceCard title={`成员（${members.length}）`}>
-                <MemberList members={members} />
+              <ResourceCard title={`${currentArea.name} · 成员（${contextMembers.length}）`}>
+                <MemberList members={contextMembers} />
               </ResourceCard>
             </TabsContent>
           </Tabs>
@@ -249,8 +253,8 @@ function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
   );
 }
 
-/** 渲染议事成员摘要列表。 */
-function MemberList({ members }: { members: MatterMember[] }) {
+/** 渲染当前公共区或私有分区的成员摘要列表。 */
+function MemberList({ members }: { members: Array<MatterMember | DiscussionAreaMember> }) {
   return (
     <ul className="space-y-2">
       {members.map((member) => (
