@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 
 import { ThemeProvider } from '@/components/theme-provider';
 import { NotificationRuntime } from '@/features/notifications/components/notification-runtime';
+import { NotificationTestButton } from '@/features/notifications/components/notification-test-button';
 import { Toaster } from '@workspace/ui/components/sonner';
 
 import '../styles/globals.css';
@@ -37,7 +38,8 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
           <NotificationRuntime />
-          <Toaster position="top-center" duration={60_000} closeButton richColors />
+          <NotificationTestButton />
+          <Toaster position="top-center" duration={3_000} closeButton richColors />
         </ThemeProvider>
       </body>
     </html>

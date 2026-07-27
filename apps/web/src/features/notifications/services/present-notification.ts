@@ -8,11 +8,30 @@ import type { RealtimeNotification } from '@workspace/contracts/notifications';
 import { useNotificationStore } from '../store/notification-store';
 import { toast } from '@workspace/ui/components/sonner';
 
-/** 全站业务通知默认保留一分钟。 */
-export const NOTIFICATION_TOAST_DURATION_MS = 60_000;
+/** 普通全站业务通知默认展示三秒。 */
+export const DEFAULT_NOTIFICATION_TOAST_DURATION_MS = 3_000;
+
+/** 会议邀请需要给用户留出响应时间，因此展示一分钟。 */
+export const MEETING_INVITATION_TOAST_DURATION_MS = 60_000;
+
+/** 单次通知展示时允许覆盖的配置。 */
+interface PresentNotificationOptions {
+  /** 覆盖该通知的 Sonner 展示时长，单位为毫秒。 */
+  duration?: number;
+}
+
+/** 根据通知类型返回对应的 Sonner 展示时长。 */
+function resolveNotificationToastDuration(type: RealtimeNotification['type']): number {
+  return type === 'MEETING_INVITED'
+    ? MEETING_INVITATION_TOAST_DURATION_MS
+    : DEFAULT_NOTIFICATION_TOAST_DURATION_MS;
+}
 
 /** 幂等写入全局 Store，并在首次收到时展示顶部 Sonner。 */
-export function presentNotification(notification: RealtimeNotification): void {
+export function presentNotification(
+  notification: RealtimeNotification,
+  options?: PresentNotificationOptions,
+): void {
   const received = useNotificationStore.getState().receive(notification);
   if (!received) {
     return;
@@ -21,7 +40,7 @@ export function presentNotification(notification: RealtimeNotification): void {
   toast(notification.title, {
     id: notification.id,
     description: notification.message,
-    duration: NOTIFICATION_TOAST_DURATION_MS,
+    duration: options?.duration ?? resolveNotificationToastDuration(notification.type),
     position: 'top-center',
     action: notification.meeting
       ? {
