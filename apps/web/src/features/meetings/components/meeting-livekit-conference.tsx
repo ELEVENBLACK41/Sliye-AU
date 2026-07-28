@@ -31,7 +31,7 @@ type PresenceNotice = {
 /** 在 LiveKit 上下文中组合视频会议、受邀成员状态和进出提示。 */
 export function MeetingLiveKitConference({ invitedParticipants }: MeetingLiveKitConferenceProps) {
   const room = useRoomContext();
-  const connectedParticipants = useParticipants();
+  const connectedParticipants = useParticipants();//获取当前连接的远端参与者列表
   const noticeSequence = useRef(0);
   const [notice, setNotice] = useState<PresenceNotice | null>(null);
   const [departedUserIds, setDepartedUserIds] = useState<Set<number>>(
@@ -77,8 +77,8 @@ export function MeetingLiveKitConference({ invitedParticipants }: MeetingLiveKit
       });
     }
 
-    room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
-    room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
+    room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);//加入房间
+    room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);//退出房间
 
     return () => {
       room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);

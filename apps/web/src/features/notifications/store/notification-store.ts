@@ -1,3 +1,11 @@
+/*
+ * @Author: shaoliye elevenblack41@gmail.com
+ * @Date: 2026-07-27 17:18:47
+ * @LastEditors: shaoliye elevenblack41@gmail.com
+ * @LastEditTime: 2026-07-28 14:54:44
+ * @FilePath: \NextNest\apps\web\src\features\notifications\store\notification-store.ts
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 /**
  * 本文件使用 Zustand 管理跨页面共享的实时通知、未读数量和连接状态。
  * 服务端数据库仍是未来消息中心的可信数据源，本 Store 只保存当前浏览器会话状态。
@@ -26,7 +34,8 @@ type NotificationStore = {
   reset: () => void;
 };
 
-const MAX_REALTIME_NOTIFICATIONS = 50;
+// 限制浏览器端保存的实时通知数量
+const MAX_REALTIME_NOTIFICATIONS = 10;
 
 /** 全站通知 Store；仅允许 Client Component 或浏览器事件处理代码使用。 */
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
