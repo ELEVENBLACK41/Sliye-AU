@@ -22,7 +22,7 @@ export function DashboardNavigationPlaceholder() {
     <>
       <aside
         aria-label="工作台主导航占位"
-        className="hidden min-h-0 flex-col items-center rounded-[2rem] border border-white/6 bg-[#252724] px-3 py-5 shadow-2xl shadow-black/20 lg:flex"
+        className="sticky top-7 hidden h-[calc(100dvh-3.5rem)] flex-col items-center px-3 py-1 lg:flex"
       >
         <div className="mb-8 size-8 rounded-lg border border-white/15 bg-white/10" aria-label="品牌标识占位" />
 
