@@ -2,12 +2,12 @@
  * @Author: shaoliye elevenblack41@gmail.com
  * @Date: 2026-07-29 13:46:53
  * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-07-29 13:52:08
+ * @LastEditTime: 2026-07-29 13:57:31
  * @FilePath: \NextNest\apps\web\src\features\dashboard\components\dashboard-account-menu-placeholder.tsx
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 /**
- * 本文件提供新版工作台右上角的用户菜单占位，用于确认个人入口与设置入口的信息结构。
+ * 这里是个人头像部分的的下拉框，暂时占位
  */
 'use client';
 
