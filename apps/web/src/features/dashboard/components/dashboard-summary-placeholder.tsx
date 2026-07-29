@@ -51,9 +51,11 @@ export function DashboardSummaryPlaceholder() {
       <div className="min-w-0 space-y-7">
         {/* 欢迎信息等等 */}
         <DashboardWelcomePlaceholder />
+        {/* 百分比个人参与的决策 */}
         <DecisionDistributionPlaceholder />
       </div>
 
+      {/* 右半区域的个人参与统计 */}
       <DashboardKeyStatisticsPlaceholder />
     </section>
   );
