@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 
 import { Card } from '@workspace/ui/components/card';
 import { DashboardMatterStatusPlaceholder } from './dashboard-matter-status-placeholder';
+import { DashboardProfileCardPlaceholder } from './dashboard-profile-card-placeholder';
 import { DashboardProposalAdoptionPlaceholder } from './dashboard-proposal-adoption-placeholder';
 import { DashboardResolutionTrendPlaceholder } from './dashboard-resolution-trend-placeholder';
 
@@ -53,13 +54,9 @@ function ProfilePanelPlaceholder() {
   return (
     <WorkspacePanel
       label="人员资料卡占位"
-      className="relative min-h-72 overflow-hidden bg-[linear-gradient(145deg,#bbbdb7,#e3e1d8)] lg:min-h-[22rem]"
+      className="relative min-h-72 overflow-hidden border-white/35 bg-[#d7d2c8] lg:min-h-[22rem]"
     >
-      <div className="absolute inset-x-[18%] top-[12%] bottom-0 rounded-t-[45%] bg-black/10" aria-label="主视觉图片占位" />
-      <div className="absolute right-5 bottom-5 left-5 space-y-3 rounded-2xl bg-white/25 p-4 backdrop-blur-sm">
-        <div className="h-4 w-32 rounded-full bg-white/65" />
-        <div className="h-3 w-20 rounded-full bg-white/45" />
-      </div>
+      <DashboardProfileCardPlaceholder />
     </WorkspacePanel>
   );
 }
