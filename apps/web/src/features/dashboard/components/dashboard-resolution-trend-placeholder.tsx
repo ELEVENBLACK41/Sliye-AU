@@ -28,7 +28,7 @@ const resolutionTrendData = [
 /** shadcn Chart 使用的正式决议数据配置。 */
 const resolutionTrendConfig = {
   resolutions: {
-    label: '正式决议',
+    label: '正式决策',
     color: '#30312e',
   },
 } satisfies ChartConfig;
@@ -41,7 +41,7 @@ export function DashboardResolutionTrendPlaceholder() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-base font-semibold tracking-tight text-[#292a27]">决议趋势</p>
+          <p className="text-xl font-medium tracking-tight text-[#292a27]">决策趋势</p>
           <p className="mt-1 text-xs text-black/40">2026 年 · 截至 7 月</p>
         </div>
         <Button
@@ -62,7 +62,7 @@ export function DashboardResolutionTrendPlaceholder() {
         <p className="pb-1 text-xs leading-tight text-black/45">
           本年度
           <br />
-          已形成决议
+          已形成决策
         </p>
       </div>
 

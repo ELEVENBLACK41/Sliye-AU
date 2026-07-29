@@ -78,7 +78,7 @@ function SettingsPanelPlaceholder() {
   );
 }
 
-/** 渲染本年度正式决议柱状趋势卡。 */
+/** 渲染本年度正式决策柱状趋势卡*/
 function ResolutionTrendPanelPlaceholder() {
   return (
     <WorkspacePanel label="本年度正式决议趋势" className="h-full min-h-72 p-5 xl:min-h-[22rem]">
