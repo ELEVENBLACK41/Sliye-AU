@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 
 import { Card } from '@workspace/ui/components/card';
+import { DashboardResolutionTrendPlaceholder } from './dashboard-resolution-trend-placeholder';
 
 /** 通用业务面板占位属性。 */
 type WorkspacePanelProps = {
@@ -77,22 +78,11 @@ function SettingsPanelPlaceholder() {
   );
 }
 
-/** 渲染柱状趋势分析卡占位。 */
-function ProgressPanelPlaceholder() {
+/** 渲染本年度正式决议柱状趋势卡。 */
+function ResolutionTrendPanelPlaceholder() {
   return (
-    <WorkspacePanel label="进度分析面板占位" className="h-full min-h-72 p-5 xl:min-h-[22rem]">
-      <PanelHeadingPlaceholder />
-      <div className="mt-5 h-8 w-24 rounded-md bg-black/15" />
-      <div className="mt-8 flex h-28 items-end justify-between gap-3" aria-label="柱状图占位">
-        {[35, 72, 55, 48, 75, 88, 42].map((height, index) => (
-          <div key={index} className="flex h-full flex-1 items-end justify-center">
-            <div
-              className={`w-2 rounded-full ${index === 5 ? 'bg-[#ffd653]' : 'bg-[#333431]'}`}
-              style={{ height: `${height}%` }}
-            />
-          </div>
-        ))}
-      </div>
+    <WorkspacePanel label="本年度正式决议趋势" className="h-full min-h-72 p-5 xl:min-h-[22rem]">
+      <DashboardResolutionTrendPlaceholder />
     </WorkspacePanel>
   );
 }
@@ -188,9 +178,9 @@ export function DashboardWorkspacePlaceholder() {
       <div className="min-w-0 xl:col-start-1 xl:row-start-2 [&>*]:h-full">
         <SettingsPanelPlaceholder />
       </div>
-
+      {/* 中间区域得图标显示 */}
       <div className="min-w-0 xl:col-start-2 xl:row-start-1">
-        <ProgressPanelPlaceholder />
+        <ResolutionTrendPanelPlaceholder />
       </div>
 
       <div className="min-w-0 xl:col-start-3 xl:row-start-1">

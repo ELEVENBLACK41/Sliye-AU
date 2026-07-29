@@ -16,7 +16,7 @@ const navigationItems = [
   { key: 'matters', label: '议事空间' },
   { key: 'decisions', label: '决策中心' },
   { key: 'meetings', label: '会议中心' },
-  { key: 'replay', label: '过程回放' },
+  { key: 'decision', label: '决策图谱' },
   { key: 'members', label: '成员管理' },
 ] as const;
 
