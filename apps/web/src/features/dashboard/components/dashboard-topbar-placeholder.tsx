@@ -24,7 +24,12 @@ function NavigationItemPlaceholder({ active = false, width = 'normal' }: Navigat
 export function DashboardTopbarPlaceholder() {
   return (
     <header className="flex items-center justify-between gap-4" aria-label="工作台顶部导航占位">
-      <div className="h-10 w-24 shrink-0 rounded-full border border-black/25 bg-white/30" aria-label="品牌区域占位" />
+      <div
+        className="flex h-12 shrink-0 items-center rounded-full border border-black/25 bg-white/30 px-6 text-2xl font-medium tracking-tight"
+        aria-label="Decision Hub 品牌标识"
+      >
+        Decision Hub
+      </div>
 
       <nav
         aria-label="主导航占位"
