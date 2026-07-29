@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 
 import { Card } from '@workspace/ui/components/card';
+import { DashboardMatterStatusPlaceholder } from './dashboard-matter-status-placeholder';
 import { DashboardProposalAdoptionPlaceholder } from './dashboard-proposal-adoption-placeholder';
 import { DashboardResolutionTrendPlaceholder } from './dashboard-resolution-trend-placeholder';
 
@@ -120,17 +121,11 @@ function SchedulePanelPlaceholder() {
   );
 }
 
-/** 渲染右上角分段状态面板占位。 */
-function StatusPanelPlaceholder() {
+/** 渲染议事空间状态分布卡。 */
+function MatterStatusPanelPlaceholder() {
   return (
-    <WorkspacePanel label="状态进度面板占位" className="p-5 xl:h-44 xl:shrink-0">
-      <PanelHeadingPlaceholder />
-      <div className="mt-7 grid grid-cols-[1.3fr_0.8fr_0.35fr] gap-1">
-        <div className="h-10 rounded-xl bg-[#ffd653]" />
-        <div className="h-10 rounded-xl bg-[#30312e]" />
-        <div className="h-10 rounded-xl bg-black/25" />
-      </div>
-      <div className="mt-5 h-3 w-24 rounded-full bg-black/10" />
+    <WorkspacePanel label="议事空间状态分布" className="p-5 xl:h-48 xl:shrink-0">
+      <DashboardMatterStatusPlaceholder />
     </WorkspacePanel>
   );
 }
@@ -174,7 +169,7 @@ export function DashboardWorkspacePlaceholder() {
       <div className="min-w-0 xl:col-start-2 xl:row-start-1">
         <ResolutionTrendPanelPlaceholder />
       </div>
-
+      {/* 中间右侧得环状图 */}
       <div className="min-w-0 xl:col-start-3 xl:row-start-1">
         <ProposalAdoptionPanelPlaceholder />
       </div>
@@ -184,7 +179,7 @@ export function DashboardWorkspacePlaceholder() {
       </div>
 
       <div className="grid min-w-0 gap-2.5 md:col-span-2 md:grid-cols-2 xl:col-start-4 xl:row-start-1 xl:row-end-3 xl:flex xl:h-full xl:flex-col">
-        <StatusPanelPlaceholder />
+        <MatterStatusPanelPlaceholder />
         <TaskListPanelPlaceholder />
       </div>
     </section>
