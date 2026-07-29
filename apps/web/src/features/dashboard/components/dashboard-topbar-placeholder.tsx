@@ -5,8 +5,10 @@
 
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
+import { Bell } from 'lucide-react';
 
 import { Button } from '@workspace/ui/components/button';
+import { DashboardAccountMenuPlaceholder } from './dashboard-account-menu-placeholder';
 
 /** 工作台主导航的文字与稳定标识。 */
 const navigationItems = [
@@ -21,22 +23,19 @@ const navigationItems = [
 /** 主导航中可由移动选中块覆盖的菜单标识。 */
 type MainNavigationKey = (typeof navigationItems)[number]['key'];
 
-/** 当前原型可展示的平台导航标识。 */
-type DashboardNavigationKey = MainNavigationKey | 'settings';
-
 /** 主导航按钮与颜色遮罩文字共用的尺寸样式，确保两层文字始终采用同一居中基准。 */
 const navigationItemLayoutClass =
   'inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-transparent bg-transparent px-4 text-center text-sm leading-none font-medium whitespace-nowrap';
 
 /** 渲染可切换选中态、但不执行跳转的工作台顶部导航。 */
 export function DashboardTopbarPlaceholder() {
-  const [activeNavigation, setActiveNavigation] = useState<DashboardNavigationKey>('dashboard');
-  const activeNavigationRef = useRef<DashboardNavigationKey>('dashboard');
+  const [activeNavigation, setActiveNavigation] = useState<MainNavigationKey>('dashboard');
+  const activeNavigationRef = useRef<MainNavigationKey>('dashboard');
   const navigationContainerRef = useRef<HTMLElement | null>(null);
 
   /** 测量目标菜单，并把现有黑色选中块直接移动或平滑重定向到该位置。 */
   const moveNavigationIndicator = useCallback(
-    (targetNavigation: DashboardNavigationKey, shouldAnimate: boolean): void => {
+    (targetNavigation: MainNavigationKey, shouldAnimate: boolean): void => {
       const navigationContainer = navigationContainerRef.current;
       if (!navigationContainer) return;
 
@@ -76,7 +75,7 @@ export function DashboardTopbarPlaceholder() {
   }, [moveNavigationIndicator]);
 
   /** 仅更新原型页面的菜单选中态，真实路由会在后续页面接入时补充。 */
-  function handleNavigationSelect(key: DashboardNavigationKey): void {
+  function handleNavigationSelect(key: MainNavigationKey): void {
     activeNavigationRef.current = key;
     moveNavigationIndicator(key, true);
     setActiveNavigation(key);
@@ -138,15 +137,14 @@ export function DashboardTopbarPlaceholder() {
         <Button
           type="button"
           variant="ghost"
-          aria-current={activeNavigation === 'settings' ? 'page' : undefined}
-          className="hidden h-12 rounded-full bg-white/60 px-5 text-sm font-medium text-[#31322f] transition-colors hover:bg-white/60 aria-[current=page]:bg-[#292a27] aria-[current=page]:text-white aria-[current=page]:hover:bg-[#292a27] sm:inline-flex"
-          onClick={() => handleNavigationSelect('settings')}
+          size="icon"
+          className="size-12 rounded-full bg-white/60 text-[#31322f] hover:bg-white/80"
+          aria-label="查看通知"
         >
-          设置
+          <Bell className="size-5" aria-hidden />
         </Button>
 
-        <div className="size-12 rounded-full bg-white/60" aria-label="通知入口占位" />
-        <div className="size-12 rounded-full bg-white/60" aria-label="用户入口占位" />
+        <DashboardAccountMenuPlaceholder />
 
         <Button
           type="button"
