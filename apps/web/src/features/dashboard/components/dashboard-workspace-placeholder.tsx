@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 
 import { Card } from '@workspace/ui/components/card';
+import { DashboardProposalAdoptionPlaceholder } from './dashboard-proposal-adoption-placeholder';
 import { DashboardResolutionTrendPlaceholder } from './dashboard-resolution-trend-placeholder';
 
 /** 通用业务面板占位属性。 */
@@ -87,20 +88,11 @@ function ResolutionTrendPanelPlaceholder() {
   );
 }
 
-/** 渲染环形统计面板占位。 */
-function RingPanelPlaceholder() {
+/** 渲染全部已结束提案的采纳率环形统计卡。 */
+function ProposalAdoptionPanelPlaceholder() {
   return (
-    <WorkspacePanel label="环形统计面板占位" className="h-full min-h-72 p-5 xl:min-h-[22rem]">
-      <PanelHeadingPlaceholder />
-      <div className="mt-7 flex items-center justify-center">
-        <div className="flex size-36 items-center justify-center rounded-full border-[0.85rem] border-[#ffd653] border-l-black/10">
-          <div className="h-7 w-20 rounded-lg bg-black/12" />
-        </div>
-      </div>
-      <div className="mt-5 flex justify-center gap-3">
-        <div className="size-10 rounded-full bg-white/70" />
-        <div className="size-10 rounded-full bg-white/70" />
-      </div>
+    <WorkspacePanel label="全部已结束提案采纳率" className="h-full min-h-72 p-5 xl:min-h-[22rem]">
+      <DashboardProposalAdoptionPlaceholder />
     </WorkspacePanel>
   );
 }
@@ -184,7 +176,7 @@ export function DashboardWorkspacePlaceholder() {
       </div>
 
       <div className="min-w-0 xl:col-start-3 xl:row-start-1">
-        <RingPanelPlaceholder />
+        <ProposalAdoptionPanelPlaceholder />
       </div>
 
       <div className="min-w-0 md:col-span-2 xl:col-start-2 xl:col-end-4 xl:row-start-2 [&>*]:h-full">
