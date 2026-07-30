@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 
 import { Card } from '@workspace/ui/components/card';
+import { DashboardAiAssistantPlaceholder } from './dashboard-ai-assistant-placeholder';
 import { DashboardMeetingSchedulePlaceholder } from './dashboard-meeting-schedule-placeholder';
 import { DashboardMatterStatusPlaceholder } from './dashboard-matter-status-placeholder';
 import { DashboardProfileCardPlaceholder } from './dashboard-profile-card-placeholder';
@@ -18,8 +19,8 @@ type WorkspacePanelProps = {
   className?: string;
   /** 面板语义名称。 */
   label: string;
-  /** 是否使用深色视觉。 */
-  tone?: 'light' | 'dark' | 'yellow';
+  /** 面板使用的基础视觉色调。 */
+  tone?: 'light' | 'dark' | 'yellow' | 'glass';
 };
 
 /** 使用共享 Card 组件渲染工作台业务面板外壳。 */
@@ -28,6 +29,7 @@ function WorkspacePanel({ children, className = '', label, tone = 'light' }: Wor
     light: 'border-black/5 bg-white/55 text-[#252622]',
     dark: 'border-white/5 bg-[#30312e] text-white',
     yellow: 'border-[#f0c63b]/30 bg-[#ffd653] text-[#252622]',
+    glass: 'border-white/70 bg-transparent text-[#252622]',
   }[tone];
 
   return (
@@ -62,18 +64,15 @@ function ProfilePanelPlaceholder() {
   );
 }
 
-/** 渲染左下角分组设置列表占位。 */
-function SettingsPanelPlaceholder() {
+/** 渲染左下角毛玻璃 AI 决策助手卡片。 */
+function AiAssistantPanelPlaceholder() {
   return (
-    <WorkspacePanel label="分组设置列表占位" className="p-5">
-      <div className="space-y-4">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="flex items-center justify-between border-b border-dashed border-black/10 pb-4 last:border-0 last:pb-0">
-            <div className="h-3 w-32 rounded-full bg-black/12" />
-            <div className="size-5 rounded-full bg-black/8" />
-          </div>
-        ))}
-      </div>
+    <WorkspacePanel
+      label="AI 决策助手"
+      tone="glass"
+      className="relative min-h-[20rem] overflow-hidden border-white/50 bg-[linear-gradient(to_bottom,rgba(247,244,193,0.09)_0%,rgba(255,241,132,0.18)_50%,rgba(255,224,68,0.3)_100%)] shadow-[0_24px_48px_rgba(112,89,11,0.08),inset_0_1px_0_rgba(255,255,255,0.62)] backdrop-blur-[8px] backdrop-saturate-125"
+    >
+      <DashboardAiAssistantPlaceholder />
     </WorkspacePanel>
   );
 }
@@ -146,8 +145,8 @@ export function DashboardWorkspacePlaceholder() {
         <ProfilePanelPlaceholder />
       </div>
 
-      <div className="min-w-0 xl:col-start-1 xl:row-start-2 [&>*]:h-full">
-        <SettingsPanelPlaceholder />
+      <div className="min-w-0 xl:z-10 xl:col-start-1 xl:row-start-2 xl:-mt-12 xl:h-[calc(100%+3rem)] [&>*]:h-full">
+        <AiAssistantPanelPlaceholder />
       </div>
       {/* 中间区域得图标显示 */}
       <div className="min-w-0 xl:col-start-2 xl:row-start-1">

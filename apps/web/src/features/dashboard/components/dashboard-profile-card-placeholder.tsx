@@ -35,7 +35,7 @@ export function DashboardProfileCardPlaceholder() {
           aria-hidden
         />
 
-        <div className="relative flex min-w-0 items-end justify-between gap-3">
+        <div className="relative flex min-w-0 -translate-y-5 items-end justify-between gap-3">
           <div className="min-w-0">
             <h2 className="truncate text-2xl leading-none font-medium tracking-tight">Sliye</h2>
             <p className="mt-2 truncate text-xs text-white/50">风控发展部 · 策略平台组</p>
