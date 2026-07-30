@@ -12,8 +12,11 @@ import {
 } from 'react';
 import { ArrowUpRight, GripHorizontal, MessageCircle, UsersRound } from 'lucide-react';
 import { gsap } from 'gsap';
+import { InertiaPlugin } from 'gsap/InertiaPlugin';
 
 import { Button } from '@workspace/ui/components/button';
+
+gsap.registerPlugin(InertiaPlugin);
 
 /** 单张决策卡片在样例中使用的数据结构。 */
 type DecisionStackItem = {
@@ -47,6 +50,8 @@ type DragSession = {
   lastTime: number;
   /** 当前指针标识。 */
   pointerId: number;
+  /** 在一次样式写入中更新卡片的位置与旋转角度。 */
+  setTransform: (value: { rotation: number; x: number; y: number }) => void;
   /** 拖拽起始横坐标。 */
   startX: number;
   /** 拖拽起始纵坐标。 */
@@ -169,7 +174,10 @@ export function DashboardDecisionCardStack() {
         clearTimeout(dragSession.holdTimer);
       }
 
-      cardElements.forEach((cardElement) => gsap.killTweensOf(cardElement));
+      cardElements.forEach((cardElement) => {
+        InertiaPlugin.untrack(cardElement);
+        gsap.killTweensOf(cardElement);
+      });
     };
   }, []);
 
@@ -221,6 +229,7 @@ export function DashboardDecisionCardStack() {
     clearTimeout(session.holdTimer);
     session.activated = true;
     cardElement.dataset.dragging = 'true';
+    InertiaPlugin.track(cardElement, 'x,y,rotation');
     gsap.to(cardElement, {
       scale: 1.025,
       duration: 0.2,
@@ -229,7 +238,12 @@ export function DashboardDecisionCardStack() {
   }
 
   /** 播放甩出动画，并在动画完成后更新牌堆顺序。 */
-  function throwFrontCard(cardElement: HTMLDivElement, direction: number, velocityY: number) {
+  function throwFrontCard(
+    cardElement: HTMLDivElement,
+    direction: number,
+    velocityX: number,
+    velocityY: number,
+  ) {
     const nextCardId = cardOrder[1];
     const nextCardElement = cardElementsRef.current.get(nextCardId);
     const horizontalDestination = direction * (cardElement.offsetWidth + 150);
@@ -246,14 +260,27 @@ export function DashboardDecisionCardStack() {
     }
 
     gsap.to(cardElement, {
-      x: horizontalDestination,
-      y: `+=${clamp(velocityY * 150, -110, 110)}`,
-      rotation: direction * 18,
+      inertia: {
+        x: {
+          velocity: direction * Math.max(Math.abs(velocityX), 620),
+          end: horizontalDestination,
+        },
+        y: {
+          velocity: velocityY,
+          min: -135,
+          max: 135,
+        },
+        rotation: {
+          velocity: clamp(velocityX * 0.045, -180, 180),
+          end: direction * 18,
+        },
+        resistance: 1250,
+        duration: { min: 0.32, max: 0.78, overshoot: 0 },
+      },
       scale: 0.94,
       opacity: 0.25,
-      duration: 0.46,
-      ease: 'power3.in',
       onComplete: () => {
+        InertiaPlugin.untrack(cardElement);
         gsap.set(cardElement, { opacity: 1, zIndex: 0 });
         moveFrontCardToBack();
         isAnimatingRef.current = false;
@@ -268,6 +295,7 @@ export function DashboardDecisionCardStack() {
     }
 
     const cardElement = event.currentTarget;
+    gsap.killTweensOf(cardElement);
     cardElement.setPointerCapture(event.pointerId);
 
     const holdTimer = setTimeout(() => {
@@ -287,6 +315,11 @@ export function DashboardDecisionCardStack() {
       lastY: event.clientY,
       lastTime: event.timeStamp,
       pointerId: event.pointerId,
+      setTransform: gsap.quickSetter(cardElement, 'css') as (value: {
+        rotation: number;
+        x: number;
+        y: number;
+      }) => void,
       startX: event.clientX,
       startY: event.clientY,
       velocityX: 0,
@@ -316,13 +349,15 @@ export function DashboardDecisionCardStack() {
     event.preventDefault();
     const currentTime = event.timeStamp;
     const elapsedTime = Math.max(currentTime - session.lastTime, 1);
-    session.velocityX = (event.clientX - session.lastX) / elapsedTime;
-    session.velocityY = (event.clientY - session.lastY) / elapsedTime;
+    const instantVelocityX = (event.clientX - session.lastX) / elapsedTime;
+    const instantVelocityY = (event.clientY - session.lastY) / elapsedTime;
+    session.velocityX = session.velocityX * 0.62 + instantVelocityX * 0.38;
+    session.velocityY = session.velocityY * 0.62 + instantVelocityY * 0.38;
     session.lastX = event.clientX;
     session.lastY = event.clientY;
     session.lastTime = currentTime;
 
-    gsap.set(event.currentTarget, {
+    session.setTransform({
       x: distanceX,
       y: distanceY,
       rotation: clamp(distanceX / 12 + session.velocityX * 3, -14, 14),
@@ -346,14 +381,23 @@ export function DashboardDecisionCardStack() {
     }
 
     const distanceX = event.clientX - session.startX;
-    const shouldThrow = Math.abs(distanceX) > 72 || Math.abs(session.velocityX) > 0.5;
+    const releaseDelay = Math.max(event.timeStamp - session.lastTime, 0);
+    const manualVelocityRetention = Math.exp(-releaseDelay / 140);
+    const manualVelocityX = session.velocityX * 1000 * manualVelocityRetention;
+    const manualVelocityY = session.velocityY * 1000 * manualVelocityRetention;
+    const trackedVelocityX = InertiaPlugin.getVelocity(event.currentTarget, 'x');
+    const trackedVelocityY = InertiaPlugin.getVelocity(event.currentTarget, 'y');
+    const velocityX = Math.abs(trackedVelocityX) > Math.abs(manualVelocityX) ? trackedVelocityX : manualVelocityX;
+    const velocityY = Math.abs(trackedVelocityY) > Math.abs(manualVelocityY) ? trackedVelocityY : manualVelocityY;
+    const shouldThrow = Math.abs(distanceX) > 72 || Math.abs(velocityX) > 460;
 
     if (shouldThrow) {
-      const direction = Math.sign(distanceX || session.velocityX) || 1;
-      throwFrontCard(event.currentTarget, direction, session.velocityY);
+      const direction = Math.sign(velocityX || distanceX) || 1;
+      throwFrontCard(event.currentTarget, direction, velocityX, velocityY);
       return;
     }
 
+    InertiaPlugin.untrack(event.currentTarget);
     gsap.to(event.currentTarget, {
       ...getStackTransform(0),
       x: 0,
@@ -364,7 +408,22 @@ export function DashboardDecisionCardStack() {
 
   /** 指针操作被浏览器取消时复用释放逻辑恢复卡片位置。 */
   function handlePointerCancel(event: ReactPointerEvent<HTMLDivElement>) {
-    handlePointerUp(event);
+    const session = dragSessionRef.current;
+
+    if (!session || session.pointerId !== event.pointerId) {
+      return;
+    }
+
+    clearTimeout(session.holdTimer);
+    dragSessionRef.current = null;
+    event.currentTarget.removeAttribute('data-dragging');
+    InertiaPlugin.untrack(event.currentTarget);
+    gsap.to(event.currentTarget, {
+      ...getStackTransform(0),
+      x: 0,
+      duration: 0.42,
+      ease: 'power3.out',
+    });
   }
 
   /** 允许不方便拖拽的用户通过按钮切换下一张卡片。 */
@@ -375,7 +434,7 @@ export function DashboardDecisionCardStack() {
 
     const frontCardElement = cardElementsRef.current.get(cardOrder[0]);
     if (frontCardElement) {
-      throwFrontCard(frontCardElement, 1, 0);
+      throwFrontCard(frontCardElement, 1, 850, 0);
     }
   }
 
