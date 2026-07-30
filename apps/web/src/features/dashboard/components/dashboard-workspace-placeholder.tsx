@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 
 import { Card } from '@workspace/ui/components/card';
+import { DashboardMeetingSchedulePlaceholder } from './dashboard-meeting-schedule-placeholder';
 import { DashboardMatterStatusPlaceholder } from './dashboard-matter-status-placeholder';
 import { DashboardProfileCardPlaceholder } from './dashboard-profile-card-placeholder';
 import { DashboardProposalAdoptionPlaceholder } from './dashboard-proposal-adoption-placeholder';
@@ -98,22 +99,8 @@ function ProposalAdoptionPanelPlaceholder() {
 /** 渲染中下方日程栅格占位。 */
 function SchedulePanelPlaceholder() {
   return (
-    <WorkspacePanel label="日程面板占位" className="min-h-[20rem] overflow-hidden p-5">
-      <div className="flex items-center justify-between gap-4">
-        <div className="h-7 w-20 rounded-full bg-white/70" />
-        <div className="h-4 w-36 rounded-full bg-black/15" />
-        <div className="h-7 w-20 rounded-full bg-white/70" />
-      </div>
-
-      <div className="mt-6 grid grid-cols-[3.5rem_repeat(6,minmax(4rem,1fr))] overflow-hidden" aria-label="日程表格占位">
-        {Array.from({ length: 28 }).map((_, index) => (
-          <div key={index} className="h-14 border-r border-b border-dashed border-black/10" />
-        ))}
-      </div>
-      <div className="pointer-events-none relative -mt-40 h-40" aria-hidden>
-        <div className="absolute top-4 left-[18%] h-12 w-[38%] rounded-xl bg-[#2f302d]" />
-        <div className="absolute top-24 left-[48%] h-12 w-[36%] rounded-xl bg-white/90" />
-      </div>
+    <WorkspacePanel label="我的会议日程" className="min-h-[20rem] overflow-hidden p-5">
+      <DashboardMeetingSchedulePlaceholder />
     </WorkspacePanel>
   );
 }

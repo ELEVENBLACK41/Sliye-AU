@@ -2,7 +2,7 @@
  * @Author: shaoliye elevenblack41@gmail.com
  * @Date: 2026-07-29 17:35:13
  * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-07-29 17:41:35
+ * @LastEditTime: 2026-07-30 09:34:17
  * @FilePath: \NextNest\apps\web\src\features\dashboard\components\dashboard-profile-card-placeholder.tsx
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -37,7 +37,7 @@ export function DashboardProfileCardPlaceholder() {
 
         <div className="relative flex min-w-0 items-end justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-2xl leading-none font-medium tracking-tight">陈屿</h2>
+            <h2 className="truncate text-2xl leading-none font-medium tracking-tight">Sliye</h2>
             <p className="mt-2 truncate text-xs text-white/50">风控发展部 · 策略平台组</p>
           </div>
         </div>
