@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 
 import { Card } from '@workspace/ui/components/card';
 import { DashboardAiAssistantPlaceholder } from './dashboard-ai-assistant-placeholder';
+import { DashboardDecisionCardStack } from './dashboard-decision-card-stack';
 import { DashboardMeetingSchedulePlaceholder } from './dashboard-meeting-schedule-placeholder';
 import { DashboardMatterStatusPlaceholder } from './dashboard-matter-status-placeholder';
 import { DashboardProfileCardPlaceholder } from './dashboard-profile-card-placeholder';
@@ -39,16 +40,6 @@ function WorkspacePanel({ children, className = '', label, tone = 'light' }: Wor
     >
       {children}
     </Card>
-  );
-}
-
-/** 渲染面板标题与右上角操作位置占位。 */
-function PanelHeadingPlaceholder({ dark = false }: { dark?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className={`h-4 w-28 rounded-full ${dark ? 'bg-white/20' : 'bg-black/15'}`} />
-      <div className={`size-9 rounded-full ${dark ? 'bg-white/10' : 'bg-white/70'}`} />
-    </div>
   );
 }
 
@@ -113,23 +104,11 @@ function MatterStatusPanelPlaceholder() {
   );
 }
 
-/** 渲染右侧深色事项列表占位。 */
-function TaskListPanelPlaceholder() {
+/** 渲染右侧深色决策卡片堆。 */
+function DecisionCardStackPanel() {
   return (
-    <WorkspacePanel label="事项列表面板占位" tone="dark" className="min-h-[26rem] flex-1 p-5">
-      <PanelHeadingPlaceholder dark />
-      <div className="mt-6 space-y-5">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="grid grid-cols-[2.5rem_minmax(0,1fr)_1.25rem] items-center gap-3">
-            <div className={`size-10 rounded-full ${index === 2 ? 'bg-white' : 'bg-white/10'}`} />
-            <div className="space-y-2">
-              <div className="h-3 w-4/5 rounded-full bg-white/20" />
-              <div className="h-2.5 w-1/2 rounded-full bg-white/10" />
-            </div>
-            <div className={`size-4 rounded-full ${index < 2 ? 'bg-[#ffd653]' : 'bg-white/10'}`} />
-          </div>
-        ))}
-      </div>
+    <WorkspacePanel label="可拖拽决策卡片堆" tone="dark" className="min-h-[26rem] flex-1 overflow-hidden">
+      <DashboardDecisionCardStack />
     </WorkspacePanel>
   );
 }
@@ -163,7 +142,7 @@ export function DashboardWorkspacePlaceholder() {
 
       <div className="grid min-w-0 gap-2.5 md:col-span-2 md:grid-cols-2 xl:col-start-4 xl:row-start-1 xl:row-end-3 xl:flex xl:h-full xl:flex-col">
         <MatterStatusPanelPlaceholder />
-        <TaskListPanelPlaceholder />
+        <DecisionCardStackPanel />
       </div>
     </section>
   );
