@@ -36,7 +36,7 @@ function WorkspacePanel({ children, className = '', label, tone = 'light' }: Wor
   return (
     <Card
       aria-label={label}
-      className={`gap-0 rounded-[1.75rem] py-0 shadow-none backdrop-blur-sm ${toneClassName} ${className}`}
+      className={`dashboard-prototype-panel gap-0 rounded-[1.75rem] py-0 shadow-none backdrop-blur-sm ${toneClassName} ${className}`}
     >
       {children}
     </Card>
@@ -117,7 +117,7 @@ function DecisionCardStackPanel() {
 export function DashboardWorkspacePlaceholder() {
   return (
     <section
-      className="grid flex-1 gap-2.5 md:grid-cols-2 xl:grid-cols-[minmax(13rem,0.75fr)_minmax(14rem,0.775fr)_minmax(14rem,0.775fr)_minmax(15rem,0.8fr)] xl:grid-rows-[minmax(22rem,1fr)_minmax(20rem,1fr)]"
+      className="dashboard-prototype-workspace grid flex-1 gap-2.5 md:grid-cols-2 xl:grid-cols-[minmax(13rem,0.75fr)_minmax(14rem,0.775fr)_minmax(14rem,0.775fr)_minmax(15rem,0.8fr)] xl:grid-rows-[minmax(22rem,1fr)_minmax(20rem,1fr)]"
       aria-label="工作台主体占位"
     >
       <div className="min-w-0 xl:col-start-1 xl:row-start-1 [&>*]:h-full">

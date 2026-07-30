@@ -47,7 +47,7 @@ function DecisionDistributionPlaceholder() {
 /** 渲染欢迎信息、横向进度和统计数字区域。 */
 export function DashboardSummaryPlaceholder() {
   return (
-    <section className="grid gap-7 py-9 lg:grid-cols-[minmax(0,1.6fr)_minmax(20rem,0.8fr)] lg:items-end lg:py-12">
+    <section className="dashboard-prototype-summary grid gap-7 py-9 lg:grid-cols-[minmax(0,1.6fr)_minmax(20rem,0.8fr)] lg:items-end lg:py-12">
       <div className="min-w-0 space-y-7">
         {/* 欢迎信息等等 */}
         <DashboardWelcomePlaceholder />
