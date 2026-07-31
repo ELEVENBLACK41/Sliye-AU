@@ -41,14 +41,14 @@ export class CreateDecisionDto implements CreateDecisionRequestPayload {
   @Min(1)
   departmentId!: number;
 
-  /** 可选的私有讨论分区；省略时创建议事级决策。 */
+  /** 可选的私有讨论分区；省略时创建项目级决策。 */
   @ApiPropertyOptional({ minimum: 1 })
   @IsOptional()
   @IsInt()
   @Min(1)
   areaId?: number;
 
-  /** 可选的来源会议；服务端会校验会议属于当前议事且正在进行。 */
+  /** 可选的来源会议；服务端会校验会议属于当前项目且正在进行。 */
   @ApiPropertyOptional({ minimum: 1 })
   @IsOptional()
   @IsInt()

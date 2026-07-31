@@ -160,7 +160,7 @@ export function DecisionParticipantActions({ decisionId }: DecisionParticipantAc
         <SheetHeader>
           <SheetTitle>补充参与人</SheetTitle>
           <SheetDescription>
-            创建决策时已自动继承当时的议事或小组成员；这里只需补充后来加入协作范围的成员，并分配决策身份。
+            创建决策时已自动继承当时的项目或小组成员；这里只需补充后来加入协作范围的成员，并分配决策身份。
           </SheetDescription>
         </SheetHeader>
 

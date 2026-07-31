@@ -1,5 +1,5 @@
 /**
- * 本文件是议事分区会议房间入口，支持普通会议与多决策会议目标切换。
+ * 本文件是项目分区会议房间入口，支持普通会议与多决策会议目标切换。
  */
 import { notFound } from 'next/navigation';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
@@ -9,7 +9,7 @@ import type {
   DecisionResolution,
   DecisionVoteRound,
 } from '@workspace/contracts/decisions';
-import type { DiscussionAreaSummary, MatterChatMessagePage, MatterDetail } from '@workspace/contracts/matters';
+import type { DiscussionAreaSummary, ProjectChatMessagePage, ProjectDetail } from '@workspace/contracts/projects';
 import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
@@ -21,11 +21,11 @@ import {
   getDecisionVoteRounds,
 } from '@/features/decisions';
 import {
-  getMatter,
-  getMatterAreas,
-  getMatterMessages,
-  MatterServerError,
-} from '@/features/matters/services/matters-server.service';
+  getProject,
+  getProjectAreas,
+  getProjectMessages,
+  ProjectServerError,
+} from '@/features/projects/services/projects-server.service';
 import { MeetingRoomPage } from '@/features/meetings/components/meeting-room-page';
 import { getMeetingDetail, MeetingServerError } from '@/features/meetings/services/meetings-server.service';
 
@@ -39,7 +39,7 @@ type MeetingRoomRouteProps = {
 
 /** 渲染当前用户可见的分区会议，并为正式操作准备单项决策上下文。 */
 export default async function MeetingRoomRoutePage({ params, searchParams }: MeetingRoomRouteProps) {
-  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.matter.read);
+  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.project.read);
   const meetingId = Number((await params).meetingId);
   const requestedDecisionId = Number((await searchParams).decisionId);
 
@@ -48,26 +48,26 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
   }
 
   let meeting: MeetingDetail;
-  let matter: MatterDetail;
+  let project: ProjectDetail;
   let area: DiscussionAreaSummary;
-  let initialChatPage: MatterChatMessagePage;
+  let initialChatPage: ProjectChatMessagePage;
 
   try {
     meeting = await getMeetingDetail(meetingId);
-    const [matterResult, areas, chatPage] = await Promise.all([
-      getMatter(meeting.matterId),
-      getMatterAreas(meeting.matterId),
+    const [projectResult, areas, chatPage] = await Promise.all([
+      getProject(meeting.projectId),
+      getProjectAreas(meeting.projectId),
       meeting.status === 'LIVE'
-        ? getMatterMessages(meeting.matterId, meeting.areaId)
+        ? getProjectMessages(meeting.projectId, meeting.areaId)
         : Promise.resolve({ items: [], nextCursor: null, hasMore: false }),
     ]);
-    matter = matterResult;
+    project = projectResult;
     initialChatPage = chatPage;
     const visibleArea = areas.find((item) => item.id === meeting.areaId);
     if (!visibleArea) notFound();
     area = visibleArea;
   } catch (error) {
-    if ((error instanceof MeetingServerError || error instanceof MatterServerError) && error.status === 404) {
+    if ((error instanceof MeetingServerError || error instanceof ProjectServerError) && error.status === 404) {
       notFound();
     }
     throw error;
@@ -101,7 +101,7 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
   const isDraft = selectedDecision?.status === 'DRAFT';
   const isDiscussing = selectedDecision?.status === 'DISCUSSING';
   const canManageMeeting =
-    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.matter.update) &&
+    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.update) &&
     (meetingRole === 'HOST' || meetingRole === 'CO_HOST');
   const canCreateProposal =
     isLive &&
@@ -112,12 +112,12 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
   const canManageConclusion =
     isLive && isDiscussing && canUpdateDecision && selectedDecision?.owner?.id === currentUser.id;
   const canVote = isLive && isDiscussing && (participantRole === 'OWNER' || participantRole === 'APPROVER');
-  const canSendChat = matter.status === 'ACTIVE' && area.status === 'ACTIVE' && isLive && meetingRole !== undefined;
+  const canSendChat = project.status === 'ACTIVE' && area.status === 'ACTIVE' && isLive && meetingRole !== undefined;
 
   return (
     <MeetingRoomPage
       meeting={meeting}
-      matter={matter}
+      project={project}
       area={area}
       selectedDecision={selectedDecision}
       initialChatPage={initialChatPage}

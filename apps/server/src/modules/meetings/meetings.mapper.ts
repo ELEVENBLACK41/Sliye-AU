@@ -12,7 +12,7 @@ import type { Prisma } from '../../generated/prisma';
 /** 会议摘要查询统一加载的分区、关联决策和创建人。 */
 export const meetingSummaryInclude = {
   createdBy: { select: { id: true, name: true, avatarUrl: true } },
-  area: { select: { id: true, matterId: true, name: true, type: true } },
+  area: { select: { id: true, projectId: true, name: true, type: true } },
   decisionLinks: {
     include: {
       decision: { select: { id: true, title: true, status: true } },
@@ -65,13 +65,13 @@ function toMeetingParticipant(
   };
 }
 
-/** 将数据库会议映射为议事会议摘要。 */
+/** 将数据库会议映射为项目会议摘要。 */
 export function toMeetingSummary(
   meeting: MeetingSummaryRecord,
 ): MeetingSummary {
   return {
     id: meeting.id,
-    matterId: meeting.area.matterId,
+    projectId: meeting.area.projectId,
     areaId: meeting.area.id,
     areaType: meeting.area.type,
     areaName: meeting.area.name,

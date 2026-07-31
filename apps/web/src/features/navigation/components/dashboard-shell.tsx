@@ -58,16 +58,16 @@ const dashboardMenus: DashboardMenuItem[] = [
     permissions: [SYSTEM_PERMISSIONS.dashboard.access],
   },
   {
-    title: '议事空间',
-    href: '/dashboard/matters',
+    title: '项目空间',
+    href: '/dashboard/projects',
     icon: MessagesSquare,
-    permissions: [SYSTEM_PERMISSIONS.matter.read],
+    permissions: [SYSTEM_PERMISSIONS.project.read],
   },
   {
     title: '权限管理',
     href: '/dashboard/users',
     icon: ShieldCheck,
-    permissions: [SYSTEM_PERMISSIONS.access.user.read, SYSTEM_PERMISSIONS.matter.auditRead],
+    permissions: [SYSTEM_PERMISSIONS.access.user.read, SYSTEM_PERMISSIONS.project.auditRead],
   },
   {
     title: 'AI 对话',

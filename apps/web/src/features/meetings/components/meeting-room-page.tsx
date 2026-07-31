@@ -1,5 +1,5 @@
 /**
- * 本文件组合议事分区会议房间、会议聊天、多决策目标选择和正式决策操作。
+ * 本文件组合项目分区会议房间、会议聊天、多决策目标选择和正式决策操作。
  */
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -11,10 +11,10 @@ import type {
 } from '@workspace/contracts/decisions';
 import type {
   DiscussionAreaSummary,
-  MatterChatMessagePage,
-  MatterDetail,
-  MatterUserSummary,
-} from '@workspace/contracts/matters';
+  ProjectChatMessagePage,
+  ProjectDetail,
+  ProjectUserSummary,
+} from '@workspace/contracts/projects';
 import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { MeetingLifecycleActions } from './meeting-lifecycle-actions';
@@ -24,21 +24,21 @@ import { DecisionProposalSection } from '@/features/decisions/components/decisio
 import { DecisionResolutionSection } from '@/features/decisions/components/decision-resolution-section';
 import { DecisionStatusActions } from '@/features/decisions/components/decision-status-actions';
 import { DecisionVoteSection } from '@/features/decisions/components/decision-vote-section';
-import { MatterChatPanel } from '@/features/matters/chat/components/matter-chat-panel';
+import { ProjectChatPanel } from '@/features/projects/chat/components/project-chat-panel';
 import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 
-/** 全屏议事会议房间属性。 */
+/** 全屏项目会议房间属性。 */
 type MeetingRoomPageProps = {
   meeting: MeetingDetail;
-  matter: MatterDetail;
+  project: ProjectDetail;
   area: DiscussionAreaSummary;
   selectedDecision: DecisionDetail | null;
-  initialChatPage: MatterChatMessagePage;
-  currentChatUser: MatterUserSummary;
+  initialChatPage: ProjectChatMessagePage;
+  currentChatUser: ProjectUserSummary;
   proposals: DecisionProposal[];
   voteRounds: DecisionVoteRound[];
   resolutions: DecisionResolution[];
@@ -55,7 +55,7 @@ type MeetingRoomPageProps = {
 /** 渲染不依赖 dashboard 外壳的公共或私有会议协作空间。 */
 export function MeetingRoomPage({
   meeting,
-  matter,
+  project,
   area,
   selectedDecision,
   initialChatPage,
@@ -75,7 +75,7 @@ export function MeetingRoomPage({
   const isLive = meeting.status === 'LIVE';
 
   if (!isLive) {
-    return <MeetingRecordPage meeting={meeting} matter={matter} area={area} canManageMeeting={canManageMeeting} />;
+    return <MeetingRecordPage meeting={meeting} project={project} area={area} canManageMeeting={canManageMeeting} />;
   }
 
   return (
@@ -84,7 +84,7 @@ export function MeetingRoomPage({
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-4 py-3 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Button asChild variant="ghost" size="icon-sm">
-              <Link href={`/dashboard/matters/${meeting.matterId}?areaId=${meeting.areaId}`} aria-label="返回议事分区">
+              <Link href={`/dashboard/projects/${meeting.projectId}?areaId=${meeting.areaId}`} aria-label="返回项目分区">
                 <ArrowLeft aria-hidden />
               </Link>
             </Button>
@@ -97,7 +97,7 @@ export function MeetingRoomPage({
                 </Badge>
               </div>
               <p className="truncate text-xs text-muted-foreground">
-                {matter.title} · {area.name}
+                {project.title} · {area.name}
               </p>
             </div>
           </div>
@@ -140,7 +140,7 @@ export function MeetingRoomPage({
                 ))
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  这是普通议事会议，未关联决策，因此不能在会议上下文中形成提案、投票或决议。
+                  这是普通项目会议，未关联决策，因此不能在会议上下文中形成提案、投票或决议。
                 </p>
               )}
             </CardContent>
@@ -166,8 +166,8 @@ export function MeetingRoomPage({
               {selectedDecision ? <TabsTrigger value="resolutions">决议 {resolutions.length}</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="discussion">
-              <MatterChatPanel
-                matterId={matter.id}
+              <ProjectChatPanel
+                projectId={project.id}
                 area={area}
                 sourceMeetingId={meeting.id}
                 initialPage={initialChatPage}
@@ -199,7 +199,7 @@ export function MeetingRoomPage({
                 </TabsContent>
                 <TabsContent value="resolutions">
                   <DecisionResolutionSection
-                    matterId={matter.id}
+                    projectId={project.id}
                     decisionId={selectedDecision.id}
                     meetingId={meeting.id}
                     proposals={proposals}

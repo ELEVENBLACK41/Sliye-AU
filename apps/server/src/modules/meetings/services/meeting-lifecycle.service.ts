@@ -13,7 +13,7 @@ import {
   type Prisma,
 } from '../../../generated/prisma';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
-import { MatterAccessService } from '../../matters/services/matter-access.service';
+import { ProjectAccessService } from '../../projects/services/project-access.service';
 import { NotificationService } from '../../notifications/services/notification.service';
 import {
   meetingDetailInclude,
@@ -24,10 +24,10 @@ import { MeetingLiveKitService } from './meeting-livekit.service';
 
 @Injectable()
 export class MeetingLifecycleService {
-  /** 注入数据库、议事分区授权、LiveKit 房间管理和全站通知服务。 */
+  /** 注入数据库、项目分区授权、LiveKit 房间管理和全站通知服务。 */
   constructor(
     private readonly prisma: PrismaService,
-    private readonly matterAccessService: MatterAccessService,
+    private readonly projectAccessService: ProjectAccessService,
     private readonly liveKitService: MeetingLiveKitService,
     private readonly notificationService: NotificationService,
   ) {}
@@ -38,9 +38,9 @@ export class MeetingLifecycleService {
     meetingId: number,
   ): Promise<MeetingDetail> {
     const meeting = await this.findAccessibleMeeting(authorization, meetingId);
-    const area = await this.matterAccessService.findArea(
+    const area = await this.projectAccessService.findArea(
       authorization,
-      meeting.area.matterId,
+      meeting.area.projectId,
       meeting.area.id,
     );
     this.assertMeetingHost(
@@ -48,7 +48,7 @@ export class MeetingLifecycleService {
       meeting,
       '只有会议主持人可以开始会议',
     );
-    this.matterAccessService.assertAreaWritable(area);
+    this.projectAccessService.assertAreaWritable(area);
     if (meeting.status !== MeetingStatus.SCHEDULED) {
       this.throwInvalidTransition('当前会议状态不能开始会议');
     }
@@ -205,7 +205,7 @@ export class MeetingLifecycleService {
     const meeting = await this.prisma.meetingSession.findFirst({
       where: {
         id: meetingId,
-        area: this.matterAccessService.buildVisibleAreaWhere(
+        area: this.projectAccessService.buildVisibleAreaWhere(
           authorization.userId,
         ),
       },
@@ -276,7 +276,7 @@ export class MeetingLifecycleService {
     });
   }
 
-  /** 在会议事务内读取最终详情。 */
+  /** 在会项目务内读取最终详情。 */
   private async findMeetingInTransaction(
     tx: Prisma.TransactionClient,
     meetingId: number,

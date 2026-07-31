@@ -20,7 +20,7 @@ function createHarness(meeting: unknown, decision: unknown = null) {
 }
 
 describe('MeetingContextService', () => {
-  it('未传会议主键时应保留普通议事协作上下文', async () => {
+  it('未传会议主键时应保留普通项目协作上下文', async () => {
     const { prisma, service } = createHarness(null);
 
     await expect(
@@ -66,7 +66,7 @@ describe('MeetingContextService', () => {
         id: 90,
         decisionLinks: { some: { decisionId: 20 } },
         participants: { some: { userId: 7 } },
-        area: { matter: { decisions: { some: { id: 20 } } } },
+        area: { project: { decisions: { some: { id: 20 } } } },
       },
       select: {
         id: true,

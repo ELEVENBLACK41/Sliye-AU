@@ -178,7 +178,7 @@ export class AuthorizationService {
     return Promise.resolve({
       AND: [
         {
-          matter: {
+          project: {
             members: {
               some: { userId: context.userId },
             },

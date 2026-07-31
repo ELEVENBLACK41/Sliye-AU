@@ -37,11 +37,11 @@ function createUserRecord(
   };
 }
 
-/** 返回决策读取同时受议事成员和私有分区成员约束的预期查询条件。 */
+/** 返回决策读取同时受项目成员和私有分区成员约束的预期查询条件。 */
 function createExpectedDecisionWhere(userId: number) {
   return {
     AND: [
-      { matter: { members: { some: { userId } } } },
+      { project: { members: { some: { userId } } } },
       {
         OR: [
           { areaId: null },
@@ -165,7 +165,7 @@ describe('AuthorizationService', () => {
     );
   });
 
-  it('决策读取应始终限定为当前用户所在议事', async () => {
+  it('决策读取应始终限定为当前用户所在项目', async () => {
     prisma.department.findMany.mockResolvedValue([
       { id: 2, parentId: null },
       { id: 3, parentId: 2 },
@@ -188,7 +188,7 @@ describe('AuthorizationService', () => {
     ).resolves.toEqual(createExpectedDecisionWhere(10));
   });
 
-  it('ALL 范围也不应穿透议事成员边界', async () => {
+  it('ALL 范围也不应穿透项目成员边界', async () => {
     const context = service.buildContext(
       createUserRecord({
         roleGrants: [{ code: 'decision:read', scopeType: DataScope.ALL }],
@@ -200,7 +200,7 @@ describe('AuthorizationService', () => {
     ).resolves.toEqual(createExpectedDecisionWhere(10));
   });
 
-  it('DEPT 范围的决策读取也应按议事成员关系裁剪', async () => {
+  it('DEPT 范围的决策读取也应按项目成员关系裁剪', async () => {
     const context = service.buildContext(
       createUserRecord({
         deptId: 2,
@@ -229,7 +229,7 @@ describe('AuthorizationService', () => {
     ).resolves.toEqual({ id: -1 });
   });
 
-  it('本人和参与范围不应改变议事成员读取边界', async () => {
+  it('本人和参与范围不应改变项目成员读取边界', async () => {
     const context = service.buildContext(
       createUserRecord({
         roleGrants: [

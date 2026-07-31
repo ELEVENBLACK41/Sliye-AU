@@ -1,8 +1,8 @@
 /**
- * 本文件定义议事分区会议、参与者和多决策关联的前后端共享契约。
+ * 本文件定义项目分区会议、参与者和多决策关联的前后端共享契约。
  */
 
-import type { DiscussionAreaType } from '../matters/matter.types.ts';
+import type { DiscussionAreaType } from '../projects/project.types.ts';
 
 /** 会议从计划到结束的稳定业务状态。 */
 export type MeetingStatus = 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
@@ -52,8 +52,8 @@ export type MeetingParticipant = {
 export type MeetingSummary = {
   /** 会议数据库主键。 */
   id: number;
-  /** 会议所属议事主键。 */
-  matterId: number;
+  /** 会议所属项目主键。 */
+  projectId: number;
   /** 会议所属讨论分区主键。 */
   areaId: number;
   /** 会议可见范围。 */
@@ -90,7 +90,7 @@ export type MeetingDetail = MeetingSummary & {
   participants: MeetingParticipant[];
 };
 
-/** 在议事分区中创建会议的请求体。 */
+/** 在项目分区中创建会议的请求体。 */
 export type CreateMeetingRequestPayload = {
   /** 会议所属讨论分区主键。 */
   areaId: number;
@@ -100,7 +100,7 @@ export type CreateMeetingRequestPayload = {
   description?: string;
   /** 计划开始时间。 */
   scheduledAt?: string;
-  /** 同一议事内需要关联的决策主键。 */
+  /** 同一项目内需要关联的决策主键。 */
   decisionIds: number[];
   /** 当前分区可见成员中的受邀用户主键。 */
   participantIds: number[];
@@ -114,5 +114,5 @@ export type MeetingLiveKitCredentials = {
   participantToken: string;
 };
 
-/** 指定议事下当前用户可见的会议列表。 */
+/** 指定项目下当前用户可见的会议列表。 */
 export type MeetingListResponse = MeetingSummary[];

@@ -32,8 +32,8 @@ import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { UpdateDepartmentStatusDto } from './dto/update-department-status.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UpdateUserStatusDto } from './dto/update-user-status.dto';
-import { MatterAuditReadDto } from '../matters/dto/matter-audit-read.dto';
-import { MatterAuditService } from '../matters/services/matter-audit.service';
+import { ProjectAuditReadDto } from '../projects/dto/project-audit-read.dto';
+import { ProjectAuditService } from '../projects/services/project-audit.service';
 
 @ApiTags('access-management')
 @ApiBearerAuth()
@@ -42,7 +42,7 @@ export class AccessManagementController {
   /** 注入访问控制管理服务。 */
   constructor(
     private readonly accessManagementService: AccessManagementService,
-    private readonly matterAuditService: MatterAuditService,
+    private readonly projectAuditService: ProjectAuditService,
   ) {}
 
   /** 查询当前操作者数据范围内的用户及其授权。 */
@@ -338,14 +338,14 @@ export class AccessManagementController {
   }
 
   /** 通过独立审计入口只读访问私有分区或私有会议消息。 */
-  @Post('matter-audits/private-content')
-  @RequirePermissions('matter:audit:read')
-  @ApiOperation({ summary: '审计读取私有议事内容' })
-  readPrivateMatterContent(
+  @Post('project-audits/private-content')
+  @RequirePermissions('project:audit:read')
+  @ApiOperation({ summary: '审计读取私有项目内容' })
+  readPrivateProjectContent(
     @CurrentAuthorization() actor: AuthorizationContext,
     @CurrentRequestMeta() meta: RequestClientMeta,
-    @Body() body: MatterAuditReadDto,
+    @Body() body: ProjectAuditReadDto,
   ) {
-    return this.matterAuditService.readPrivateContent(actor, body, meta);
+    return this.projectAuditService.readPrivateContent(actor, body, meta);
   }
 }

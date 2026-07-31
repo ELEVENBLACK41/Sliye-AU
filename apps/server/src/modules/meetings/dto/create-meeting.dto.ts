@@ -50,7 +50,7 @@ export class CreateMeetingDto implements CreateMeetingRequestPayload {
   @IsISO8601({ strict: true })
   scheduledAt?: string;
 
-  /** 同一议事内需要关联的决策主键，普通会议允许为空数组。 */
+  /** 同一项目内需要关联的决策主键，普通会议允许为空数组。 */
   @ApiProperty({ type: [Number], example: [11, 12] })
   @IsArray()
   @ArrayUnique()

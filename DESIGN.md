@@ -14,7 +14,7 @@
 
 Decision Hub 是一套记录和呈现“一项决策如何产生”的协作系统。核心链路包括：
 
-- 创建议事空间；
+- 创建项目空间；
 - 邀请参与人并划分公开或私密讨论区；
 - 通过群聊或会议讨论；
 - 提交提案；
@@ -88,7 +88,7 @@ Decision Hub 是一套记录和呈现“一项决策如何产生”的协作系�
 - 使用 Lucide 风格的线性图标，线条简洁，尺寸通常为 `16–20px`。
 - 图标放在浅灰、白色或黄色圆形容器中。
 - 不使用彩色插画式图标，不绘制自定义 SVG。
-- 图标必须有业务含义，例如议事使用对话图标，决策使用分支图标，提案使用灯泡图标，投票使用投票箱或勾选图标，回放使用时间线或播放图标。
+- 图标必须有业务含义，例如项目使用对话图标，决策使用分支图标，提案使用灯泡图标，投票使用投票箱或勾选图标，回放使用时间线或播放图标。
 
 ### 4.6 动效
 
@@ -106,7 +106,7 @@ Decision Hub 是一套记录和呈现“一项决策如何产生”的协作系�
 - 使用顶部主导航，不使用全局左侧边栏。
 - 左侧为胶囊形 `Decision Hub` 品牌标识。
 - 中间为白色半透明胶囊导航，选中项使用炭黑移动色块。
-- 主导航包含：工作台、议事空间、决策中心、会议中心、过程回放、成员管理。
+- 主导航包含：工作台、项目空间、决策中心、会议中心、过程回放、成员管理。
 - 右侧为通知圆形按钮和用户头像按钮。
 - 设置不放在主导航中，放入头像 Dropdown。
 - 用户菜单包含：个人资料、账号设置、外观设置、通知设置、退出登录。
@@ -150,7 +150,7 @@ Design a responsive Chinese web application page for “Decision Hub”, a colla
 
 Use the uploaded dashboard screenshot as the strict visual reference. Preserve its warm editorial workspace style: a cool gray-blue outer background, a nearly full-screen warm ivory canvas, a subtle yellow glow in the upper-right corner, graphite text, translucent white surfaces, charcoal feature cards, and #FFD653 as the only strong accent color. Use organic 24–30px card radii, pill-shaped controls, thin low-contrast borders, restrained shadows, generous whitespace, Satoshi-like typography for English and numbers, and clean Chinese sans-serif typography.
 
-Keep the global top navigation consistent across every page. Place the pill-shaped “Decision Hub” brand on the left, a translucent pill navigation in the center, and notification plus avatar controls on the right. Navigation items are 工作台、议事空间、决策中心、会议中心、过程回放、成员管理. Show the active route with a smoothly movable charcoal pill. Settings belong in the avatar dropdown, never as a primary navigation item.
+Keep the global top navigation consistent across every page. Place the pill-shaped “Decision Hub” brand on the left, a translucent pill navigation in the center, and notification plus avatar controls on the right. Navigation items are 工作台、项目空间、决策中心、会议中心、过程回放、成员管理. Show the active route with a smoothly movable charcoal pill. Settings belong in the avatar dropdown, never as a primary navigation item.
 
 Use Lucide-style outline icons. Use realistic Chinese product copy and believable sample data. Do not use lorem ipsum, generic dashboard charts, stock photos, decorative illustrations, a global left sidebar, heavy gradients, neon colors, glassmorphism everywhere, or dense enterprise-admin styling.
 
@@ -161,22 +161,22 @@ Design desktop at 1440×1024 and ensure the structure can responsively collapse 
 
 ## 8. 页面提示词
 
-### 8.1 议事空间列表
+### 8.1 项目空间列表
 
 ```text
-Create the “议事空间” list page.
+Create the “项目空间” list page.
 
-The page should help users scan all discussion spaces they can access. Use a large editorial heading “议事空间” with a short description and a yellow primary button “创建议事”. Add a compact pill search field and filters for 全部、进行中、已关闭、已归档.
+The page should help users scan all discussion spaces they can access. Use a large editorial heading “项目空间” with a short description and a yellow primary button “创建项目”. Add a compact pill search field and filters for 全部、进行中、已关闭、已归档.
 
-Present spaces as an asymmetric bento list rather than a traditional admin table. Each space card must show: title, short purpose statement, ACTIVE/CLOSED/ARCHIVED status, public or private visibility, owner, participant avatar group, number of related decisions, last activity time, and a subtle arrow affordance. Use one larger highlighted active space card and several smaller cards. Add realistic examples such as “2027 产品路线规划”, “研发效能改进议事”, and “品牌升级评审”.
+Present spaces as an asymmetric bento list rather than a traditional admin table. Each space card must show: title, short purpose statement, ACTIVE/CLOSED/ARCHIVED status, public or private visibility, owner, participant avatar group, number of related decisions, last activity time, and a subtle arrow affordance. Use one larger highlighted active space card and several smaller cards. Add realistic examples such as “2027 产品路线规划”, “研发效能改进项目”, and “品牌升级评审”.
 
 Use charcoal for one featured card, warm translucent white for normal cards, and yellow only for active status or primary action. Include a meaningful empty state for users who have not joined any discussion space.
 ```
 
-### 8.2 议事空间详情
+### 8.2 项目空间详情
 
 ```text
-Create the “议事空间详情” page for “2027 产品路线规划”.
+Create the “项目空间详情” page for “2027 产品路线规划”.
 
 Use a compact breadcrumb above a large title. The hero area should show status, visibility, owner, department, participants, creation date, and a short purpose statement. Provide permission-aware actions such as “发起决策”, “创建会议”, “邀请成员”, and a quiet more-actions menu.
 
@@ -294,7 +294,7 @@ Use one abstract CSS-based composition made from rounded charcoal and yellow sha
 - 是否延续顶部胶囊导航，而不是生成传统左侧后台菜单；
 - 是否使用暖象牙白、炭黑和单一黄色强调色；
 - 是否存在清晰的中文业务文案和真实感数据；
-- 是否准确表达议事、决策、提案、投票、决议和回放之间的关系；
+- 是否准确表达项目、决策、提案、投票、决议和回放之间的关系；
 - 是否错误加入任务、行动项、执行进度或看板；
 - 是否把设置放进头像菜单，而不是主导航；
 - 是否避免大面积渐变、霓虹色和过量玻璃效果；
@@ -304,8 +304,8 @@ Use one abstract CSS-based composition made from rounded charcoal and yellow sha
 
 ## 10. 推荐生成顺序
 
-1. 议事空间列表
-2. 议事空间详情
+1. 项目空间列表
+2. 项目空间详情
 3. 决策中心列表
 4. 决策详情
 5. 提案与投票

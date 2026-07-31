@@ -1,5 +1,5 @@
 /**
- * 本文件保留旧决策详情地址，并把合法资源重定向到所属议事的嵌套路由。
+ * 本文件保留旧决策详情地址，并把合法资源重定向到所属项目的嵌套路由。
  */
 import { notFound, redirect } from 'next/navigation';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
@@ -13,7 +13,7 @@ type DecisionDetailRouteProps = {
   params: Promise<{ decisionId: string }>;
 };
 
-/** 读取决策所属议事后跳转到新的嵌套详情地址。 */
+/** 读取决策所属项目后跳转到新的嵌套详情地址。 */
 export default async function DecisionDetailRoutePage({ params }: DecisionDetailRouteProps) {
   await requireServerPermission(SYSTEM_PERMISSIONS.decision.read);
   const { decisionId: rawDecisionId } = await params;
@@ -25,7 +25,7 @@ export default async function DecisionDetailRoutePage({ params }: DecisionDetail
 
   try {
     const decision = await getDecisionDetail(decisionId);
-    redirect(`/dashboard/matters/${decision.matterId}/decisions/${decision.id}`);
+    redirect(`/dashboard/projects/${decision.projectId}/decisions/${decision.id}`);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
       notFound();

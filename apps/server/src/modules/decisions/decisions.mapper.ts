@@ -36,10 +36,10 @@ export function toDecisionSummary(
     title: decision.title,
     description: decision.description,
     status: decision.status,
-    matterId: decision.matterId,
-    scope: (decision.areaId ?? null) === null ? 'MATTER' : 'AREA',
+    projectId: decision.projectId,
+    scope: (decision.areaId ?? null) === null ? 'PROJECT' : 'AREA',
     area: decision.area ?? null,
-    matter: decision.matter,
+    project: decision.project,
     department: {
       id: decision.department.id,
       code: decision.department.code,

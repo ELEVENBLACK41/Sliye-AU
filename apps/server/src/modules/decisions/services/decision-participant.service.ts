@@ -60,7 +60,7 @@ export class DecisionParticipantService {
       },
       select: {
         id: true,
-        matterId: true,
+        projectId: true,
         areaId: true,
         ownerId: true,
         status: true,
@@ -97,7 +97,7 @@ export class DecisionParticipantService {
         id: dto.userId,
         ...availableParticipantUserWhere,
         ...(areaId === null
-          ? { matterMemberships: { some: { matterId: decision.matterId } } }
+          ? { projectMemberships: { some: { projectId: decision.projectId } } }
           : {
               discussionAreaMemberships: {
                 some: { areaId },
@@ -202,7 +202,7 @@ export class DecisionParticipantService {
       },
       select: {
         id: true,
-        matterId: true,
+        projectId: true,
         areaId: true,
         ownerId: true,
         status: true,
@@ -238,7 +238,7 @@ export class DecisionParticipantService {
       where: {
         ...availableParticipantUserWhere,
         ...(areaId === null
-          ? { matterMemberships: { some: { matterId: decision.matterId } } }
+          ? { projectMemberships: { some: { projectId: decision.projectId } } }
           : {
               discussionAreaMemberships: {
                 some: { areaId },

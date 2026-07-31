@@ -26,7 +26,7 @@ type DecisionStackItem = {
   participantCount: number;
   /** 当前提案数量。 */
   proposalCount: number;
-  /** 决策所属议事空间。 */
+  /** 决策所属项目空间。 */
   space: string;
   /** 决策当前阶段。 */
   stage: string;
@@ -94,7 +94,7 @@ const decisionStackItems: DecisionStackItem[] = [
   {
     id: 'roadmap-priority',
     title: '下半年路线图优先投入哪条主线？',
-    space: '年度规划议事空间',
+    space: '年度规划项目空间',
     stage: '待讨论',
     participantCount: 15,
     proposalCount: 5,

@@ -29,32 +29,32 @@ export class MeetingsController {
     private readonly liveKitService: MeetingLiveKitService,
   ) {}
 
-  /** 在议事的当前分区中创建一场计划会议。 */
-  @Post('matters/:matterId/meetings')
-  @RequirePermissions('matter:update')
-  @ApiOperation({ summary: '在议事分区中创建会议' })
+  /** 在项目的当前分区中创建一场计划会议。 */
+  @Post('projects/:projectId/meetings')
+  @RequirePermissions('project:update')
+  @ApiOperation({ summary: '在项目分区中创建会议' })
   create(
     @CurrentAuthorization() authorization: AuthorizationContext,
-    @Param('matterId', ParseIntPipe) matterId: number,
+    @Param('projectId', ParseIntPipe) projectId: number,
     @Body() body: CreateMeetingDto,
   ) {
-    return this.meetingsService.create(authorization, matterId, body);
+    return this.meetingsService.create(authorization, projectId, body);
   }
 
-  /** 查询议事下当前用户可见分区的全部会议。 */
-  @Get('matters/:matterId/meetings')
-  @RequirePermissions('matter:read')
-  @ApiOperation({ summary: '查询议事会议列表' })
+  /** 查询项目下当前用户可见分区的全部会议。 */
+  @Get('projects/:projectId/meetings')
+  @RequirePermissions('project:read')
+  @ApiOperation({ summary: '查询项目会议列表' })
   list(
     @CurrentAuthorization() authorization: AuthorizationContext,
-    @Param('matterId', ParseIntPipe) matterId: number,
+    @Param('projectId', ParseIntPipe) projectId: number,
   ) {
-    return this.meetingsService.list(authorization, matterId);
+    return this.meetingsService.list(authorization, projectId);
   }
 
   /** 查询授权范围内的单场会议详情。 */
   @Get('meetings/:meetingId')
-  @RequirePermissions('matter:read')
+  @RequirePermissions('project:read')
   @ApiOperation({ summary: '查询会议详情和受邀成员' })
   get(
     @CurrentAuthorization() authorization: AuthorizationContext,
@@ -65,7 +65,7 @@ export class MeetingsController {
 
   /** 为当前受邀用户签发进行中会议的 LiveKit 加入凭证。 */
   @Post('meetings/:meetingId/livekit-token')
-  @RequirePermissions('matter:read')
+  @RequirePermissions('project:read')
   @ApiOperation({ summary: '获取会议 LiveKit 音视频加入凭证' })
   issueLiveKitToken(
     @CurrentAuthorization() authorization: AuthorizationContext,
@@ -76,7 +76,7 @@ export class MeetingsController {
 
   /** 由会议主持人开始一场计划会议。 */
   @Post('meetings/:meetingId/start')
-  @RequirePermissions('matter:update')
+  @RequirePermissions('project:update')
   @ApiOperation({ summary: '开始会议并写入决策事件' })
   start(
     @CurrentAuthorization() authorization: AuthorizationContext,
@@ -87,7 +87,7 @@ export class MeetingsController {
 
   /** 由会议主持人结束一场进行中的会议。 */
   @Post('meetings/:meetingId/end')
-  @RequirePermissions('matter:update')
+  @RequirePermissions('project:update')
   @ApiOperation({ summary: '结束会议并写入决策事件' })
   end(
     @CurrentAuthorization() authorization: AuthorizationContext,

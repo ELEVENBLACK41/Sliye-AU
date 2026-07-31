@@ -5,8 +5,8 @@
 /** 决策事项从草稿、讨论、形成正式决议或取消到归档的全局业务状态；投票状态由具体轮次管理。 */
 export type DecisionStatus = 'DRAFT' | 'DISCUSSING' | 'RESOLVED' | 'CANCELLED' | 'ARCHIVED';
 
-/** 决策的协作可见范围；议事级面向全部议事成员，小组级仅面向绑定分区成员。 */
-export type DecisionScope = 'MATTER' | 'AREA';
+/** 决策的协作可见范围；项目级面向全部项目成员，小组级仅面向绑定分区成员。 */
+export type DecisionScope = 'PROJECT' | 'AREA';
 
 /** 用户参与某个决策时承担的角色。 */
 export type DecisionParticipantRole = 'VIEWER' | 'EDITOR' | 'APPROVER' | 'OWNER';
@@ -95,14 +95,14 @@ export type DecisionSummary = {
   description: string | null;
   /** 决策当前业务状态。 */
   status: DecisionStatus;
-  /** 决策所属议事主键。 */
-  matterId: number;
-  /** 决策作用于整个议事还是一个私有小组。 */
+  /** 决策所属项目主键。 */
+  projectId: number;
+  /** 决策作用于整个项目还是一个私有小组。 */
   scope: DecisionScope;
-  /** 小组级决策所属分区；议事级决策为 `null`。 */
+  /** 小组级决策所属分区；项目级决策为 `null`。 */
   area: DecisionAreaSummary | null;
-  /** 决策所属议事摘要。 */
-  matter: { id: number; title: string };
+  /** 决策所属项目摘要。 */
+  project: { id: number; title: string };
   /** 决策所属部门。 */
   department: DecisionDepartmentSummary;
   /** 创建该决策的用户。 */
@@ -325,7 +325,7 @@ export type DecisionDetail = DecisionSummary & {
   participants: DecisionParticipant[];
 };
 
-/** 创建决策的请求体；参与者由服务端按照议事或私有分区成员自动继承。 */
+/** 创建决策的请求体；参与者由服务端按照项目或私有分区成员自动继承。 */
 export type CreateDecisionRequestPayload = {
   /** 决策标题。 */
   title: string;
@@ -333,7 +333,7 @@ export type CreateDecisionRequestPayload = {
   description?: string;
   /** 可选的来源会议；创建成功后会自动建立会议决策关联。 */
   meetingId?: number;
-  /** 私有讨论分区主键；传入时继承分区成员，省略时创建议事级决策并继承议事成员。 */
+  /** 私有讨论分区主键；传入时继承分区成员，省略时创建项目级决策并继承项目成员。 */
   areaId?: number;
   /** 决策所属的启用部门主键。 */
   departmentId: number;

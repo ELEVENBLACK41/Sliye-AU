@@ -5,7 +5,7 @@ import { GitFork, Lightbulb, MessagesSquare } from 'lucide-react';
 
 /** 工作台个人参与统计的静态占位数据。 */
 const keyStatistics = [
-  { label: '参与议事', value: 12, icon: MessagesSquare },
+  { label: '参与项目', value: 12, icon: MessagesSquare },
   { label: '参与决策', value: 48, icon: GitFork },
   { label: '提交提案', value: 21, icon: Lightbulb },
 ] as const;

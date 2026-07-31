@@ -10,8 +10,8 @@ import {
   DiscussionAreaMemberRole,
   DiscussionAreaStatus,
   DiscussionAreaType,
-  MatterMemberRole,
-  MatterStatus,
+  ProjectMemberRole,
+  ProjectStatus,
   ParticipantRole,
   ProposalStatus,
   ResolutionKind,
@@ -23,7 +23,7 @@ import {
 import type { AuthorizationService } from '../auth/services/authorization.service';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import type { MeetingContextService } from '../meetings/services/meeting-context.service';
-import type { MatterAccessService } from '../matters/services/matter-access.service';
+import type { ProjectAccessService } from '../projects/services/project-access.service';
 import { DecisionsService } from './decisions.service';
 import { DecisionCoreService } from './services/decision-core.service';
 import { DecisionParticipantService } from './services/decision-participant.service';
@@ -42,26 +42,26 @@ function createDecisionsService(
         Promise.resolve(meetingId ?? null),
     ),
   } as unknown as MeetingContextService;
-  const matterAccessService = {
-    findMatter: jest.fn().mockResolvedValue({
+  const projectAccessService = {
+    findProject: jest.fn().mockResolvedValue({
       id: 10,
-      status: MatterStatus.ACTIVE,
-      memberRole: MatterMemberRole.MEMBER,
+      status: ProjectStatus.ACTIVE,
+      memberRole: ProjectMemberRole.MEMBER,
     }),
     findArea: jest.fn().mockResolvedValue({
       id: 40,
-      matterId: 10,
+      projectId: 10,
       type: DiscussionAreaType.PRIVATE,
       status: DiscussionAreaStatus.ACTIVE,
-      matterStatus: MatterStatus.ACTIVE,
-      matterMemberRole: MatterMemberRole.MEMBER,
+      projectStatus: ProjectStatus.ACTIVE,
+      projectMemberRole: ProjectMemberRole.MEMBER,
       areaMemberRole: DiscussionAreaMemberRole.MEMBER,
     }),
     assertAreaWritable: jest.fn(),
-  } as unknown as MatterAccessService;
+  } as unknown as ProjectAccessService;
 
   return new DecisionsService(
-    new DecisionCoreService(prisma, authorizationService, matterAccessService),
+    new DecisionCoreService(prisma, authorizationService, projectAccessService),
     new DecisionParticipantService(prisma, authorizationService),
     new DecisionProposalService(
       prisma,
@@ -99,7 +99,7 @@ function createDecisionRecord() {
 
   return {
     id: 20,
-    matterId: 10,
+    projectId: 10,
     areaId: null,
     area: null,
     title: '是否重构权限模块',
@@ -117,7 +117,7 @@ function createDecisionRecord() {
       code: 'engineering',
       name: '研发部',
     },
-    matter: { id: 10, title: '权限模块议事' },
+    project: { id: 10, title: '权限模块项目' },
     creator: { id: 7, name: '成员甲', avatarUrl: null },
     owner: { id: 7, name: '成员甲', avatarUrl: null },
     _count: { participants: 1 },
@@ -432,7 +432,7 @@ describe('DecisionsService', () => {
       decision: {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
-          matterId: 10,
+          projectId: 10,
           areaId: null,
           ownerId: 7,
           status: DecisionStatus.DRAFT,
@@ -596,7 +596,7 @@ describe('DecisionsService', () => {
       decision: {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
-          matterId: 10,
+          projectId: 10,
           ownerId: 7,
           status: DecisionStatus.DISCUSSING,
         }),
@@ -625,7 +625,7 @@ describe('DecisionsService', () => {
         emailVerifiedAt: { not: null },
         deptId: { not: null },
         roles: { some: {} },
-        matterMemberships: { some: { matterId: 10 } },
+        projectMemberships: { some: { projectId: 10 } },
         decisionParticipants: { none: { decisionId: 20 } },
       },
       select: {
@@ -645,7 +645,7 @@ describe('DecisionsService', () => {
       decision: {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
-          matterId: 10,
+          projectId: 10,
           areaId: 40,
           ownerId: 7,
           status: DecisionStatus.DISCUSSING,
@@ -739,7 +739,7 @@ describe('DecisionsService', () => {
       decision: {
         findFirst: jest.fn().mockResolvedValue({
           id: 20,
-          matterId: 10,
+          projectId: 10,
           ownerId: 7,
           status: DecisionStatus.DISCUSSING,
         }),
@@ -781,7 +781,7 @@ describe('DecisionsService', () => {
         emailVerifiedAt: { not: null },
         deptId: { not: null },
         roles: { some: {} },
-        matterMemberships: { some: { matterId: 10 } },
+        projectMemberships: { some: { projectId: 10 } },
       },
       select: { id: true },
     });
@@ -975,7 +975,7 @@ describe('DecisionsService', () => {
     expect(createEvent).not.toHaveBeenCalled();
   });
 
-  it('创建议事级决策时应继承议事成员并映射初始角色', async () => {
+  it('创建项目级决策时应继承项目成员并映射初始角色', async () => {
     const record = createDecisionRecord();
     let capturedCreateInput: unknown;
     const createDecisionMock = jest.fn((input: unknown) => {
@@ -983,13 +983,13 @@ describe('DecisionsService', () => {
       return Promise.resolve(record);
     });
     const transaction = {
-      matterMember: {
+      projectMember: {
         findMany: jest.fn().mockResolvedValue([
-          { userId: 7, role: MatterMemberRole.MEMBER },
-          { userId: 8, role: MatterMemberRole.OWNER },
-          { userId: 9, role: MatterMemberRole.MANAGER },
-          { userId: 10, role: MatterMemberRole.MEMBER },
-          { userId: 11, role: MatterMemberRole.VIEWER },
+          { userId: 7, role: ProjectMemberRole.MEMBER },
+          { userId: 8, role: ProjectMemberRole.OWNER },
+          { userId: 9, role: ProjectMemberRole.MANAGER },
+          { userId: 10, role: ProjectMemberRole.MEMBER },
+          { userId: 11, role: ProjectMemberRole.VIEWER },
         ]),
       },
       decision: { create: createDecisionMock },
@@ -1024,7 +1024,7 @@ describe('DecisionsService', () => {
       data: {
         creatorId: 7,
         ownerId: 7,
-        matterId: 10,
+        projectId: 10,
         participants: {
           create: [
             { userId: 7, role: 'OWNER' },
@@ -1092,7 +1092,7 @@ describe('DecisionsService', () => {
     });
     expect(capturedCreateInput).toMatchObject({
       data: {
-        matterId: 10,
+        projectId: 10,
         areaId: 40,
         participants: {
           create: [
@@ -1104,7 +1104,7 @@ describe('DecisionsService', () => {
         events: {
           create: {
             payload: {
-              matterId: 10,
+              projectId: 10,
               areaId: 40,
               scope: 'AREA',
               inheritedParticipantCount: 3,

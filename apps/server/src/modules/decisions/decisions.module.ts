@@ -4,9 +4,9 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { MeetingsModule } from '../meetings/meetings.module';
-import { MattersModule } from '../matters/matters.module';
+import { ProjectsModule } from '../projects/projects.module';
 import { DecisionsController } from './decisions.controller';
-import { MatterDecisionsController } from './matter-decisions.controller';
+import { ProjectDecisionsController } from './project-decisions.controller';
 import { DecisionsService } from './decisions.service';
 import { DecisionCoreService } from './services/decision-core.service';
 import { DecisionParticipantService } from './services/decision-participant.service';
@@ -15,8 +15,8 @@ import { DecisionResolutionService } from './services/decision-resolution.servic
 import { DecisionVoteService } from './services/decision-vote.service';
 
 @Module({
-  imports: [AuthModule, MeetingsModule, MattersModule],
-  controllers: [DecisionsController, MatterDecisionsController],
+  imports: [AuthModule, MeetingsModule, ProjectsModule],
+  controllers: [DecisionsController, ProjectDecisionsController],
   providers: [
     DecisionsService,
     DecisionCoreService,

@@ -1,5 +1,5 @@
 /**
- * 本文件保留旧决策回放地址，并重定向到所属议事下的新回放地址。
+ * 本文件保留旧决策回放地址，并重定向到所属项目下的新回放地址。
  */
 import { notFound, redirect } from 'next/navigation';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
@@ -13,7 +13,7 @@ type DecisionReplayRouteProps = {
   params: Promise<{ decisionId: string }>;
 };
 
-/** 读取所属议事后跳转到新的嵌套回放地址。 */
+/** 读取所属项目后跳转到新的嵌套回放地址。 */
 export default async function DecisionReplayRoutePage({ params }: DecisionReplayRouteProps) {
   await requireServerPermission(SYSTEM_PERMISSIONS.decision.read);
   const { decisionId: rawDecisionId } = await params;
@@ -25,7 +25,7 @@ export default async function DecisionReplayRoutePage({ params }: DecisionReplay
 
   try {
     const decision = await getDecisionDetail(decisionId);
-    redirect(`/dashboard/matters/${decision.matterId}/decisions/${decision.id}/replay`);
+    redirect(`/dashboard/projects/${decision.projectId}/decisions/${decision.id}/replay`);
   } catch (error) {
     if (error instanceof DecisionServerError && error.status === 404) {
       notFound();

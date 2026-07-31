@@ -71,16 +71,16 @@ export function DecisionDetailPage({
   canVote,
 }: DecisionDetailPageProps) {
   const discussionHref = decision.area
-    ? `/dashboard/matters/${decision.matterId}?areaId=${decision.area.id}&decisionId=${decision.id}`
-    : `/dashboard/matters/${decision.matterId}?decisionId=${decision.id}`;
+    ? `/dashboard/projects/${decision.projectId}?areaId=${decision.area.id}&decisionId=${decision.id}`
+    : `/dashboard/projects/${decision.projectId}?decisionId=${decision.id}`;
 
   return (
     <main className="flex flex-col gap-4">
       <div>
         <Button asChild variant="ghost" size="sm">
-          <Link href={`/dashboard/matters/${decision.matterId}`}>
+          <Link href={`/dashboard/projects/${decision.projectId}`}>
             <ArrowLeft aria-hidden />
-            返回议事：{decision.matter.title}
+            返回项目：{decision.project.title}
           </Link>
         </Button>
       </div>
@@ -93,7 +93,7 @@ export function DecisionDetailPage({
               <CardTitle className="mt-1 text-2xl">{decision.title}</CardTitle>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{decision.area ? decision.area.name : '议事级'}</Badge>
+              <Badge variant="outline">{decision.area ? decision.area.name : '项目级'}</Badge>
               <Badge>{decision.status}</Badge>
             </div>
           </div>
@@ -123,7 +123,7 @@ export function DecisionDetailPage({
           <p className="text-sm text-muted-foreground">
             {decision.area
               ? `当前决策仅在“${decision.area.name}”小组内推进，公开信息需通过分区摘要发布。`
-              : '当前决策面向全部议事成员，可在各个可见讨论分区中关联和推进。'}
+              : '当前决策面向全部项目成员，可在各个可见讨论分区中关联和推进。'}
           </p>
           <Button asChild variant="outline">
             <Link href={discussionHref}>查看相关讨论</Link>
@@ -173,7 +173,7 @@ export function DecisionDetailPage({
       />
 
       <DecisionResolutionSection
-        matterId={decision.matterId}
+        projectId={decision.projectId}
         decisionId={decision.id}
         proposals={proposals}
         voteRounds={voteRounds}

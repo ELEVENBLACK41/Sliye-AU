@@ -14,10 +14,10 @@ const RESET_CONFIRMATION = 'RESET_DECISION_COLLABORATION';
 
 /** 协作领域数据统计结果。 */
 type CollaborationDataCounts = {
-  /** 议事数量。 */
-  matters: number;
-  /** 议事成员关系数量。 */
-  matterMembers: number;
+  /** 项目数量。 */
+  projects: number;
+  /** 项目成员关系数量。 */
+  projectMembers: number;
   /** 讨论分区数量。 */
   discussionAreas: number;
   /** 私有分区成员关系数量。 */
@@ -122,13 +122,13 @@ function describeDatabaseTarget(): string {
   return `${databaseUrl.hostname}:${databaseUrl.port || '5432'}/${databaseName}`;
 }
 
-/** 并行统计当前议事与决策协作模型中的数据数量。 */
+/** 并行统计当前项目与决策协作模型中的数据数量。 */
 async function countCollaborationData(
   prisma: PrismaClient,
 ): Promise<CollaborationDataCounts> {
   const [
-    matters,
-    matterMembers,
+    projects,
+    projectMembers,
     discussionAreas,
     discussionAreaMembers,
     decisions,
@@ -143,8 +143,8 @@ async function countCollaborationData(
     decisionTasks,
     collaborationAuditLogs,
   ] = await Promise.all([
-    prisma.matter.count(),
-    prisma.matterMember.count(),
+    prisma.project.count(),
+    prisma.projectMember.count(),
     prisma.discussionArea.count(),
     prisma.discussionAreaMember.count(),
     prisma.decision.count(),
@@ -161,8 +161,8 @@ async function countCollaborationData(
   ]);
 
   return {
-    matters,
-    matterMembers,
+    projects,
+    projectMembers,
     discussionAreas,
     discussionAreaMembers,
     decisions,
@@ -228,8 +228,8 @@ async function countPreservedData(
 function printCounts(counts: CollaborationDataCounts): void {
   console.log(`数据库：${describeDatabaseTarget()}`);
   console.table({
-    议事: counts.matters,
-    议事成员: counts.matterMembers,
+    项目: counts.projects,
+    项目成员: counts.projectMembers,
     讨论分区: counts.discussionAreas,
     私有分区成员: counts.discussionAreaMembers,
     决策: counts.decisions,
@@ -293,7 +293,7 @@ function assertResetAllowed(): void {
   }
 }
 
-/** 按外键依赖顺序在单个事务中清理议事与决策协作数据。 */
+/** 按外键依赖顺序在单个事务中清理项目与决策协作数据。 */
 async function resetCollaborationData(prisma: PrismaClient): Promise<void> {
   await prisma.$transaction(async (transaction) => {
     await transaction.decisionEvent.deleteMany();
@@ -303,7 +303,7 @@ async function resetCollaborationData(prisma: PrismaClient): Promise<void> {
     await transaction.meetingSession.deleteMany();
     await transaction.decision.deleteMany();
     await transaction.discussionArea.deleteMany();
-    await transaction.matter.deleteMany();
+    await transaction.project.deleteMany();
   });
 }
 

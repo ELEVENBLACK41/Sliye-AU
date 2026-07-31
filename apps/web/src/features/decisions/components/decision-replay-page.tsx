@@ -68,7 +68,7 @@ export function DecisionReplayPage({ decision, events, proposals, voteRounds, re
     <main className="flex flex-col gap-4">
       <div>
         <Button asChild variant="ghost" size="sm">
-          <Link href={`/dashboard/matters/${decision.matterId}/decisions/${decision.id}`}>
+          <Link href={`/dashboard/projects/${decision.projectId}/decisions/${decision.id}`}>
             <ArrowLeft aria-hidden />
             返回决策详情
           </Link>
@@ -86,7 +86,7 @@ export function DecisionReplayPage({ decision, events, proposals, voteRounds, re
               <CardTitle className="mt-1 text-2xl">{decision.title}</CardTitle>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Badge variant="outline">{decision.area ? decision.area.name : '议事级'}</Badge>
+              <Badge variant="outline">{decision.area ? decision.area.name : '项目级'}</Badge>
               <Badge>{decision.status}</Badge>
             </div>
           </div>

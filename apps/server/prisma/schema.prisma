@@ -89,7 +89,7 @@ enum PermissionKind {
 }
 
 enum ResourceType {
-  MATTER
+  PROJECT
   DISCUSSION_AREA
   DECISION
   MEETING
@@ -147,15 +147,15 @@ enum ResolutionStatus {
   REVOKED
 }
 
-/// 一项议事从协作中到关闭、归档的生命周期状态。
-enum MatterStatus {
+/// 一项项目从协作中到关闭、归档的生命周期状态。
+enum ProjectStatus {
   ACTIVE
   CLOSED
   ARCHIVED
 }
 
-/// 用户在议事成员列表中承担的资源级角色。
-enum MatterMemberRole {
+/// 用户在项目成员列表中承担的资源级角色。
+enum ProjectMemberRole {
   OWNER
   MANAGER
   MEMBER
@@ -168,7 +168,7 @@ enum DiscussionAreaType {
   PRIVATE
 }
 
-/// 私有讨论分区中的成员角色；公共区直接继承议事成员关系。
+/// 私有讨论分区中的成员角色；公共区直接继承项目成员关系。
 enum DiscussionAreaMemberRole {
   MANAGER
   MEMBER
@@ -277,9 +277,9 @@ model User {
 
   posts Post[]
 
-  mattersCreated             Matter[]               @relation("MatterCreator")
-  mattersOwned               Matter[]               @relation("MatterOwner")
-  matterMemberships          MatterMember[]
+  projectsCreated            Project[]              @relation("ProjectCreator")
+  projectsOwned              Project[]              @relation("ProjectOwner")
+  projectMemberships         ProjectMember[]
   discussionAreasCreated     DiscussionArea[]       @relation("DiscussionAreaCreator")
   discussionAreaMemberships  DiscussionAreaMember[]
   createdDecisions           Decision[]             @relation("DecisionCreator")
@@ -631,7 +631,7 @@ model Department {
   children Department[] @relation("DeptTree")
 
   users     User[]
-  matters   Matter[]
+  projects  Project[]
   decisions Decision[]
 
   @@index([parentId])
@@ -678,13 +678,13 @@ model AccessControlAuditLog {
   @@index([createdAt])
 }
 
-/// 一项议事是多项正式决策、公开讨论和私有分区的顶层协作容器。
-model Matter {
+/// 一项项目是多项正式决策、公开讨论和私有分区的顶层协作容器。
+model Project {
   id Int @id @default(autoincrement())
 
   title       String
   description String?
-  status      MatterStatus @default(ACTIVE)
+  status      ProjectStatus @default(ACTIVE)
 
   createdById Int
   ownerId     Int?
@@ -696,10 +696,10 @@ model Matter {
   updatedAt  DateTime  @default(now()) @updatedAt
 
   department Department @relation(fields: [deptId], references: [id], onDelete: Restrict)
-  createdBy  User       @relation("MatterCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  owner      User?      @relation("MatterOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy  User       @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  owner      User?      @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
-  members   MatterMember[]
+  members   ProjectMember[]
   areas     DiscussionArea[]
   decisions Decision[]
   auditLogs CollaborationAuditLog[]
@@ -711,37 +711,37 @@ model Matter {
   @@index([createdAt])
 }
 
-/// 用户与议事之间的显式成员关系；议事级决策以此为可见边界，小组决策还需校验分区成员关系。
-model MatterMember {
+/// 用户与项目之间的显式成员关系；项目级决策以此为可见边界，小组决策还需校验分区成员关系。
+model ProjectMember {
   id Int @id @default(autoincrement())
 
-  matterId Int
-  userId   Int
-  role     MatterMemberRole @default(MEMBER)
+  projectId Int
+  userId    Int
+  role      ProjectMemberRole @default(MEMBER)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([matterId, userId])
+  @@unique([projectId, userId])
   @@index([userId])
   @@index([role])
 }
 
-/// 议事内的公开或私有讨论边界；消息和会议均必须归属于一个分区。
+/// 项目内的公开或私有讨论边界；消息和会议均必须归属于一个分区。
 model DiscussionArea {
   id Int @id @default(autoincrement())
 
-  matterId    Int
+  projectId   Int
   createdById Int
 
   name        String
   description String?
   type        DiscussionAreaType   @default(PRIVATE)
   status      DiscussionAreaStatus @default(ACTIVE)
-  /// 公共区固定写入 PUBLIC，私有区为空；复合唯一键保证每项议事至多一个公共区。
+  /// 公共区固定写入 PUBLIC，私有区为空；复合唯一键保证每项项目至多一个公共区。
   publicKey   String?
 
   closedAt   DateTime?
@@ -749,8 +749,8 @@ model DiscussionArea {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  matter    Matter @relation(fields: [matterId], references: [id], onDelete: Restrict)
-  createdBy User   @relation("DiscussionAreaCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  createdBy User    @relation("DiscussionAreaCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
   members   DiscussionAreaMember[]
   messages  DiscussionMessage[]
@@ -758,8 +758,8 @@ model DiscussionArea {
   decisions Decision[]
   auditLogs CollaborationAuditLog[]
 
-  @@unique([matterId, publicKey])
-  @@index([matterId, type])
+  @@unique([projectId, publicKey])
+  @@index([projectId, type])
   @@index([createdById])
   @@index([status])
   @@index([createdAt])
@@ -832,7 +832,7 @@ model CollaborationAuditLog {
   id Int @id @default(autoincrement())
 
   actorId   Int
-  matterId  Int
+  projectId Int
   areaId    Int?
   meetingId Int?
 
@@ -845,12 +845,12 @@ model CollaborationAuditLog {
   createdAt DateTime @default(now())
 
   actor   User            @relation("CollaborationAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
-  matter  Matter          @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
   area    DiscussionArea? @relation(fields: [areaId], references: [id], onDelete: SetNull)
   meeting MeetingSession? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
 
   @@index([actorId])
-  @@index([matterId])
+  @@index([projectId])
   @@index([areaId])
   @@index([meetingId])
   @@index([action])
@@ -865,12 +865,12 @@ model Decision {
   description String?
   status      DecisionStatus @default(DRAFT)
 
-  matterId  Int
-  /// 为空表示议事级决策；有值时表示仅属于一个私有讨论分区的小组决策。
+  projectId Int
+  /// 为空表示项目级决策；有值时表示仅属于一个私有讨论分区的小组决策。
   areaId    Int?
   creatorId Int
   ownerId   Int?
-  /// 牵头部门只表达业务责任归属，不决定议事聊天可见性。
+  /// 牵头部门只表达业务责任归属，不决定项目聊天可见性。
   deptId    Int
 
   decidedAt  DateTime?
@@ -878,7 +878,7 @@ model Decision {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  matter     Matter          @relation(fields: [matterId], references: [id], onDelete: Restrict)
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
   area       DiscussionArea? @relation(fields: [areaId], references: [id], onDelete: Restrict)
   department Department      @relation(fields: [deptId], references: [id], onDelete: Restrict)
   creator    User            @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
@@ -893,7 +893,7 @@ model Decision {
   messages     DiscussionMessage[]
   meetingLinks MeetingDecision[]
 
-  @@index([matterId])
+  @@index([projectId])
   @@index([areaId])
   @@index([deptId])
   @@index([creatorId])
@@ -1190,7 +1190,7 @@ model MeetingSession {
   description String?
   status      MeetingStatus @default(SCHEDULED)
 
-  /// 议事内部稳定且不可重复的房间代码，不保存临时加入令牌。
+  /// 项目内部稳定且不可重复的房间代码，不保存临时加入令牌。
   roomKey        String  @unique @default(cuid())
   /// 外部音视频服务商标识，例如 LiveKit；为空表示尚未分配服务商。
   provider       String?
@@ -1224,7 +1224,7 @@ model MeetingSession {
   @@index([createdAt])
 }
 
-/// 会议与决策之间的多对多关联；一场会议可以讨论同一议事中的多项决策。
+/// 会议与决策之间的多对多关联；一场会议可以讨论同一项目中的多项决策。
 model MeetingDecision {
   meetingId  Int
   decisionId Int

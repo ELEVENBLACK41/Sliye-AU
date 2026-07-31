@@ -12,7 +12,7 @@ export default async function UsersPage() {
   const currentUser = await requireReadyUser();
   if (
     !hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.access.user.read) &&
-    !hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.matter.auditRead)
+    !hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.auditRead)
   ) {
     redirect('/dashboard/forbidden');
   }

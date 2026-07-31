@@ -44,14 +44,14 @@ export type DecisionSummaryRecord = {
   description: string | null;
   /** 决策当前状态。 */
   status: DecisionStatus;
-  /** 决策所属议事主键。 */
-  matterId: number;
-  /** 小组级决策所属分区主键；议事级决策为 `null`。 */
+  /** 决策所属项目主键。 */
+  projectId: number;
+  /** 小组级决策所属分区主键；项目级决策为 `null`。 */
   areaId: number | null;
   /** 小组级决策所属分区摘要。 */
   area: { id: number; name: string } | null;
-  /** 决策所属议事摘要。 */
-  matter: { id: number; title: string };
+  /** 决策所属项目摘要。 */
+  project: { id: number; title: string };
   /** 决策所属部门。 */
   department: DecisionDepartmentRecord;
   /** 决策创建人。 */

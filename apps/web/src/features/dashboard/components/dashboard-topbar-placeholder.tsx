@@ -15,7 +15,7 @@ import { DashboardAccountMenuPlaceholder } from './dashboard-account-menu-placeh
 /** 工作台主导航的文字与稳定标识。 */
 const navigationItems = [
   { key: 'dashboard', label: '工作台', href: '/dashboardnew' },
-  { key: 'matters', label: '议事空间', href: '/dashboardnew/matters' },
+  { key: 'projects', label: '项目空间', href: '/dashboardnew/projects' },
   { key: 'decisions', label: '决策中心', href: undefined },
   { key: 'meetings', label: '会议中心', href: undefined },
   { key: 'decision', label: '决策图谱', href: undefined },
@@ -33,8 +33,8 @@ const navigationItemLayoutClass =
 export function DashboardTopbarPlaceholder() {
   const pathname = usePathname();
   const navigationContainerRef = useRef<HTMLElement | null>(null);
-  const activeNavigation: MainNavigationKey = pathname.startsWith('/dashboardnew/matters')
-    ? 'matters'
+  const activeNavigation: MainNavigationKey = pathname.startsWith('/dashboardnew/projects')
+    ? 'projects'
     : 'dashboard';
   const activeNavigationRef = useRef<MainNavigationKey>(activeNavigation);
   const hasPositionedIndicatorRef = useRef(false);

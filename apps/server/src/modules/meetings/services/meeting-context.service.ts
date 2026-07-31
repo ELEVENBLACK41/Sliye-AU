@@ -40,7 +40,7 @@ export class MeetingContextService {
         id: meetingId,
         decisionLinks: { some: { decisionId } },
         participants: { some: { userId: actorUserId } },
-        area: { matter: { decisions: { some: { id: decisionId } } } },
+        area: { project: { decisions: { some: { id: decisionId } } } },
       },
       select: {
         id: true,

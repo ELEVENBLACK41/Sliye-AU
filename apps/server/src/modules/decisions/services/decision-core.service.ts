@@ -15,8 +15,8 @@ import {
   DecisionStatus,
   DiscussionAreaMemberRole,
   DiscussionAreaType,
-  MatterMemberRole,
-  MatterStatus,
+  ProjectMemberRole,
+  ProjectStatus,
   MeetingStatus,
   ParticipantRole,
 } from '../../../generated/prisma';
@@ -29,11 +29,11 @@ import {
   toDecisionEvent,
   toDecisionSummary,
 } from '../decisions.mapper';
-import { MatterAccessService } from '../../matters/services/matter-access.service';
+import { ProjectAccessService } from '../../projects/services/project-access.service';
 
 /** 决策列表与详情统一加载的基础关系。 */
 const decisionSummaryInclude = {
-  matter: { select: { id: true, title: true } },
+  project: { select: { id: true, title: true } },
   area: { select: { id: true, name: true } },
   department: true,
   creator: {
@@ -49,18 +49,18 @@ const decisionSummaryInclude = {
 
 /** 创建决策时写入的一条初始参与关系。 */
 type InitialDecisionParticipant = {
-  /** 被继承的议事或分区成员主键。 */
+  /** 被继承的项目或分区成员主键。 */
   userId: number;
   /** 成员在决策中的初始协作角色。 */
   role: ParticipantRole;
 };
 
-/** 把议事成员身份映射为决策中的默认协作角色。 */
-function mapMatterMemberRole(role: MatterMemberRole): ParticipantRole {
-  if (role === MatterMemberRole.OWNER || role === MatterMemberRole.MANAGER) {
+/** 把项目成员身份映射为决策中的默认协作角色。 */
+function mapProjectMemberRole(role: ProjectMemberRole): ParticipantRole {
+  if (role === ProjectMemberRole.OWNER || role === ProjectMemberRole.MANAGER) {
     return ParticipantRole.EDITOR;
   }
-  if (role === MatterMemberRole.MEMBER) {
+  if (role === ProjectMemberRole.MEMBER) {
     return ParticipantRole.APPROVER;
   }
   return ParticipantRole.VIEWER;
@@ -97,7 +97,7 @@ export class DecisionCoreService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authorizationService: AuthorizationService,
-    private readonly matterAccessService: MatterAccessService,
+    private readonly projectAccessService: ProjectAccessService,
   ) {}
 
   /** 返回经过数据范围裁剪的决策列表。 */
@@ -117,18 +117,18 @@ export class DecisionCoreService {
     return decisions.map(toDecisionSummary);
   }
 
-  /** 返回指定议事下当前成员可见的全部正式决策。 */
-  async listMatter(
+  /** 返回指定项目下当前成员可见的全部正式决策。 */
+  async listProject(
     authorization: AuthorizationContext,
-    matterId: number,
+    projectId: number,
   ): Promise<DecisionListResponse> {
-    await this.matterAccessService.findMatter(authorization, matterId);
+    await this.projectAccessService.findProject(authorization, projectId);
     const scopeWhere = await this.authorizationService.buildDecisionWhere(
       authorization,
       'decision:read',
     );
     const decisions = await this.prisma.decision.findMany({
-      where: { AND: [{ matterId }, scopeWhere] },
+      where: { AND: [{ projectId }, scopeWhere] },
       include: decisionSummaryInclude,
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
     });
@@ -140,7 +140,7 @@ export class DecisionCoreService {
   async get(
     authorization: AuthorizationContext,
     decisionId: number,
-    matterId?: number,
+    projectId?: number,
   ): Promise<DecisionDetail> {
     const scopeWhere = await this.authorizationService.buildDecisionWhere(
       authorization,
@@ -150,7 +150,7 @@ export class DecisionCoreService {
       where: {
         AND: [
           { id: decisionId },
-          ...(matterId === undefined ? [] : [{ matterId }]),
+          ...(projectId === undefined ? [] : [{ projectId }]),
           scopeWhere,
         ],
       },
@@ -315,20 +315,20 @@ export class DecisionCoreService {
     return toDecisionDetail(updatedDecision);
   }
 
-  /** 在进行中的议事内创建决策，并继承当前协作范围成员和时间线事件。 */
+  /** 在进行中的项目内创建决策，并继承当前协作范围成员和时间线事件。 */
   async create(
     authorization: AuthorizationContext,
-    matterId: number,
+    projectId: number,
     dto: CreateDecisionDto,
   ): Promise<DecisionDetail> {
-    const matter = await this.matterAccessService.findMatter(
+    const project = await this.projectAccessService.findProject(
       authorization,
-      matterId,
+      projectId,
     );
-    if (matter.status !== MatterStatus.ACTIVE) {
+    if (project.status !== ProjectStatus.ACTIVE) {
       throw new BusinessException({
-        code: API_ERROR_CODES.MATTER_READ_ONLY,
-        message: '只有进行中的议事可以创建决策',
+        code: API_ERROR_CODES.PROJECT_READ_ONLY,
+        message: '只有进行中的项目可以创建决策',
         status: 409,
       });
     }
@@ -339,16 +339,16 @@ export class DecisionCoreService {
     );
 
     if (dto.areaId !== undefined) {
-      const area = await this.matterAccessService.findArea(
+      const area = await this.projectAccessService.findArea(
         authorization,
-        matterId,
+        projectId,
         dto.areaId,
       );
-      this.matterAccessService.assertAreaWritable(area);
+      this.projectAccessService.assertAreaWritable(area);
       if (area.type !== DiscussionAreaType.PRIVATE) {
         throw new BusinessException({
           code: API_ERROR_CODES.DECISION_AREA_INVALID,
-          message: '公共讨论区应创建议事级决策',
+          message: '公共讨论区应创建项目级决策',
           status: 400,
         });
       }
@@ -361,7 +361,7 @@ export class DecisionCoreService {
           status: MeetingStatus.LIVE,
           ...(dto.areaId === undefined ? {} : { areaId: dto.areaId }),
           area: {
-            matterId,
+            projectId,
             OR: [
               { type: 'PUBLIC' },
               { members: { some: { userId: authorization.userId } } },
@@ -384,17 +384,17 @@ export class DecisionCoreService {
       const inheritedParticipants =
         dto.areaId === undefined
           ? (
-              await tx.matterMember.findMany({
-                where: { matterId },
+              await tx.projectMember.findMany({
+                where: { projectId },
                 select: { userId: true, role: true },
               })
             ).map((member) => ({
               userId: member.userId,
-              role: mapMatterMemberRole(member.role),
+              role: mapProjectMemberRole(member.role),
             }))
           : (
               await tx.discussionAreaMember.findMany({
-                where: { areaId: dto.areaId, area: { matterId } },
+                where: { areaId: dto.areaId, area: { projectId } },
                 select: { userId: true, role: true },
               })
             ).map((member) => ({
@@ -410,7 +410,7 @@ export class DecisionCoreService {
         data: {
           title: dto.title,
           description: dto.description,
-          matterId,
+          projectId,
           areaId: dto.areaId,
           deptId: dto.departmentId,
           creatorId: authorization.userId,
@@ -424,9 +424,9 @@ export class DecisionCoreService {
               type: DecisionEventType.DECISION_CREATED,
               title: '创建决策',
               payload: {
-                matterId,
+                projectId,
                 areaId: dto.areaId ?? null,
-                scope: dto.areaId === undefined ? 'MATTER' : 'AREA',
+                scope: dto.areaId === undefined ? 'PROJECT' : 'AREA',
                 departmentId: dto.departmentId,
                 meetingId: dto.meetingId ?? null,
                 inheritedParticipantCount: initialParticipants.length,

@@ -12,8 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/componen
 
 /** 正式决议展示组件属性。 */
 type DecisionResolutionSectionProps = {
-  /** 所属议事数据库主键，用于生成嵌套回放地址。 */
-  matterId?: number;
+  /** 所属项目数据库主键，用于生成嵌套回放地址。 */
+  projectId?: number;
   /** 当前决策数据库主键。 */
   decisionId: number;
   /** 当前决策的全部提案。 */
@@ -30,7 +30,7 @@ type DecisionResolutionSectionProps = {
 
 /** 展示最终结论，并提供全过程回放和形成正式决议入口。 */
 export function DecisionResolutionSection({
-  matterId,
+  projectId,
   decisionId,
   proposals,
   voteRounds,
@@ -51,8 +51,8 @@ export function DecisionResolutionSection({
           <Button asChild variant="outline">
             <Link
               href={
-                matterId
-                  ? `/dashboard/matters/${matterId}/decisions/${decisionId}/replay`
+                projectId
+                  ? `/dashboard/projects/${projectId}/decisions/${decisionId}/replay`
                   : `/dashboard/decisions/${decisionId}/replay`
               }
             >

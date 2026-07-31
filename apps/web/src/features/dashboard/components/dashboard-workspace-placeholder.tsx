@@ -7,7 +7,7 @@ import { Card } from '@workspace/ui/components/card';
 import { DashboardAiAssistantPlaceholder } from './dashboard-ai-assistant-placeholder';
 import { DashboardDecisionCardStack } from './dashboard-decision-card-stack';
 import { DashboardMeetingSchedulePlaceholder } from './dashboard-meeting-schedule-placeholder';
-import { DashboardMatterStatusPlaceholder } from './dashboard-matter-status-placeholder';
+import { DashboardProjectStatusPlaceholder } from './dashboard-project-status-placeholder';
 import { DashboardProfileCardPlaceholder } from './dashboard-profile-card-placeholder';
 import { DashboardProposalAdoptionPlaceholder } from './dashboard-proposal-adoption-placeholder';
 import { DashboardResolutionTrendPlaceholder } from './dashboard-resolution-trend-placeholder';
@@ -87,11 +87,11 @@ function SchedulePanelPlaceholder() {
   );
 }
 
-/** 渲染议事空间状态分布卡。 */
-function MatterStatusPanelPlaceholder() {
+/** 渲染项目空间状态分布卡。 */
+function ProjectStatusPanelPlaceholder() {
   return (
-    <WorkspacePanel label="议事空间状态分布" className="p-5 xl:h-48 xl:shrink-0">
-      <DashboardMatterStatusPlaceholder />
+    <WorkspacePanel label="项目空间状态分布" className="p-5 xl:h-48 xl:shrink-0">
+      <DashboardProjectStatusPlaceholder />
     </WorkspacePanel>
   );
 }
@@ -133,7 +133,7 @@ export function DashboardWorkspacePlaceholder() {
       </div>
 
       <div className="grid min-w-0 gap-2.5 md:col-span-2 md:grid-cols-2 xl:col-start-4 xl:row-start-1 xl:row-end-3 xl:flex xl:h-full xl:flex-col">
-        <MatterStatusPanelPlaceholder />
+        <ProjectStatusPanelPlaceholder />
         <DecisionCardStackPanel />
       </div>
     </section>

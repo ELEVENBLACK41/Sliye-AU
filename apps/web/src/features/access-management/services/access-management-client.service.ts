@@ -14,15 +14,15 @@ import type {
   UpdateRoleRequestPayload,
   UpdateUserDepartmentRequestPayload,
 } from '@workspace/contracts/access';
-import type { MatterAuditReadRequestPayload, MatterAuditReadResponse } from '@workspace/contracts/matters';
+import type { ProjectAuditReadRequestPayload, ProjectAuditReadResponse } from '@workspace/contracts/projects';
 
 import { requestData } from '@/services/request';
 
-/** 通过独立权限管理入口审计读取私有议事快照。 */
-export function readPrivateMatterContent(payload: MatterAuditReadRequestPayload): Promise<MatterAuditReadResponse> {
-  return requestData<MatterAuditReadResponse, MatterAuditReadRequestPayload>(
-    '/api/access-management/matter-audits/private-content',
-    { method: 'POST', body: payload, errorMessage: '私有议事内容审计读取失败' },
+/** 通过独立权限管理入口审计读取私有项目快照。 */
+export function readPrivateProjectContent(payload: ProjectAuditReadRequestPayload): Promise<ProjectAuditReadResponse> {
+  return requestData<ProjectAuditReadResponse, ProjectAuditReadRequestPayload>(
+    '/api/access-management/project-audits/private-content',
+    { method: 'POST', body: payload, errorMessage: '私有项目内容审计读取失败' },
   );
 }
 

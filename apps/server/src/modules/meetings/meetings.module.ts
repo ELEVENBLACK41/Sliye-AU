@@ -3,7 +3,7 @@
  */
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import { MattersModule } from '../matters/matters.module';
+import { ProjectsModule } from '../projects/projects.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MeetingLiveKitWebhookController } from './meeting-livekit-webhook.controller';
 import { MeetingsController } from './meetings.controller';
@@ -14,7 +14,7 @@ import { MeetingLiveKitService } from './services/meeting-livekit.service';
 import { MeetingLiveKitWebhookService } from './services/meeting-livekit-webhook.service';
 
 @Module({
-  imports: [AuthModule, MattersModule, NotificationsModule],
+  imports: [AuthModule, ProjectsModule, NotificationsModule],
   controllers: [MeetingsController, MeetingLiveKitWebhookController],
   providers: [
     MeetingsService,

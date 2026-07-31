@@ -1,5 +1,5 @@
 /**
- * 本文件验证议事分区会议的创建、可见性、参会人边界和多决策时间线。
+ * 本文件验证项目分区会议的创建、可见性、参会人边界和多决策时间线。
  */
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { PrismaService } from '../../database/prisma.service';
@@ -7,16 +7,16 @@ import {
   DiscussionAreaMemberRole,
   DiscussionAreaStatus,
   DiscussionAreaType,
-  MatterMemberRole,
-  MatterStatus,
+  ProjectMemberRole,
+  ProjectStatus,
   MeetingParticipantRole,
   MeetingStatus,
 } from '../../generated/prisma';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import type {
   DiscussionAreaAccessContext,
-  MatterAccessService,
-} from '../matters/services/matter-access.service';
+  ProjectAccessService,
+} from '../projects/services/project-access.service';
 import type { MeetingDetailRecord } from './meetings.mapper';
 import { MeetingsService } from './meetings.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
@@ -59,7 +59,7 @@ function createMeetingRecord(
     createdBy: { id: 7, name: '负责人', avatarUrl: null },
     area: {
       id: 40,
-      matterId: 10,
+      projectId: 10,
       name: '公共讨论',
       type: DiscussionAreaType.PUBLIC,
     },
@@ -118,11 +118,11 @@ function createAreaContext(
 ): DiscussionAreaAccessContext {
   return {
     id: 40,
-    matterId: 10,
+    projectId: 10,
     type,
     status: DiscussionAreaStatus.ACTIVE,
-    matterStatus: MatterStatus.ACTIVE,
-    matterMemberRole: MatterMemberRole.OWNER,
+    projectStatus: ProjectStatus.ACTIVE,
+    projectMemberRole: ProjectMemberRole.OWNER,
     areaMemberRole:
       type === DiscussionAreaType.PRIVATE
         ? DiscussionAreaMemberRole.MANAGER
@@ -144,7 +144,7 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
   };
   const prisma = {
     decision: { count: jest.fn().mockResolvedValue(2) },
-    matterMember: { count: jest.fn().mockResolvedValue(2) },
+    projectMember: { count: jest.fn().mockResolvedValue(2) },
     discussionAreaMember: { count: jest.fn().mockResolvedValue(2) },
     meetingSession: {
       create: jest.fn(),
@@ -157,15 +157,15 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
     ),
   };
   const areaContext = createAreaContext(type);
-  const matterAccessService = {
-    findMatter: jest.fn().mockResolvedValue({
+  const projectAccessService = {
+    findProject: jest.fn().mockResolvedValue({
       id: 10,
-      status: MatterStatus.ACTIVE,
-      memberRole: MatterMemberRole.OWNER,
+      status: ProjectStatus.ACTIVE,
+      memberRole: ProjectMemberRole.OWNER,
     }),
     findArea: jest.fn().mockResolvedValue(areaContext),
-    buildVisibleAreaWhere: jest.fn((userId: number, matterId?: number) => ({
-      ...(matterId === undefined ? {} : { matterId }),
+    buildVisibleAreaWhere: jest.fn((userId: number, projectId?: number) => ({
+      ...(projectId === undefined ? {} : { projectId }),
       visibleToUserId: userId,
     })),
     assertAreaMeetingManager: jest.fn(),
@@ -180,16 +180,16 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
   return {
     prisma,
     transaction,
-    matterAccessService,
+    projectAccessService,
     service: new MeetingsService(
       prisma as unknown as PrismaService,
-      matterAccessService as unknown as MatterAccessService,
+      projectAccessService as unknown as ProjectAccessService,
       notificationService as unknown as NotificationService,
       liveKitService,
     ),
     lifecycleService: new MeetingLifecycleService(
       prisma as unknown as PrismaService,
-      matterAccessService as unknown as MatterAccessService,
+      projectAccessService as unknown as ProjectAccessService,
       liveKitService as unknown as MeetingLiveKitService,
       notificationService as unknown as NotificationService,
     ),
@@ -200,7 +200,7 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
 
 describe('MeetingsService', () => {
   it('公共分区应能创建关联多项决策的会议', async () => {
-    const { service, prisma, matterAccessService, notificationService } =
+    const { service, prisma, projectAccessService, notificationService } =
       createHarness();
     prisma.meetingSession.create.mockResolvedValue(createMeetingRecord());
 
@@ -215,12 +215,12 @@ describe('MeetingsService', () => {
       }),
     ).resolves.toMatchObject({
       id: 30,
-      matterId: 10,
+      projectId: 10,
       areaId: 40,
       participantCount: 2,
       decisions: [{ id: 20 }, { id: 21 }],
     });
-    expect(matterAccessService.assertAreaMeetingManager).toHaveBeenCalled();
+    expect(projectAccessService.assertAreaMeetingManager).toHaveBeenCalled();
     expect(notificationService.notifyMeetingInvited).toHaveBeenCalledWith({
       recipientIds: [8],
       meetingId: 30,
@@ -231,7 +231,7 @@ describe('MeetingsService', () => {
     expect(prisma.decision.count).toHaveBeenCalledWith({
       where: {
         id: { in: [20, 21] },
-        matterId: 10,
+        projectId: 10,
         OR: [{ areaId: null }, { areaId: 40 }],
       },
     });
@@ -279,17 +279,17 @@ describe('MeetingsService', () => {
   });
 
   it('会议列表应复用当前用户可见分区条件', async () => {
-    const { service, prisma, matterAccessService } = createHarness();
+    const { service, prisma, projectAccessService } = createHarness();
     prisma.meetingSession.findMany.mockResolvedValue([]);
 
     await expect(service.list(createAuthorization(), 10)).resolves.toEqual([]);
-    expect(matterAccessService.buildVisibleAreaWhere).toHaveBeenCalledWith(
+    expect(projectAccessService.buildVisibleAreaWhere).toHaveBeenCalledWith(
       7,
       10,
     );
     expect(prisma.meetingSession.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { area: { matterId: 10, visibleToUserId: 7 } },
+        where: { area: { projectId: 10, visibleToUserId: 7 } },
       }),
     );
   });
@@ -317,7 +317,7 @@ describe('MeetingsService', () => {
     });
   });
 
-  it('普通议事会议不应写入决策时间线', async () => {
+  it('普通项目会议不应写入决策时间线', async () => {
     const { lifecycleService, prisma, transaction } = createHarness();
     const scheduled = createMeetingRecord({ decisionLinks: [] });
     const live = createMeetingRecord({

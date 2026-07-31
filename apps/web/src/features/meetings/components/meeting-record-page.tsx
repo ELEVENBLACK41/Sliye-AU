@@ -3,7 +3,7 @@
  */
 import Link from 'next/link';
 import { ArrowLeft, CalendarClock, CircleCheckBig, FileClock, UsersRound } from 'lucide-react';
-import type { DiscussionAreaSummary, MatterDetail } from '@workspace/contracts/matters';
+import type { DiscussionAreaSummary, ProjectDetail } from '@workspace/contracts/projects';
 import type { MeetingDetail } from '@workspace/contracts/meetings';
 
 import { MeetingLifecycleActions } from './meeting-lifecycle-actions';
@@ -16,8 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/componen
 type MeetingRecordPageProps = {
   /** 当前会议详情。 */
   meeting: MeetingDetail;
-  /** 会议所属议事。 */
-  matter: MatterDetail;
+  /** 会议所属项目。 */
+  project: ProjectDetail;
   /** 会议所属讨论分区。 */
   area: DiscussionAreaSummary;
   /** 当前用户是否可以开始待开始的会议。 */
@@ -25,9 +25,9 @@ type MeetingRecordPageProps = {
 };
 
 /** 渲染会议准备信息或结束后的精简记录，不加载实时聊天和音视频能力。 */
-export function MeetingRecordPage({ meeting, matter, area, canManageMeeting }: MeetingRecordPageProps) {
+export function MeetingRecordPage({ meeting, project, area, canManageMeeting }: MeetingRecordPageProps) {
   const isScheduled = meeting.status === 'SCHEDULED';
-  const areaHref = `/dashboard/matters/${meeting.matterId}?areaId=${meeting.areaId}`;
+  const areaHref = `/dashboard/projects/${meeting.projectId}?areaId=${meeting.areaId}`;
 
   return (
     <main className="min-h-dvh bg-muted/30">
@@ -35,7 +35,7 @@ export function MeetingRecordPage({ meeting, matter, area, canManageMeeting }: M
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-3 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Button asChild variant="ghost" size="icon-sm">
-              <Link href={areaHref} aria-label="返回议事分区">
+              <Link href={areaHref} aria-label="返回项目分区">
                 <ArrowLeft aria-hidden />
               </Link>
             </Button>
@@ -48,7 +48,7 @@ export function MeetingRecordPage({ meeting, matter, area, canManageMeeting }: M
                 </Badge>
               </div>
               <p className="truncate text-xs text-muted-foreground">
-                {matter.title} · {area.name}
+                {project.title} · {area.name}
               </p>
             </div>
           </div>
@@ -105,14 +105,14 @@ export function MeetingRecordPage({ meeting, matter, area, canManageMeeting }: M
                     >
                       <Link
                         className="text-sm font-medium hover:underline"
-                        href={`/dashboard/matters/${matter.id}/decisions/${decision.id}`}
+                        href={`/dashboard/projects/${project.id}/decisions/${decision.id}`}
                       >
                         {decision.title}
                       </Link>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">{formatDecisionStatus(decision.status)}</Badge>
                         <Button asChild size="sm" variant="ghost">
-                          <Link href={`/dashboard/matters/${matter.id}/decisions/${decision.id}/replay`}>过程回放</Link>
+                          <Link href={`/dashboard/projects/${project.id}/decisions/${decision.id}/replay`}>过程回放</Link>
                         </Button>
                       </div>
                     </li>

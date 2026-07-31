@@ -1,5 +1,5 @@
 /**
- * 本文件负责议事分区会议的创建、可见列表和详情查询。
+ * 本文件负责项目分区会议的创建、可见列表和详情查询。
  */
 import { Injectable } from '@nestjs/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
@@ -14,7 +14,7 @@ import {
   MeetingParticipantRole,
 } from '../../generated/prisma';
 import type { AuthorizationContext } from '../auth/types/auth.types';
-import { MatterAccessService } from '../matters/services/matter-access.service';
+import { ProjectAccessService } from '../projects/services/project-access.service';
 import { NotificationService } from '../notifications/services/notification.service';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
 import {
@@ -26,30 +26,30 @@ import {
 
 @Injectable()
 export class MeetingsService {
-  /** 注入数据库、统一议事分区授权和全站通知服务。 */
+  /** 注入数据库、统一项目分区授权和全站通知服务。 */
   constructor(
     private readonly prisma: PrismaService,
-    private readonly matterAccessService: MatterAccessService,
+    private readonly projectAccessService: ProjectAccessService,
     private readonly notificationService: NotificationService,
   ) {}
 
-  /** 在当前用户可管理的议事分区中创建会议和多决策关联。 */
+  /** 在当前用户可管理的项目分区中创建会议和多决策关联。 */
   async create(
     authorization: AuthorizationContext,
-    matterId: number,
+    projectId: number,
     dto: CreateMeetingDto,
   ): Promise<MeetingDetail> {
-    const area = await this.matterAccessService.findArea(
+    const area = await this.projectAccessService.findArea(
       authorization,
-      matterId,
+      projectId,
       dto.areaId,
     );
-    this.matterAccessService.assertAreaMeetingManager(area);
-    this.matterAccessService.assertAreaWritable(area);
+    this.projectAccessService.assertAreaMeetingManager(area);
+    this.projectAccessService.assertAreaWritable(area);
 
     await Promise.all([
-      this.assertDecisionsInArea(matterId, dto.areaId, dto.decisionIds),
-      this.assertParticipantsVisible(matterId, dto.areaId, area.type, [
+      this.assertDecisionsInArea(projectId, dto.areaId, dto.decisionIds),
+      this.assertParticipantsVisible(projectId, dto.areaId, area.type, [
         ...new Set([authorization.userId, ...dto.participantIds]),
       ]),
     ]);
@@ -104,17 +104,17 @@ export class MeetingsService {
     return toMeetingDetail(meeting);
   }
 
-  /** 查询一项议事下当前用户可见分区中的全部会议。 */
+  /** 查询一项项目下当前用户可见分区中的全部会议。 */
   async list(
     authorization: AuthorizationContext,
-    matterId: number,
+    projectId: number,
   ): Promise<MeetingListResponse> {
-    await this.matterAccessService.findMatter(authorization, matterId);
+    await this.projectAccessService.findProject(authorization, projectId);
     const meetings = await this.prisma.meetingSession.findMany({
       where: {
-        area: this.matterAccessService.buildVisibleAreaWhere(
+        area: this.projectAccessService.buildVisibleAreaWhere(
           authorization.userId,
-          matterId,
+          projectId,
         ),
       },
       include: meetingSummaryInclude,
@@ -132,7 +132,7 @@ export class MeetingsService {
     const meeting = await this.prisma.meetingSession.findFirst({
       where: {
         id: meetingId,
-        area: this.matterAccessService.buildVisibleAreaWhere(
+        area: this.projectAccessService.buildVisibleAreaWhere(
           authorization.userId,
         ),
       },
@@ -149,9 +149,9 @@ export class MeetingsService {
     return toMeetingDetail(meeting);
   }
 
-  /** 校验会议只关联议事级决策或当前分区自己的小组决策。 */
+  /** 校验会议只关联项目级决策或当前分区自己的小组决策。 */
   private async assertDecisionsInArea(
-    matterId: number,
+    projectId: number,
     areaId: number,
     decisionIds: number[],
   ): Promise<void> {
@@ -161,14 +161,14 @@ export class MeetingsService {
     const count = await this.prisma.decision.count({
       where: {
         id: { in: decisionIds },
-        matterId,
+        projectId,
         OR: [{ areaId: null }, { areaId }],
       },
     });
     if (count !== decisionIds.length) {
       throw new BusinessException({
         code: API_ERROR_CODES.MEETING_DECISION_INVALID,
-        message: '会议只能关联议事级决策或当前分区的小组决策',
+        message: '会议只能关联项目级决策或当前分区的小组决策',
         status: 400,
       });
     }
@@ -176,15 +176,15 @@ export class MeetingsService {
 
   /** 校验受邀用户全部位于公共区或私有区的可见成员集合。 */
   private async assertParticipantsVisible(
-    matterId: number,
+    projectId: number,
     areaId: number,
     areaType: DiscussionAreaType,
     participantIds: number[],
   ): Promise<void> {
     const count =
       areaType === DiscussionAreaType.PUBLIC
-        ? await this.prisma.matterMember.count({
-            where: { matterId, userId: { in: participantIds } },
+        ? await this.prisma.projectMember.count({
+            where: { projectId, userId: { in: participantIds } },
           })
         : await this.prisma.discussionAreaMember.count({
             where: { areaId, userId: { in: participantIds } },
@@ -194,7 +194,7 @@ export class MeetingsService {
         code: API_ERROR_CODES.MEETING_PARTICIPANT_INVALID,
         message:
           areaType === DiscussionAreaType.PUBLIC
-            ? '公共会议只能邀请当前议事成员'
+            ? '公共会议只能邀请当前项目成员'
             : '私有会议只能邀请当前私有分区成员',
         status: 400,
       });
