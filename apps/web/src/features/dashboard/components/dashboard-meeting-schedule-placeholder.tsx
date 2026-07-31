@@ -260,7 +260,7 @@ function MeetingScheduleTimeline({ selectedDayIndex, onDaySelect }: MeetingSched
   }, [selectedDayIndex]);
 
   return (
-    <div className="overflow-x-auto pb-1">
+    <div className=" pb-1">
       <div className="min-w-[32rem]">
         <div className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3">
           <div className="flex items-end pb-2 text-[10px] font-medium text-black/35">
@@ -363,9 +363,11 @@ export function DashboardMeetingSchedulePlaceholder() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 xl:gap-[clamp(0.5rem,calc(1.8cqh+0.405rem),1rem)]">
       <div>
-        <h2 className="text-xl font-medium tracking-tight text-[#292a27]">我的会议</h2>
+        <h2 className="text-xl font-medium tracking-tight text-[#292a27] xl:text-[clamp(1.125rem,calc(2.2cqh+0.495rem),1.25rem)]">
+          我的会议
+        </h2>
         <p className="mt-1 flex items-center gap-1 text-xs text-black/40">
           <MapPin className="size-3" aria-hidden />
           2026年7月27日—8月2日

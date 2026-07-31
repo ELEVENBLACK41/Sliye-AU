@@ -8,7 +8,9 @@ import { DashboardWorkspacePlaceholder } from './dashboard-workspace-placeholder
 export function DashboardPrototype() {
   return (
     <>
+    {/* 上班区域 */}
       <DashboardSummaryPlaceholder />
+    {/* 下班区域 */}
       <DashboardWorkspacePlaceholder />
     </>
   );

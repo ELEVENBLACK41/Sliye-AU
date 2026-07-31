@@ -48,7 +48,7 @@ function ProfilePanelPlaceholder() {
   return (
     <WorkspacePanel
       label="人员资料卡占位"
-      className="relative min-h-72 overflow-hidden border-white/35 bg-[#d7d2c8] lg:min-h-[22rem]"
+      className="relative min-h-72 overflow-hidden border-white/35 bg-[#d7d2c8] lg:min-h-[22rem] xl:min-h-0"
     >
       <DashboardProfileCardPlaceholder />
     </WorkspacePanel>
@@ -63,7 +63,10 @@ function AiAssistantPanelPlaceholder() {
 /** 渲染本年度正式决策柱状趋势卡*/
 function ResolutionTrendPanelPlaceholder() {
   return (
-    <WorkspacePanel label="本年度正式决议趋势" className="h-full min-h-72 p-5 xl:min-h-[22rem]">
+    <WorkspacePanel
+      label="本年度正式决议趋势"
+      className="h-full min-h-72 overflow-hidden p-5 xl:min-h-0 xl:p-[clamp(1rem,calc(2.2cqh+0.495rem),1.25rem)]"
+    >
       <DashboardResolutionTrendPlaceholder />
     </WorkspacePanel>
   );
@@ -72,7 +75,10 @@ function ResolutionTrendPanelPlaceholder() {
 /** 渲染全部已结束提案的采纳率环形统计卡。 */
 function ProposalAdoptionPanelPlaceholder() {
   return (
-    <WorkspacePanel label="全部已结束提案采纳率" className="h-full min-h-72 p-5 xl:min-h-[22rem]">
+    <WorkspacePanel
+      label="全部已结束提案采纳率"
+      className="h-full min-h-72 overflow-hidden p-5 xl:min-h-0 xl:p-[clamp(1rem,calc(2.2cqh+0.495rem),1.25rem)]"
+    >
       <DashboardProposalAdoptionPlaceholder />
     </WorkspacePanel>
   );
@@ -81,7 +87,10 @@ function ProposalAdoptionPanelPlaceholder() {
 /** 渲染中下方日程栅格占位。 */
 function SchedulePanelPlaceholder() {
   return (
-    <WorkspacePanel label="我的会议日程" className="min-h-[20rem] overflow-hidden p-5">
+    <WorkspacePanel
+      label="我的会议日程"
+      className="min-h-[20rem] overflow-hidden p-5 xl:min-h-0 xl:p-[clamp(1rem,calc(2.2cqh+0.495rem),1.25rem)]"
+    >
       <DashboardMeetingSchedulePlaceholder />
     </WorkspacePanel>
   );
@@ -99,7 +108,7 @@ function ProjectStatusPanelPlaceholder() {
 /** 渲染右侧深色决策卡片堆。 */
 function DecisionCardStackPanel() {
   return (
-    <WorkspacePanel label="可拖拽决策卡片堆" tone="dark" className="min-h-[26rem] flex-1 overflow-hidden">
+    <WorkspacePanel label="可拖拽决策卡片堆" tone="dark" className="min-h-[26rem] flex-1 overflow-hidden xl:min-h-0">
       <DashboardDecisionCardStack />
     </WorkspacePanel>
   );
@@ -109,7 +118,7 @@ function DecisionCardStackPanel() {
 export function DashboardWorkspacePlaceholder() {
   return (
     <section
-      className="grid flex-1 gap-2.5 md:grid-cols-2 xl:grid-cols-[minmax(13rem,0.75fr)_minmax(14rem,0.775fr)_minmax(14rem,0.775fr)_minmax(15rem,0.8fr)] xl:grid-rows-[minmax(22rem,1fr)_minmax(20rem,1fr)]"
+      className="grid flex-1 gap-2.5 md:grid-cols-2 xl:h-[max(36rem,calc(100dvh-22.5rem))] xl:flex-none xl:grid-cols-[minmax(13rem,0.75fr)_minmax(14rem,0.775fr)_minmax(14rem,0.775fr)_minmax(15rem,0.8fr)] xl:grid-rows-[minmax(0,1.1fr)_minmax(0,1fr)] xl:[container-type:size]"
       aria-label="工作台主体占位"
     >
       <div className="min-w-0 xl:col-start-1 xl:row-start-1 [&>*]:h-full">

@@ -120,7 +120,7 @@ function clamp(value: number, minimum: number, maximum: number) {
 function DecisionCard({ item, stackIndex }: { item: DecisionStackItem; stackIndex: number }) {
   return (
     <article
-      className="flex h-full flex-col overflow-hidden rounded-[1.4rem] border border-white/12 bg-[#3a3b37] p-4 text-white shadow-[0_22px_45px_rgba(0,0,0,0.34)]"
+      className="flex h-full flex-col overflow-hidden rounded-[1.4rem] border border-white/12 bg-[#3a3b37] p-4 text-white shadow-[0_22px_45px_rgba(0,0,0,0.34)] xl:p-[clamp(0.75rem,calc(1.8cqh+0.405rem),1rem)]"
       aria-hidden={stackIndex !== 0}
     >
       <div className="flex items-start justify-between gap-3">
@@ -135,9 +135,9 @@ function DecisionCard({ item, stackIndex }: { item: DecisionStackItem; stackInde
         </span>
       </div>
 
-      <div className="flex flex-1 flex-col justify-center py-5">
+      <div className="flex flex-1 flex-col justify-center py-5 xl:py-[clamp(0.5rem,calc(2.2cqh+0.495rem),1.25rem)]">
         <p className="mb-2 text-[11px] text-white/42">{item.space}</p>
-        <h3 className="text-[1.45rem] leading-[1.15] font-semibold tracking-[-0.045em] text-balance">
+        <h3 className="text-[1.45rem] leading-[1.15] font-semibold tracking-[-0.045em] text-balance xl:text-[clamp(1.125rem,calc(2.4cqh+0.54rem),1.45rem)]">
           {item.title}
         </h3>
       </div>
@@ -440,7 +440,7 @@ export function DashboardDecisionCardStack() {
 
   return (
     <section
-      className="relative flex h-full min-h-[26rem] flex-col overflow-hidden rounded-[inherit] px-5 pt-5 pb-4 select-none"
+      className="relative flex h-full min-h-[26rem] flex-col overflow-hidden rounded-[inherit] px-5 pt-5 pb-4 select-none xl:min-h-0 xl:px-[clamp(1rem,calc(2.2cqh+0.495rem),1.25rem)] xl:pt-[clamp(1rem,calc(2.2cqh+0.495rem),1.25rem)] xl:pb-[clamp(0.75rem,calc(1.8cqh+0.405rem),1rem)]"
       aria-labelledby="decision-card-stack-title"
     >
       <div
@@ -453,7 +453,10 @@ export function DashboardDecisionCardStack() {
           <p className="mb-1.5 text-[10px] font-semibold tracking-[0.14em] text-[#ffd653] uppercase">
             Decision deck · {cardOrder.length}
           </p>
-          <h2 id="decision-card-stack-title" className="text-lg font-semibold tracking-[-0.035em] text-white">
+          <h2
+            id="decision-card-stack-title"
+            className="text-lg font-semibold tracking-[-0.035em] text-white xl:text-[clamp(1rem,calc(2cqh+0.45rem),1.125rem)]"
+          >
             正在发生的决定
           </h2>
         </div>
@@ -469,7 +472,10 @@ export function DashboardDecisionCardStack() {
         </Button>
       </header>
 
-      <div className="relative my-4 min-h-[18rem] flex-1" aria-live="polite">
+      <div
+        className="relative my-4 min-h-[18rem] flex-1 xl:my-[clamp(0.5rem,calc(1.8cqh+0.405rem),1rem)] xl:min-h-0"
+        aria-live="polite"
+      >
         {cardOrder.map((cardId, stackIndex) => {
           const item = decisionStackItems.find((candidate) => candidate.id === cardId);
 

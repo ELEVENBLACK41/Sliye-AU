@@ -41,22 +41,24 @@ export function DashboardResolutionTrendPlaceholder() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xl font-medium tracking-tight text-[#292a27]">决策趋势</p>
+          <p className="text-xl font-medium tracking-tight text-[#292a27] xl:text-[clamp(1.125rem,calc(2.2cqh+0.495rem),1.25rem)]">
+            决策趋势
+          </p>
           <p className="mt-1 text-xs text-black/40">2026 年 · 截至 7 月</p>
         </div>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="size-10 rounded-full bg-white/75 text-[#292a27] shadow-sm hover:bg-white"
+          className="size-10 rounded-full bg-white/75 text-[#292a27] shadow-sm hover:bg-white xl:size-[clamp(2rem,calc(4.5cqh+1.0125rem),2.5rem)]"
           aria-label="查看决议趋势详情"
         >
           <ArrowUpRight className="size-4" aria-hidden />
         </Button>
       </div>
 
-      <div className="mt-4 flex items-end gap-3">
-        <strong className="text-5xl leading-none font-light tracking-[-0.06em] text-[#292a27] tabular-nums">
+      <div className="mt-4 flex items-end gap-3 xl:mt-[clamp(0.5rem,calc(1.8cqh+0.405rem),1rem)]">
+        <strong className="text-5xl leading-none font-light tracking-[-0.06em] text-[#292a27] tabular-nums xl:text-[clamp(2.25rem,calc(5cqh+1.125rem),3rem)]">
           {totalResolutions}
         </strong>
         <p className="pb-1 text-xs leading-tight text-black/45">
@@ -68,7 +70,7 @@ export function DashboardResolutionTrendPlaceholder() {
 
       <ChartContainer
         config={resolutionTrendConfig}
-        className="mt-3 min-h-36 w-full flex-1 aspect-auto"
+        className="mt-3 min-h-36 w-full flex-1 aspect-auto xl:mt-[clamp(0.5rem,calc(1.4cqh+0.315rem),0.75rem)] xl:min-h-0"
         initialDimension={{ width: 240, height: 176 }}
       >
         <BarChart accessibilityLayer data={resolutionTrendData} margin={{ top: 4, right: 2, left: 2, bottom: 0 }}>
