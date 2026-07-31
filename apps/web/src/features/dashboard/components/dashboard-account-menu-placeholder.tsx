@@ -33,7 +33,7 @@ export function DashboardAccountMenuPlaceholder() {
           type="button"
           variant="ghost"
           size="icon"
-          className="size-12 rounded-full bg-white/60 text-[#31322f] hover:bg-white/80"
+          className="size-12 rounded-full border border-white/65 bg-white/20 text-[#31322f] shadow-[0_10px_30px_rgba(41,42,39,0.08)] backdrop-blur-sm backdrop-saturate-150 hover:bg-white/30"
           aria-label="打开用户菜单"
         >
           <UserRound className="size-5" aria-hidden />

@@ -109,7 +109,10 @@ export function DashboardTopbarPlaceholder() {
   }
 
   return (
-    <header className="sticky top-4 z-50 flex items-center gap-4 sm:top-6" aria-label="工作台顶部导航">
+    <header
+      className="sticky top-[calc(1rem+1px)] z-50 flex items-center gap-4 sm:top-[calc(1.5rem+1px)]"
+      aria-label="工作台顶部导航"
+    >
       <div
         className="flex h-12 shrink-0 items-center rounded-full border border-black/25 bg-white/30 px-6 text-2xl font-medium tracking-tight"
         aria-label="Decision Hub 品牌标识"
@@ -121,7 +124,7 @@ export function DashboardTopbarPlaceholder() {
         <nav
           ref={navigationContainerRef}
           aria-label="主导航"
-          className="isolate relative hidden h-12 items-center gap-1 rounded-full bg-white/55 p-1 lg:flex"
+          className="isolate relative hidden h-12 items-center gap-1 rounded-full border border-white/65 bg-white/20 p-1 shadow-[0_10px_30px_rgba(41,42,39,0.08)] backdrop-blur-[2px] backdrop-saturate-150 lg:flex"
         >
           <span
             aria-hidden
@@ -181,7 +184,7 @@ export function DashboardTopbarPlaceholder() {
           type="button"
           variant="ghost"
           size="icon"
-          className="size-12 rounded-full bg-white/60 text-[#31322f] hover:bg-white/80"
+          className="size-12 rounded-full border border-white/65 bg-white/20 text-[#31322f] shadow-[0_10px_30px_rgba(41,42,39,0.08)] backdrop-blur-sm backdrop-saturate-150 hover:bg-white/30"
           aria-label="查看通知"
         >
           <Bell className="size-5" aria-hidden />
