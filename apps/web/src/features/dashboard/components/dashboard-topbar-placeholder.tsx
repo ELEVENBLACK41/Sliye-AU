@@ -124,7 +124,7 @@ export function DashboardTopbarPlaceholder() {
         <nav
           ref={navigationContainerRef}
           aria-label="主导航"
-          className="isolate relative hidden h-12 items-center gap-1 rounded-full border border-white/65 bg-white/20 p-1 shadow-[0_10px_30px_rgba(41,42,39,0.08)] backdrop-blur-[2px] backdrop-saturate-150 lg:flex"
+          className="isolate relative hidden h-12 items-center gap-1 rounded-full border border-white/65 bg-white/20 p-1 shadow-[0_10px_30px_rgba(41,42,39,0.08)] backdrop-blur-sm backdrop-saturate-150 lg:flex"
         >
           <span
             aria-hidden
