@@ -1,3 +1,11 @@
+/*
+ * @Author: shaoliye elevenblack41@gmail.com
+ * @Date: 2026-07-30 16:37:40
+ * @LastEditors: shaoliye elevenblack41@gmail.com
+ * @LastEditTime: 2026-07-31 10:24:17
+ * @FilePath: \NextNest\apps\web\src\features\dashboard\components\dashboard-ai-assistant-placeholder.tsx
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 /**
  * 本文件展示新版工作台左下角的毛玻璃 AI 决策助手卡片，当前仅使用静态内容预览视觉样式。
  */
@@ -53,7 +61,7 @@ export function DashboardAiAssistantPlaceholder() {
           <strong className="font-semibold">需要我关注？</strong>
         </p>
 
-        <div className="mt-6 flex flex-wrap gap-2" aria-label="快捷提问">
+        {/* <div className="mt-6 flex flex-wrap gap-2" aria-label="快捷提问">
           {assistantSuggestions.map((suggestion) => (
             <Button
               key={suggestion}
@@ -65,7 +73,7 @@ export function DashboardAiAssistantPlaceholder() {
               {suggestion}
             </Button>
           ))}
-        </div>
+        </div> */}
       </div>
 
       <footer className="relative flex items-center gap-2 rounded-2xl border border-white/75 bg-[#f4f4f1]/80 p-1.5 shadow-[0_10px_24px_rgba(41,42,39,0.08)] backdrop-blur-md">

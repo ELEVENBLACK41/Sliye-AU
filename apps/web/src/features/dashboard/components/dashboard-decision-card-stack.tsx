@@ -16,7 +16,7 @@ import { InertiaPlugin } from 'gsap/InertiaPlugin';
 
 import { Button } from '@workspace/ui/components/button';
 
-gsap.registerPlugin(InertiaPlugin);
+gsap.registerPlugin(InertiaPlugin);//惯性动画插件
 
 /** 单张决策卡片在样例中使用的数据结构。 */
 type DecisionStackItem = {
@@ -275,7 +275,7 @@ export function DashboardDecisionCardStack() {
           end: direction * 18,
         },
         resistance: 1250,
-        duration: { min: 0.32, max: 0.78, overshoot: 0 },
+        duration: { min: 0.32, max: 0.78 },
       },
       scale: 0.94,
       opacity: 0.25,

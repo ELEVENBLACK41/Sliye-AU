@@ -1,23 +1,25 @@
 /**
- * 本文件提供新版工作台顶部导航的本地选中态交互，暂时不执行路由跳转。
+ * 本文件提供新版工作台顶部导航，并根据当前路由展示选中态。
  */
 'use client';
 
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { Bell } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 import { Button } from '@workspace/ui/components/button';
 import { DashboardAccountMenuPlaceholder } from './dashboard-account-menu-placeholder';
 
 /** 工作台主导航的文字与稳定标识。 */
 const navigationItems = [
-  { key: 'dashboard', label: '工作台' },
-  { key: 'matters', label: '议事空间' },
-  { key: 'decisions', label: '决策中心' },
-  { key: 'meetings', label: '会议中心' },
-  { key: 'decision', label: '决策图谱' },
-  { key: 'members', label: '成员管理' },
+  { key: 'dashboard', label: '工作台', href: '/dashboardnew' },
+  { key: 'matters', label: '议事空间', href: '/dashboardnew/matters' },
+  { key: 'decisions', label: '决策中心', href: undefined },
+  { key: 'meetings', label: '会议中心', href: undefined },
+  { key: 'decision', label: '决策图谱', href: undefined },
+  { key: 'members', label: '成员管理', href: undefined },
 ] as const;
 
 /** 主导航中可由移动选中块覆盖的菜单标识。 */
@@ -27,11 +29,15 @@ type MainNavigationKey = (typeof navigationItems)[number]['key'];
 const navigationItemLayoutClass =
   'inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-transparent bg-transparent px-4 text-center text-sm leading-none font-medium whitespace-nowrap';
 
-/** 渲染可切换选中态、但不执行跳转的工作台顶部导航。 */
+/** 渲染随页面滚动保持固定、并支持真实路由跳转的工作台顶部导航。 */
 export function DashboardTopbarPlaceholder() {
-  const [activeNavigation, setActiveNavigation] = useState<MainNavigationKey>('dashboard');
-  const activeNavigationRef = useRef<MainNavigationKey>('dashboard');
+  const pathname = usePathname();
   const navigationContainerRef = useRef<HTMLElement | null>(null);
+  const activeNavigation: MainNavigationKey = pathname.startsWith('/dashboardnew/matters')
+    ? 'matters'
+    : 'dashboard';
+  const activeNavigationRef = useRef<MainNavigationKey>(activeNavigation);
+  const hasPositionedIndicatorRef = useRef(false);
 
   /** 测量目标菜单，并把现有黑色选中块直接移动或平滑重定向到该位置。 */
   const moveNavigationIndicator = useCallback(
@@ -57,14 +63,34 @@ export function DashboardTopbarPlaceholder() {
     [],
   );
 
-  /** 首次渲染时定位选中块，并在导航尺寸变化后无动画地重新对齐。 */
+  /** 路由状态变化后校准选中块，兼容浏览器前进与后退导航。 */
+  useLayoutEffect(() => {
+    if (!hasPositionedIndicatorRef.current) {
+      activeNavigationRef.current = activeNavigation;
+      moveNavigationIndicator(activeNavigation, false);
+      hasPositionedIndicatorRef.current = true;
+      return;
+    }
+
+    if (activeNavigationRef.current === activeNavigation) return;
+
+    activeNavigationRef.current = activeNavigation;
+    moveNavigationIndicator(activeNavigation, true);
+  }, [activeNavigation, moveNavigationIndicator]);
+
+  /** 仅在导航容器真实调整尺寸时重新定位，跳过观察器首次回调以免覆盖切换动画。 */
   useLayoutEffect(() => {
     const navigationContainer = navigationContainerRef.current;
     if (!navigationContainer) return;
 
-    moveNavigationIndicator(activeNavigationRef.current, false);
+    let hasReceivedInitialObservation = false;
 
     const resizeObserver = new ResizeObserver(() => {
+      if (!hasReceivedInitialObservation) {
+        hasReceivedInitialObservation = true;
+        return;
+      }
+
       moveNavigationIndicator(activeNavigationRef.current, false);
     });
     resizeObserver.observe(navigationContainer);
@@ -74,15 +100,16 @@ export function DashboardTopbarPlaceholder() {
     };
   }, [moveNavigationIndicator]);
 
-  /** 仅更新原型页面的菜单选中态，真实路由会在后续页面接入时补充。 */
-  function handleNavigationSelect(key: MainNavigationKey): void {
-    activeNavigationRef.current = key;
-    moveNavigationIndicator(key, true);
-    setActiveNavigation(key);
+  /** 用户点击可用路由时立即播放选中动画，不等待目标页面加载完成。 */
+  function handleNavigationIntent(targetNavigation: MainNavigationKey): void {
+    if (activeNavigationRef.current === targetNavigation) return;
+
+    activeNavigationRef.current = targetNavigation;
+    moveNavigationIndicator(targetNavigation, true);
   }
 
   return (
-    <header className="flex items-center gap-4" aria-label="工作台顶部导航">
+    <header className="sticky top-4 z-50 flex items-center gap-4 sm:top-6" aria-label="工作台顶部导航">
       <div
         className="flex h-12 shrink-0 items-center rounded-full border border-black/25 bg-white/30 px-6 text-2xl font-medium tracking-tight"
         aria-label="Decision Hub 品牌标识"
@@ -105,19 +132,35 @@ export function DashboardTopbarPlaceholder() {
               width: 'var(--navigation-indicator-width, 0px)',
             }}
           />
-          {navigationItems.map((item) => (
-            <Button
-              key={item.key}
-              type="button"
-              variant="ghost"
-              aria-current={activeNavigation === item.key ? 'page' : undefined}
-              data-navigation-key={item.key}
-              className={`relative z-10 ${navigationItemLayoutClass} text-[#31322f] hover:bg-transparent hover:text-[#31322f] active:translate-y-0`}
-              onClick={() => handleNavigationSelect(item.key)}
-            >
-              {item.label}
-            </Button>
-          ))}
+          {navigationItems.map((item) => {
+            const navigationButton = (
+              <Button
+                type="button"
+                variant="ghost"
+                aria-current={activeNavigation === item.key ? 'page' : undefined}
+                data-navigation-key={item.key}
+                className={`relative z-10 ${navigationItemLayoutClass} text-[#31322f] hover:bg-transparent hover:text-[#31322f] active:translate-y-0`}
+              >
+                {item.label}
+              </Button>
+            );
+
+            return item.href ? (
+              <Button key={item.key} asChild variant="ghost" className="h-auto rounded-full p-0">
+                <Link
+                  href={item.href}
+                  aria-current={activeNavigation === item.key ? 'page' : undefined}
+                  data-navigation-key={item.key}
+                  className={`relative z-10 ${navigationItemLayoutClass} text-[#31322f] hover:bg-transparent hover:text-[#31322f]`}
+                  onClick={() => handleNavigationIntent(item.key)}
+                >
+                  {item.label}
+                </Link>
+              </Button>
+            ) : (
+              <span key={item.key}>{navigationButton}</span>
+            );
+          })}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 z-20 flex items-center gap-1 p-1 text-white"
