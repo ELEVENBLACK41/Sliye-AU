@@ -57,15 +57,7 @@ function ProfilePanelPlaceholder() {
 
 /** 渲染左下角毛玻璃 AI 决策助手卡片。 */
 function AiAssistantPanelPlaceholder() {
-  return (
-    <WorkspacePanel
-      label="AI 决策助手"
-      tone="glass"
-      className="relative min-h-[20rem] overflow-hidden border-white/50 bg-[linear-gradient(to_bottom,rgba(247,244,193,0.09)_0%,rgba(255,241,132,0.18)_50%,rgba(255,224,68,0.3)_100%)] shadow-[0_24px_48px_rgba(112,89,11,0.08),inset_0_1px_0_rgba(255,255,255,0.62)] backdrop-blur-[8px] backdrop-saturate-125"
-    >
-      <DashboardAiAssistantPlaceholder />
-    </WorkspacePanel>
-  );
+  return <DashboardAiAssistantPlaceholder />;
 }
 
 /** 渲染本年度正式决策柱状趋势卡*/
