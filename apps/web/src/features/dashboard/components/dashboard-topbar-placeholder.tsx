@@ -7,7 +7,7 @@ import { useCallback, useLayoutEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { Bell } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { Button } from '@workspace/ui/components/button';
 import { DashboardAccountMenuPlaceholder } from './dashboard-account-menu-placeholder';
@@ -32,6 +32,7 @@ const navigationItemLayoutClass =
 /** 渲染随页面滚动保持固定、并支持真实路由跳转的工作台顶部导航。 */
 export function DashboardTopbarPlaceholder() {
   const pathname = usePathname();
+  const router = useRouter();
   const navigationContainerRef = useRef<HTMLElement | null>(null);
   const activeNavigation: MainNavigationKey = pathname.startsWith('/dashboardnew/projects')
     ? 'projects'
@@ -41,7 +42,11 @@ export function DashboardTopbarPlaceholder() {
 
   /** 测量目标菜单，并把现有黑色选中块直接移动或平滑重定向到该位置。 */
   const moveNavigationIndicator = useCallback(
-    (targetNavigation: MainNavigationKey, shouldAnimate: boolean): void => {
+    (
+      targetNavigation: MainNavigationKey,
+      shouldAnimate: boolean,
+      onComplete?: () => void,
+    ): void => {
       const navigationContainer = navigationContainerRef.current;
       if (!navigationContainer) return;
 
@@ -58,6 +63,7 @@ export function DashboardTopbarPlaceholder() {
         duration: shouldAnimate ? 0.32 : 0,
         ease: 'power3.out',
         overwrite: 'auto',
+        onComplete,
       });
     },
     [],
@@ -100,12 +106,19 @@ export function DashboardTopbarPlaceholder() {
     };
   }, [moveNavigationIndicator]);
 
-  /** 用户点击可用路由时立即播放选中动画，不等待目标页面加载完成。 */
-  function handleNavigationIntent(targetNavigation: MainNavigationKey): void {
+  /** 先完成选中块动画，再提交可能包含大量客户端组件的目标路由渲染。 */
+  function handleNavigationIntent(
+    targetNavigation: MainNavigationKey,
+    targetHref: string,
+  ): void {
     if (activeNavigationRef.current === targetNavigation) return;
 
     activeNavigationRef.current = targetNavigation;
-    moveNavigationIndicator(targetNavigation, true);
+    moveNavigationIndicator(targetNavigation, true, () => {
+      if (activeNavigationRef.current !== targetNavigation || pathname === targetHref) return;
+
+      router.push(targetHref);
+    });
   }
 
   return (
@@ -155,7 +168,10 @@ export function DashboardTopbarPlaceholder() {
                   aria-current={activeNavigation === item.key ? 'page' : undefined}
                   data-navigation-key={item.key}
                   className={`relative z-10 ${navigationItemLayoutClass} text-[#31322f] hover:bg-transparent hover:text-[#31322f]`}
-                  onClick={() => handleNavigationIntent(item.key)}
+                  onNavigate={(event) => {
+                    event.preventDefault();
+                    handleNavigationIntent(item.key, item.href);
+                  }}
                 >
                   {item.label}
                 </Link>
