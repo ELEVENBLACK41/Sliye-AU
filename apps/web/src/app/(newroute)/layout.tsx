@@ -1,18 +1,18 @@
 /**
- * 本文件提供新版工作台路由共享的视觉外壳和固定顶部导航。
+ * 本文件为新版工作区一级业务路由提供共享视觉外壳和固定顶部导航。
  */
 import type { ReactNode } from 'react';
 
 import { DashboardTopbarPlaceholder } from '@/features/dashboard/components/dashboard-topbar-placeholder';
 
-/** 新版工作台路由布局的属性。 */
-type DashboardNewLayoutProps = Readonly<{
-  /** 当前子路由渲染的页面内容。 */
+/** 新版工作区共享布局属性。 */
+type WorkspaceLayoutProps = Readonly<{
+  /** 当前一级业务路由渲染的页面内容。 */
   children: ReactNode;
 }>;
 
-/** 渲染新版工作台各页面共用的渐变背景与顶部导航。 */
-export default function DashboardNewLayout({ children }: DashboardNewLayoutProps) {
+/** 渲染新版工作台、项目空间等一级业务路由共用的页面外壳。 */
+export default function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
   return (
     <main className="min-h-dvh bg-[#adb4be] text-[#20211f]">
       <div

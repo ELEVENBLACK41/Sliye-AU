@@ -1,8 +1,9 @@
 /**
- * 本文件提供新版“项目空间”路由的滚动测试页面。
+ * 本文件兼容新版项目空间迁移前的旧地址。
  */
+import { redirect } from 'next/navigation';
 
-/** 渲染用于验证顶部导航固定效果的高页面空白区域。 */
-export default function ProjectsPage() {
-  return <div className="min-h-[180dvh]" aria-label="项目空间滚动测试区域" />;
+/** 将旧的 Dashboard 子路由跳转到独立项目空间一级路由。 */
+export default function LegacyProjectsPage() {
+  redirect('/projects');
 }

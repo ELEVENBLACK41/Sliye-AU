@@ -15,14 +15,15 @@ type RefreshResponseBody = ApiResponse<AuthSession>;
 /** 提前刷新 access token 的安全缓冲时间，避免渲染过程中刚好过期。 */
 const ACCESS_TOKEN_REFRESH_LEEWAY_MS = 15_000;
 
-/** 保护 Dashboard 路由，并在 access Cookie 缺失、损坏或即将过期时提前轮换会话。 */
+/** 保护登录后的一级业务路由，并在 access Cookie 缺失、损坏或即将过期时提前轮换会话。 */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const accessToken = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const needsRefresh = !accessToken || isAccessTokenExpired(accessToken);
   const hasRefreshToken = request.cookies.has(AUTH_REFRESH_COOKIE_NAME);
+  const isProtectedPath = pathname.startsWith('/dashboard') || pathname.startsWith('/projects');
 
-  if (pathname.startsWith('/dashboard') && needsRefresh && hasRefreshToken) {
+  if (isProtectedPath && needsRefresh && hasRefreshToken) {
     // 刷新后的 Cookie 要在下一次请求中被 Server Component 读取，因此主动回跳一次原地址。
     const refreshedResponse = await refreshSessionFromProxy(request, NextResponse.redirect(request.nextUrl));
 
@@ -31,7 +32,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (pathname.startsWith('/dashboard') && needsRefresh) {
+  if (isProtectedPath && needsRefresh) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', `${pathname}${request.nextUrl.search}`);
     const response = NextResponse.redirect(loginUrl);
@@ -67,9 +68,9 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-/** Next.js Proxy 只拦截登录页和 Dashboard 路由组。 填上后此文件机器子集会自动执行*/
+/** Next.js Proxy 只拦截登录页和当前已上线的受保护业务路由。 */
 export const config = {
-  matcher: ['/login', '/dashboard/:path*'],
+  matcher: ['/login', '/dashboard/:path*', '/projects/:path*'],
 };
 
 /** 在 Proxy 阶段请求 NestJS refresh，保证进入 Server Component 前 Cookie 已续签。 */
