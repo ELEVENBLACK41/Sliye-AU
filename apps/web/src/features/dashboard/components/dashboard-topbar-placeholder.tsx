@@ -121,7 +121,7 @@ export function DashboardTopbarPlaceholder() {
 
   return (
     <header
-      className="sticky top-[calc(1rem+1px)] z-50 flex items-center gap-4 sm:top-[calc(1.5rem+1px)]"
+      className="sticky top-0 z-50 flex items-center gap-4"
       aria-label="工作台顶部导航"
     >
       <div
