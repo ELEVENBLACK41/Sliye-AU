@@ -121,7 +121,7 @@ export function DashboardTopbarPlaceholder() {
 
   return (
     <header
-      className="sticky top-0 z-50 flex items-center gap-4"
+      className="relative z-50 flex items-center gap-4 lg:sticky lg:top-0"
       aria-label="工作台顶部导航"
     >
       <div
@@ -198,7 +198,7 @@ export function DashboardTopbarPlaceholder() {
           type="button"
           variant="ghost"
           size="icon"
-          className="size-12 rounded-full border border-white/65 bg-white/20 text-[#31322f] shadow-[0_10px_30px_rgba(41,42,39,0.08)] backdrop-blur-sm backdrop-saturate-150 hover:bg-white/30"
+          className="hidden size-12 rounded-full border border-white/65 bg-white/20 text-[#31322f] shadow-[0_10px_30px_rgba(41,42,39,0.08)] backdrop-blur-sm backdrop-saturate-150 hover:bg-white/30 sm:inline-flex"
           aria-label="查看通知"
         >
           <Bell className="size-5" aria-hidden />

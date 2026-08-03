@@ -14,6 +14,9 @@ export type ProjectSpaceSummary = {
   decisionCount: number;
 };
 
+/** 项目空间中央区域可切换的一级业务模块。 */
+export type ProjectSectionKey = 'discussion' | 'decisions' | 'meetings';
+
 /** 决策关系画布中的一条议题分支。 */
 export type DecisionBranch = {
   /** 分支稳定标识。 */

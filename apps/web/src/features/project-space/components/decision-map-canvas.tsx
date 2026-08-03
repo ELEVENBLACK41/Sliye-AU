@@ -1,12 +1,11 @@
 /**
  * 本文件展示项目、议题、提案和正式决议之间的关系画布线框。
  */
-import { CircleUserRound, Minus, Plus, Search, UsersRound } from 'lucide-react';
+import { CircleUserRound, UsersRound } from 'lucide-react';
 
 import { decisionBranches } from '../project-space.constants';
 import type { DecisionBranch } from '../types/project-space.type';
 import { Badge } from '@workspace/ui/components/badge';
-import { Button } from '@workspace/ui/components/button';
 
 /** 渲染单条议题分支及其提案状态。 */
 function DecisionBranchRow({ branch, index }: { branch: DecisionBranch; index: number }) {
@@ -57,32 +56,10 @@ function DecisionBranchRow({ branch, index }: { branch: DecisionBranch; index: n
   );
 }
 
-/** 渲染项目空间中央决策关系画布及画布工具。 */
+/** 渲染项目空间中央决策关系画布。 */
 export function DecisionMapCanvas() {
   return (
-    <section className="flex min-h-[31rem] min-w-0 flex-col bg-white/18 lg:min-h-0" aria-labelledby="decision-map-title">
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] px-5 py-4">
-        <div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-black/45">项目空间</span>
-            <span aria-hidden>/</span>
-            <h1 id="decision-map-title" className="font-semibold">产品体验升级计划</h1>
-          </div>
-          <p className="mt-1 text-[11px] text-black/40">进行中 · 12 位成员 · 4 项决策</p>
-        </div>
-        <div className="flex items-center gap-1.5" aria-label="关系画布工具">
-          <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg border-black/10 bg-white/45 text-xs shadow-none">全部状态</Button>
-          <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg border-black/10 bg-white/45 text-xs shadow-none">适应画布</Button>
-          <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg border-black/10 bg-white/45 shadow-none" aria-label="缩小画布">
-            <Search className="size-3.5" aria-hidden /><Minus className="size-2.5" aria-hidden />
-          </Button>
-          <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg border-black/10 bg-white/45 shadow-none" aria-label="放大画布">
-            <Search className="size-3.5" aria-hidden /><Plus className="size-2.5" aria-hidden />
-          </Button>
-        </div>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-auto p-5">
+    <div className="min-h-[25rem] min-w-0 flex-1 overflow-auto bg-white/18 p-5 lg:min-h-0">
         <div className="relative mx-auto grid min-h-[25rem] min-w-[42rem] grid-cols-[7.5rem_1fr] items-center gap-8">
           <div className="relative z-10 grid size-24 place-items-center justify-self-center rounded-full border-2 border-white bg-[#30312e] p-3 text-center text-white shadow-[0_0_0_1px_rgba(0,0,0,0.18)]">
             <div>
@@ -102,7 +79,6 @@ export function DecisionMapCanvas() {
             <path d="M105 200 C150 200 145 347 205 347" fill="none" stroke="currentColor" strokeWidth="1" />
           </svg>
         </div>
-      </div>
-    </section>
+    </div>
   );
 }

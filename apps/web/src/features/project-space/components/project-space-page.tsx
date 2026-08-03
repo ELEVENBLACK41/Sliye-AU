@@ -9,25 +9,32 @@
 /**
  * 本文件组合新版项目空间的项目导航、决策画布、上下文详情和过程回放区域。
  */
-import { DecisionContextPanel } from './decision-context-panel';
-import { DecisionMapCanvas } from './decision-map-canvas';
+'use client';
+
+import { useState } from 'react';
+
+import type { ProjectSectionKey } from '../types/project-space.type';
 import { DecisionReplayTimeline } from './decision-replay-timeline';
 import { ProjectListPanel } from './project-list-panel';
+import { ProjectOverviewPanel } from './project-overview-panel';
+import { ProjectWorkspacePanel } from './project-workspace-panel';
 
 /** 渲染项目空间完整线框，并明确各业务区域未来的数据与交互边界。 */
 export function ProjectSpacePage() {
+  const [activeSection, setActiveSection] = useState<ProjectSectionKey>('decisions');
+
   return (
-    <section className="mt-6 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] backdrop-blur-sm lg:overflow-hidden" aria-label="项目空间">
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_14rem] xl:grid-cols-[14rem_minmax(0,1fr)_16rem]">
+    <section className="mt-6 flex min-w-0 flex-none flex-col overflow-visible rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] backdrop-blur-sm lg:min-h-0 lg:flex-1 lg:overflow-hidden" aria-label="项目空间">
+      <div className="grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_14rem] xl:grid-cols-[14rem_minmax(0,1fr)_16rem]">
         {/* 左侧项目列表 */}
         <ProjectListPanel />
         {/* 决策地图画布 */}
-        <DecisionMapCanvas />
-        {/* 右侧项目决策详情的面板*/}
-        <DecisionContextPanel />
+        <ProjectWorkspacePanel activeSection={activeSection} onSectionChange={setActiveSection} />
+        {/* 右侧项目级详情与讨论频道快捷入口 */}
+        <ProjectOverviewPanel />
       </div>
-      {/* 下方模拟时间线 */}
-      <DecisionReplayTimeline />
+      {/* 决策回放只属于决策模块，并用于驱动后续 D3 动画。 */}
+      {activeSection === 'decisions' ? <DecisionReplayTimeline /> : null}
     </section>
   );
 }

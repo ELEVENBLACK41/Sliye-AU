@@ -10,7 +10,10 @@ import { Input } from '@workspace/ui/components/input';
 /** 渲染项目空间左侧项目导航。 */
 export function ProjectListPanel() {
   return (
-    <aside className="flex min-h-0 flex-col border-b border-black/10 bg-white/28 lg:border-r lg:border-b-0" aria-label="项目列表">
+    <aside
+      className="flex min-w-0 shrink-0 flex-col border-b border-black/10 bg-white/28 lg:min-h-0 lg:border-r lg:border-b-0"
+      aria-label="项目列表"
+    >
       <div className="p-3">
         <label className="relative block" htmlFor="project-search">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-black/35" aria-hidden />
@@ -27,10 +30,10 @@ export function ProjectListPanel() {
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-2" aria-label="可访问项目">
-        <ul className="space-y-1">
+      <nav className="min-w-0 px-2 pb-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pb-0" aria-label="可访问项目">
+        <ul className="flex touch-pan-x gap-2 overflow-x-auto overscroll-x-contain pb-1 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0">
           {projectSpaceProjects.map((project, index) => (
-            <li key={project.id}>
+            <li key={project.id} className="w-52 shrink-0 lg:w-auto">
               <button
                 type="button"
                 aria-current={index === 0 ? 'page' : undefined}
