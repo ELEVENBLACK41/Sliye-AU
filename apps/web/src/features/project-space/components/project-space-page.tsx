@@ -26,7 +26,7 @@ export function ProjectSpacePage() {
   const replayController = useDecisionReplay();
 
   return (
-    <section className="relative mt-6 flex min-w-0 flex-none flex-col overflow-visible rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] lg:min-h-0 lg:flex-1 lg:overflow-hidden" aria-label="项目空间">
+    <section className="relative mt-6 flex min-w-0 flex-none flex-col overflow-visible rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] lg:-mb-6 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-b-none" aria-label="项目空间">
       <div className="grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_14rem] xl:grid-cols-[14rem_minmax(0,1fr)_16rem]">
         {/* 左侧项目列表 */}
         <ProjectListPanel />

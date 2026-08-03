@@ -37,6 +37,8 @@ const TREE_OFFSET_Y = 70;
 const NODE_VERTICAL_GAP = 82;
 const NODE_HORIZONTAL_GAP = 250;
 const NODE_APPEAR_PROGRESS = 0.82;
+/** 首次进入画布时项目根节点使用的放大倍率。 */
+const INITIAL_ROOT_SCALE = 2.2;
 
 /** 为不同业务层级返回稳定的节点尺寸。 */
 function getNodeSize(type: DecisionTreeNodeType): { width: number; height: number } {
@@ -244,9 +246,27 @@ function DecisionMapCanvas({ currentIndex, progress }, forwardedRef) {
       });
   }, [currentIndex, progress]);
 
+  /** 首次进入页面时仅定位项目根节点，后续回放不再改变用户的画布视口。 */
+  useEffect(() => {
+    const svg = svgRef.current;
+    const zoomBehavior = zoomBehaviorRef.current;
+    const rootNode = treeNodes[0];
+    if (!svg || !zoomBehavior || !rootNode) return;
+
+    const centerX = rootNode.y + TREE_OFFSET_X;
+    const centerY = rootNode.x + TREE_OFFSET_Y;
+    const translateX = TREE_VIEWBOX_WIDTH / 2 - centerX * INITIAL_ROOT_SCALE;
+    const translateY = TREE_VIEWBOX_HEIGHT / 2 - centerY * INITIAL_ROOT_SCALE;
+
+    select(svg).call(
+      zoomBehavior.transform,
+      zoomIdentity.translate(translateX, translateY).scale(INITIAL_ROOT_SCALE),
+    );
+  }, [treeNodes]);
+
   return (
     <section
-      className="relative min-h-[50rem] min-w-0 flex-1 overflow-hidden bg-white/18"
+      className="relative flex min-h-[50rem] min-w-0 flex-1 flex-col overflow-hidden bg-white/18 lg:min-h-0"
       aria-labelledby="d3-replay-title"
     >
       <div
@@ -296,11 +316,11 @@ function DecisionMapCanvas({ currentIndex, progress }, forwardedRef) {
         </aside>
       </header>
 
-      <div className="relative z-10 mt-1 w-full overflow-x-auto overscroll-x-contain pb-28">
-        <div className="mx-auto min-w-[62rem] px-3">
+      <div className="relative z-10 mt-1 min-h-0 w-full flex-1 overflow-x-auto overscroll-x-contain">
+        <div className="mx-auto h-full min-w-[62rem] px-3">
           <svg
             ref={svgRef}
-            className="h-[48rem] w-full cursor-grab touch-none active:cursor-grabbing"
+            className="h-[48rem] w-full cursor-grab touch-none active:cursor-grabbing lg:h-full"
             viewBox={`0 0 ${TREE_VIEWBOX_WIDTH} ${TREE_VIEWBOX_HEIGHT}`}
             role="img"
             aria-label={`项目决策树，当前回放到${currentEvent.label}`}
