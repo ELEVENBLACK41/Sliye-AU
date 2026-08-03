@@ -74,7 +74,7 @@ const meetingScheduleData: DashboardMeetingPlaceholder[] = [
   {
     id: 'weekly-product-sync',
     title: '产品方向周会',
-    description: '同步本周议题与待确认方向',
+    description: '同步本周决策与待确认方向',
     dayIndex: 0,
     startTime: '09:00',
     durationMinutes: 60,

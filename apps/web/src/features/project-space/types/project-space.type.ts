@@ -17,17 +17,17 @@ export type ProjectSpaceSummary = {
 /** 项目空间中央区域可切换的一级业务模块。 */
 export type ProjectSectionKey = 'discussion' | 'decisions' | 'meetings';
 
-/** 决策关系画布中的一条议题分支。 */
+/** 决策关系画布中的一条决策分支。 */
 export type DecisionBranch = {
   /** 分支稳定标识。 */
   id: string;
-  /** 议题名称。 */
+  /** 决策名称。 */
   title: string;
-  /** 议题当前阶段。 */
+  /** 决策当前阶段。 */
   status: string;
-  /** 参与议题的成员数量。 */
+  /** 参与决策的成员数量。 */
   participantCount: number;
-  /** 议题包含的提案信息。 */
+  /** 决策包含的提案信息。 */
   proposals: DecisionProposal[];
 };
 

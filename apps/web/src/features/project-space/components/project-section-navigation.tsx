@@ -18,10 +18,10 @@ type ProjectSectionNavigationProps = {
 
 /** 项目内部一级导航的展示配置。 */
 const projectSections = [
-  { key: 'discussion', label: '讨论', count: 12, icon: MessageCircle },
-  { key: 'decisions', label: '决策', count: 4, icon: GitBranch },
-  { key: 'meetings', label: '会议', count: 2, icon: CalendarDays },
-] satisfies Array<{ key: ProjectSectionKey; label: string; count: number; icon: typeof MessageCircle }>;
+  { key: 'discussion', label: '讨论', icon: MessageCircle },
+  { key: 'decisions', label: '决策', icon: GitBranch },
+  { key: 'meetings', label: '会议', icon: CalendarDays },
+] satisfies Array<{ key: ProjectSectionKey; label: string; icon: typeof MessageCircle }>;
 
 /** 渲染当前项目内部的模块切换入口。 */
 export function ProjectSectionNavigation({ activeSection, onSectionChange }: ProjectSectionNavigationProps) {
@@ -47,16 +47,9 @@ export function ProjectSectionNavigation({ activeSection, onSectionChange }: Pro
                 className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/25 ${
                   isActive ? 'bg-[#292a27] text-white' : 'text-black/50 hover:bg-white/55 hover:text-black/80'
                 }`}
-              >
-                <Icon className="size-3.5" aria-hidden />
-                {section.label}
-                <span
-                  className={`grid min-w-4 place-items-center rounded-full px-1 text-[9px] ${
-                    isActive ? 'bg-white/18 text-white/75' : 'bg-black/7 text-black/45'
-                  }`}
                 >
-                  {section.count}
-                </span>
+                  <Icon className="size-3.5" aria-hidden />
+                  {section.label}
               </button>
             </li>
           );

@@ -1,5 +1,5 @@
 /**
- * 本文件展示项目群组列表、聊天消息与消息转议题和提案的讨论链路线框。
+ * 本文件展示项目群组列表、聊天消息与消息转决策和提案的讨论链路线框。
  */
 import {
   ArrowRight,
@@ -105,12 +105,12 @@ export function ProjectDiscussionWorkspace() {
                 <Lightbulb className="size-4" aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                <span className="text-[10px] font-medium text-[#8a6500]">由聊天发起议题</span>
+                <span className="text-[10px] font-medium text-[#8a6500]">由聊天发起决策</span>
                 <h3 className="mt-1 text-sm font-semibold">邀请机制优化</h3>
                 <p className="mt-1 text-[11px] leading-4 text-black/50">如何提升新用户转化率，同时控制激励成本？</p>
-                <Button type="button" variant="ghost" size="sm" className="mt-2 h-7 rounded-full px-2 text-[10px] text-black/65 hover:bg-black/5">
+                {/* <Button type="button" variant="ghost" size="sm" className="mt-2 h-7 rounded-full px-2 text-[10px] text-black/65 hover:bg-black/5">
                   查看议题链路 <ArrowRight className="size-3" aria-hidden />
-                </Button>
+                </Button> */}
               </div>
             </div>
           </article>
@@ -129,7 +129,7 @@ export function ProjectDiscussionWorkspace() {
                 <FileText className="size-4" aria-hidden />
               </span>
               <div className="min-w-0 flex-1">
-                <span className="text-[10px] font-medium text-black/40">议题内新增提案</span>
+                <span className="text-[10px] font-medium text-black/40">决策内新增提案</span>
                 <h3 className="mt-1 text-sm font-semibold">提案 A：分层邀请与延迟激励</h3>
                 <p className="mt-1 text-[11px] text-black/45">创建人：周然 · 等待讨论确认</p>
               </div>
@@ -141,7 +141,7 @@ export function ProjectDiscussionWorkspace() {
           <div className="rounded-2xl border border-black/10 bg-white/70 p-2 shadow-sm shadow-black/[0.02]">
             <Textarea
               aria-label="发送项目群消息"
-              placeholder="发送消息，或从讨论中发起议题、提案……"
+              placeholder="发送消息，或从讨论中发起决策、提案……"
               className="min-h-14 resize-none border-0 bg-transparent px-2 py-1 text-xs shadow-none focus-visible:ring-0"
             />
             <div className="mt-1 flex items-center justify-between gap-2">
@@ -150,7 +150,7 @@ export function ProjectDiscussionWorkspace() {
                   <Paperclip className="size-3.5" aria-hidden />
                 </Button>
                 <Button type="button" variant="ghost" size="sm" className="h-7 rounded-lg px-2 text-[10px]">
-                  <Lightbulb className="size-3.5" aria-hidden /> 发起议题
+                  <Lightbulb className="size-3.5" aria-hidden /> 发起决策
                 </Button>
               </div>
               <Button type="button" size="sm" className="h-7 rounded-full bg-[#292a27] px-3 text-[10px] text-white">
