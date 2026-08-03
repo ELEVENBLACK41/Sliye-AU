@@ -1,21 +1,28 @@
 /**
- * 本文件展示项目空间底部的决策过程回放控制与关键事件时间轴。
+ * 本文件展示与中央 D3 证据流联动的决策过程回放胶囊。
  */
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
-import { CalendarDays, ChevronDown, ChevronUp, Play } from 'lucide-react';
+import { ChevronDown, ChevronUp, Pause, Play, RotateCcw } from 'lucide-react';
 
+import type { DecisionReplayController } from '../hooks/use-decision-replay';
 import { replayEvents } from '../project-space.constants';
 import { Button } from '@workspace/ui/components/button';
-import { Switch } from '@workspace/ui/components/switch';
 
-/** 渲染决策过程回放时间轴。 */
-export function DecisionReplayTimeline() {
+/** 决策过程回放胶囊的共享控制状态。 */
+type DecisionReplayTimelineProps = {
+  /** 页面层创建的决策回放控制器。 */
+  controller: DecisionReplayController;
+};
+
+/** 渲染可控制中央 D3 动画的决策过程回放胶囊。 */
+export function DecisionReplayTimeline({ controller }: DecisionReplayTimelineProps) {
   const [isReplayVisible, setIsReplayVisible] = useState(true);
   const replayPanelRef = useRef<HTMLElement | null>(null);
   const revealControlRef = useRef<HTMLButtonElement | null>(null);
+  const eventButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const hasMountedRef = useRef(false);
 
   /** 根据展开状态驱动回放胶囊上下浮动，并在系统减少动态效果时直接切换。 */
@@ -73,10 +80,21 @@ export function DecisionReplayTimeline() {
       });
     }
 
-    return () => {
-      gsap.killTweensOf([replayPanel, revealControl]);
-    };
+    return () => gsap.killTweensOf([replayPanel, revealControl]);
   }, [isReplayVisible]);
+
+  /** 时间回放跨越多个日期时，将当前事件自动滚动到胶囊可视区域中央。 */
+  useEffect(() => {
+    const currentButton = eventButtonRefs.current[controller.currentIndex];
+    if (!currentButton) return;
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    currentButton.scrollIntoView({
+      behavior: reduceMotion ? 'auto' : 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
+  }, [controller.currentIndex]);
 
   /** 将决策回放胶囊向下收起。 */
   function hideReplay(): void {
@@ -95,83 +113,109 @@ export function DecisionReplayTimeline() {
         inert={!isReplayVisible}
         aria-hidden={!isReplayVisible}
         aria-labelledby="replay-title"
-        className="pointer-events-auto mx-auto w-full overflow-hidden rounded-[2rem] border border-white/80 bg-white/62 px-5 py-4 opacity-0 shadow-[0_24px_70px_rgba(27,28,25,0.22)] backdrop-blur-2xl sm:px-6 sm:py-5"
+        className="pointer-events-auto mx-auto w-full overflow-hidden rounded-[2rem] border border-white/80 bg-white/66 px-4 py-3.5 opacity-0 shadow-[0_24px_70px_rgba(27,28,25,0.22)] backdrop-blur-2xl sm:px-5"
       >
-        <header className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-          <div>
-            <p className="text-[11px] font-medium tracking-[0.16em] text-black/38">DECISION REPLAY</p>
-            <h2 id="replay-title" className="mt-1 text-lg font-semibold tracking-tight">
-              决策过程回放
-            </h2>
+        <header className="flex flex-wrap items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={controller.togglePlayback}
+            className="size-11 shrink-0 rounded-full border-black/12 bg-[#292a27] text-white shadow-none hover:bg-[#3b3c38] hover:text-white"
+            aria-label={controller.isPlaying ? '暂停决策过程回放' : '播放决策过程回放'}
+          >
+            {controller.isPlaying ? <Pause className="size-4 fill-current" aria-hidden /> : <Play className="ml-0.5 size-4 fill-current" aria-hidden />}
+          </Button>
+
+          <div className="mr-auto min-w-36">
+            <p className="text-[9px] font-semibold tracking-[0.16em] text-black/35">DECISION REPLAY</p>
+            <div className="flex items-center gap-2">
+              <h2 id="replay-title" className="text-sm font-semibold tracking-tight">决策过程回放</h2>
+              <span className="text-[10px] text-black/35">每事件 1.4 秒</span>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-black/55">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 rounded-full border-black/10 bg-white/50 px-4 text-sm shadow-none"
-            >
-              1×
-            </Button>
-            <label className="flex items-center gap-2 whitespace-nowrap" htmlFor="key-events-only">
-              仅看关键事件
-              <Switch id="key-events-only" defaultChecked aria-label="仅看关键事件" />
-            </label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={hideReplay}
-              className="h-9 rounded-full px-3 text-sm text-black/55 hover:bg-black/[0.06] hover:text-black"
-              aria-label="隐藏决策过程回放"
-            >
-              <ChevronDown className="size-4" aria-hidden />
-              隐藏
-            </Button>
-          </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={controller.resetReplay}
+            className="size-8 rounded-full text-black/48 hover:bg-black/[0.06] hover:text-black"
+            aria-label="回到决策过程起点"
+          >
+            <RotateCcw className="size-3.5" aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={controller.cycleSpeed}
+            className="h-8 rounded-full border-black/10 bg-white/50 px-3 text-xs shadow-none"
+            aria-label={`当前 ${controller.speed} 倍速，点击切换倍速`}
+          >
+            {controller.speed}×
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={hideReplay}
+            className="h-8 rounded-full px-2.5 text-xs text-black/48 hover:bg-black/[0.06] hover:text-black"
+            aria-label="隐藏决策过程回放"
+          >
+            <ChevronDown className="size-3.5" aria-hidden />
+            隐藏
+          </Button>
         </header>
 
-        <div
-          className="mt-4 w-full min-w-0 touch-pan-x overflow-x-auto overscroll-x-contain pb-2"
-          aria-label="可横向滚动的决策回放轨道"
-        >
-          <div className="flex w-max min-w-full items-start gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="size-14 shrink-0 rounded-2xl border-black/15 bg-white/55 shadow-none"
-              aria-label="播放决策过程"
-            >
-              <Play className="size-5 fill-current" aria-hidden />
-            </Button>
-            <div className="flex h-14 w-56 shrink-0 items-center gap-2 rounded-2xl border border-black/10 bg-white/45 px-4 text-sm text-black/60">
-              <span>2026.04.12</span>
-              <span>—</span>
-              <span>2026.05.28</span>
-              <CalendarDays className="ml-auto size-4 shrink-0" aria-hidden />
-            </div>
-            <ol className="relative flex min-w-max pt-2" aria-label="决策回放事件">
-              <span className="absolute top-3.5 right-16 left-16 h-px bg-black/20" aria-hidden />
-              {replayEvents.map((event) => (
-                <li
-                  key={`${event.date}-${event.label}`}
-                  className="relative flex w-32 shrink-0 flex-col items-center px-2 text-center"
-                >
-                  <span
-                    className={`relative z-10 size-3 rounded-full ${
-                      event.active
-                        ? 'bg-[#f0b900] ring-4 ring-[#f0b900]/15'
-                        : 'border border-black/35 bg-[#f8f7f2]'
-                    }`}
-                    aria-hidden
-                  />
-                  <time className="mt-3 text-sm font-medium text-black/50">{event.date}</time>
-                  <span className="mt-1 line-clamp-2 text-[15px] leading-5 text-black/70">{event.label}</span>
+        <div className="mt-3 w-full min-w-0 touch-pan-x overflow-x-auto overscroll-x-contain pb-1" aria-label="决策回放事件轨道">
+          <ol className="relative grid w-full grid-flow-col auto-cols-[12.5%] items-start px-2 pt-1">
+            {replayEvents.map((event, index) => {
+              const isCurrent = index === controller.currentIndex;
+              const isPast = index < controller.currentIndex;
+              const connectionProgress = isPast ? 100 : isCurrent ? controller.progress * 100 : 0;
+
+              return (
+                <li key={event.id} className="relative flex min-w-0 justify-center px-1 text-center">
+                  {index < replayEvents.length - 1 ? (
+                    <span
+                      className="absolute top-[0.68rem] left-1/2 h-px w-full bg-black/12"
+                      style={{
+                        backgroundImage: `linear-gradient(to right, #e7b200 ${connectionProgress}%, transparent ${connectionProgress}%)`,
+                      }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <button
+                    ref={(button) => {
+                      eventButtonRefs.current[index] = button;
+                    }}
+                    type="button"
+                    onClick={() => controller.seekToEvent(index)}
+                    className="group flex w-full min-w-0 flex-col items-center rounded-xl px-1 pb-1.5 outline-none focus-visible:ring-2 focus-visible:ring-[#d5a400]/60"
+                    aria-current={isCurrent ? 'step' : undefined}
+                  >
+                    <span
+                      className={`relative z-10 grid size-3.5 place-items-center rounded-full transition-all ${
+                        isCurrent
+                          ? 'scale-110 bg-[#efb900] ring-4 ring-[#efb900]/18'
+                          : isPast
+                            ? 'bg-[#efb900]'
+                            : 'border border-black/25 bg-[#f8f7f2] group-hover:border-black/50'
+                      }`}
+                      aria-hidden
+                    />
+                    <span className={`mt-2 text-[9px] font-semibold ${isCurrent ? 'text-[#8a6a00]' : 'text-black/35'}`}>
+                      {event.timeLabel}
+                    </span>
+                    <span className={`mt-0.5 line-clamp-1 text-[11px] ${isCurrent ? 'font-semibold text-black/75' : 'text-black/48'}`}>
+                      {event.phase} · {event.label}
+                    </span>
+                  </button>
                 </li>
-              ))}
-            </ol>
-          </div>
+              );
+            })}
+          </ol>
         </div>
       </section>
 

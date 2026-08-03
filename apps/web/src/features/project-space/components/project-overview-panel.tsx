@@ -34,7 +34,7 @@ export function ProjectOverviewPanel() {
         <dt className="text-black/40">成员</dt>
         <dd>12 人</dd>
         <dt className="text-black/40">决策</dt>
-        <dd>4 项进行中</dd>
+        <dd>7 项已决议 · 1 项已废弃</dd>
         <dt className="text-black/40">会议</dt>
         <dd>2 场已安排</dd>
         <dt className="text-black/40">群组</dt>

@@ -17,36 +17,60 @@ export type ProjectSpaceSummary = {
 /** 项目空间中央区域可切换的一级业务模块。 */
 export type ProjectSectionKey = 'discussion' | 'decisions' | 'meetings';
 
-/** 决策关系画布中的一条决策分支。 */
-export type DecisionBranch = {
-  /** 分支稳定标识。 */
-  id: string;
-  /** 决策名称。 */
-  title: string;
-  /** 决策当前阶段。 */
-  status: string;
-  /** 参与决策的成员数量。 */
-  participantCount: number;
-  /** 决策包含的提案信息。 */
-  proposals: DecisionProposal[];
-};
+/** D3 决策树中的节点类型。 */
+export type DecisionTreeNodeType = 'project' | 'decision' | 'proposal' | 'resolution' | 'abandoned';
 
-/** 决策关系画布中的提案摘要。 */
-export type DecisionProposal = {
-  /** 提案名称。 */
+/** D3 决策树路径最终形成的业务结果。 */
+export type DecisionTreeRouteStatus =
+  | 'neutral'
+  | 'unvoted'
+  | 'resolved'
+  | 'rejected'
+  | 'abandoned'
+  | 'superseded'
+  | 'revoked';
+
+/** D3 决策树中的项目、决策、提案或正式决议节点。 */
+export type DecisionTreeNode = {
+  /** 节点稳定标识，并与回放事件保持一致。 */
+  id: string;
+  /** 节点业务类型。 */
+  type: DecisionTreeNodeType;
+  /** 节点主要名称。 */
   title: string;
-  /** 提案当前投票或决议状态。 */
-  status: string;
-  /** 是否已经形成正式决议。 */
-  resolved?: boolean;
+  /** 节点辅助说明。 */
+  subtitle: string;
+  /** 节点所在路径最终形成正式决议、被废弃或保持中性旁支。 */
+  routeStatus: DecisionTreeRouteStatus;
+  /** 当前路径形成正式决议或被废弃时对应的回放事件标识。 */
+  completionEventId?: string;
+  /** 提案投票结果正式确定时对应的回放事件标识。 */
+  statusEventId?: string;
+  /** 点击节点时优先展示的最终业务结果事件标识。 */
+  detailEventId?: string;
+  /** 当前节点的下级业务节点。 */
+  children?: DecisionTreeNode[];
 };
 
 /** 决策过程回放中的时间节点。 */
 export type DecisionReplayEvent = {
-  /** 节点日期。 */
-  date: string;
+  /** 节点稳定标识。 */
+  id: string;
+  /** 节点在完整决策过程中的顺序。 */
+  sequence: number;
+  /** 节点所属的决策阶段。 */
+  phase: '决策' | '提案' | '投票' | '决议' | '废弃';
+  /** 事件在模拟时间线中的可读发生时间。 */
+  timeLabel: string;
   /** 节点事件名称。 */
   label: string;
-  /** 是否为回放当前定位的关键节点。 */
-  active?: boolean;
+  /** 节点发生时的业务说明。 */
+  summary: string;
+  /** 发起节点动作的成员或协作空间。 */
+  actor: string;
+  /** 节点沉淀的过程证据。 */
+  evidence: string;
 };
+
+/** 决策过程回放支持的播放倍速。 */
+export type DecisionReplaySpeed = 1 | 1.5 | 2;

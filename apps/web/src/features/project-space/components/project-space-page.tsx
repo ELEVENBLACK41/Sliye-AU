@@ -13,6 +13,7 @@
 
 import { useState } from 'react';
 
+import { useDecisionReplay } from '../hooks/use-decision-replay';
 import type { ProjectSectionKey } from '../types/project-space.type';
 import { DecisionReplayTimeline } from './decision-replay-timeline';
 import { ProjectListPanel } from './project-list-panel';
@@ -22,6 +23,7 @@ import { ProjectWorkspacePanel } from './project-workspace-panel';
 /** 渲染项目空间完整线框，并明确各业务区域未来的数据与交互边界。 */
 export function ProjectSpacePage() {
   const [activeSection, setActiveSection] = useState<ProjectSectionKey>('decisions');
+  const replayController = useDecisionReplay();
 
   return (
     <section className="relative mt-6 flex min-w-0 flex-none flex-col overflow-visible rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] lg:min-h-0 lg:flex-1 lg:overflow-hidden" aria-label="项目空间">
@@ -29,12 +31,16 @@ export function ProjectSpacePage() {
         {/* 左侧项目列表 */}
         <ProjectListPanel />
         {/* 决策地图画布 */}
-        <ProjectWorkspacePanel activeSection={activeSection} onSectionChange={setActiveSection} />
+        <ProjectWorkspacePanel
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+          replayController={replayController}
+        />
         {/* 右侧项目级详情与讨论频道快捷入口 */}
         <ProjectOverviewPanel />
       </div>
       {/* 决策回放只属于决策模块，并用于驱动后续 D3 动画。 */}
-      {activeSection === 'decisions' ? <DecisionReplayTimeline /> : null}
+      {activeSection === 'decisions' ? <DecisionReplayTimeline controller={replayController} /> : null}
     </section>
   );
 }
