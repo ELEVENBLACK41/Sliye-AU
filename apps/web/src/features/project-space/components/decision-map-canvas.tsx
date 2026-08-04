@@ -38,7 +38,7 @@ const NODE_VERTICAL_GAP = 82;
 const NODE_HORIZONTAL_GAP = 250;
 const NODE_APPEAR_PROGRESS = 0.82;
 /** 首次进入画布时项目根节点使用的放大倍率。 */
-const INITIAL_ROOT_SCALE = 2.2;
+const INITIAL_ROOT_SCALE = 1.2;
 
 /** 为不同业务层级返回稳定的节点尺寸。 */
 function getNodeSize(type: DecisionTreeNodeType): { width: number; height: number } {

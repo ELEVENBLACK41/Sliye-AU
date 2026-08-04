@@ -63,8 +63,9 @@ export function ProjectWorkspacePanel({ activeSection, onSectionChange, replayCo
           </div>
         ) : null}
       </header>
-
+      {/* 群组展示区域 */}
       {activeSection === 'discussion' ? <ProjectDiscussionWorkspace /> : null}
+      {/* 中间D3流程展示区域 */}
       {activeSection === 'decisions' ? (
         <DecisionMapCanvas
           ref={decisionMapRef}
@@ -72,7 +73,8 @@ export function ProjectWorkspacePanel({ activeSection, onSectionChange, replayCo
           progress={replayController.progress}
         />
       ) : null}
-      {activeSection === 'meetings' ? <ProjectMeetingWorkspace /> : null}
+      {/* 会议展示区域 */}
+      {/* {activeSection === 'meetings' ? <ProjectMeetingWorkspace /> : null} */}
     </section>
   );
 }
