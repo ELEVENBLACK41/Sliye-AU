@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, RefreshCw, Search, GitBranch, Plus } from 'lucide-react';
 import type { DecisionEventTimelineItem, DecisionSummary } from '@workspace/contracts/decisions';
-import type { ProjectDetail } from '@workspace/contracts/projects';
+import type { DiscussionAreaSummary, ProjectDetail } from '@workspace/contracts/projects';
 
 import { getDecisionEvents } from '@/features/decisions/services/decisions-client.service';
 import { useDecisionReplay } from '../hooks/use-decision-replay';
@@ -24,6 +24,8 @@ import { Skeleton } from '@workspace/ui/components/skeleton';
 type ProjectDecisionsWorkspaceProps = {
   /** 当前项目。 */
   project: ProjectDetail;
+  /** 当前用户可见的项目讨论分区。 */
+  areas: DiscussionAreaSummary[];
   /** 当前项目下用户可见的决策摘要。 */
   decisions: DecisionSummary[];
 };
@@ -37,7 +39,7 @@ type LoadedDecisionEvents = {
 };
 
 /** 按需读取项目决策事件，并处理加载、空数据和局部失败状态。 */
-export function ProjectDecisionsWorkspace({ project, decisions }: ProjectDecisionsWorkspaceProps) {
+export function ProjectDecisionsWorkspace({ project, areas, decisions }: ProjectDecisionsWorkspaceProps) {
   const [loadedEvents, setLoadedEvents] = useState<LoadedDecisionEvents[] | null>(null);
   const [hasError, setHasError] = useState(false);
   const [retryVersion, setRetryVersion] = useState(0);
@@ -80,7 +82,7 @@ export function ProjectDecisionsWorkspace({ project, decisions }: ProjectDecisio
     decision,
     events: loadedEvents.find((item) => item.decisionId === decision.id)?.events ?? [],
   }));
-  const replayModel = buildProjectDecisionReplayModel(project.title, eventSources);
+  const replayModel = buildProjectDecisionReplayModel(project.title, eventSources, areas);
   if (replayModel.events.length === 0) return <DecisionEventsEmptyState />;
 
   return <ProjectDecisionReplay replayModel={replayModel} />;

@@ -10,6 +10,7 @@ import { ChevronDown, ChevronUp, Pause, Play, RotateCcw } from 'lucide-react';
 import type { DecisionReplayController } from '../hooks/use-decision-replay';
 import type { DecisionReplayEvent } from '../types/project-space.type';
 import { Button } from '@workspace/ui/components/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@workspace/ui/components/tooltip';
 
 /** 决策过程回放胶囊的共享控制状态。 */
 type DecisionReplayTimelineProps = {
@@ -181,11 +182,13 @@ export function DecisionReplayTimeline({ controller, events }: DecisionReplayTim
           className="mt-2 w-full min-w-0 touch-pan-x overflow-x-auto overscroll-x-contain [@media(max-height:800px)]:mt-1"
           aria-label="决策回放事件轨道"
         >
-          <ol className="relative grid w-full grid-flow-col auto-cols-[12.5%] items-start px-1 pt-0.5 [@media(max-height:800px)]:pt-0">
-            {events.map((event, index) => {
+          <TooltipProvider delayDuration={180}>
+            <ol className="relative grid w-full grid-flow-col auto-cols-[12.5%] items-start px-1 pt-0.5 [@media(max-height:800px)]:pt-0">
+              {events.map((event, index) => {
               const isCurrent = index === controller.currentIndex;
               const isPast = index < controller.currentIndex;
               const connectionProgress = isPast ? 100 : isCurrent ? controller.progress * 100 : 0;
+              const fullLabel = `${event.scopeLabel ? `${event.scopeLabel} · ` : ''}${event.phase} · ${event.label}`;
 
               return (
                 <li key={event.id} className="relative flex min-w-0 justify-center px-1 text-center">
@@ -198,36 +201,44 @@ export function DecisionReplayTimeline({ controller, events }: DecisionReplayTim
                       aria-hidden
                     />
                   ) : null}
-                  <button
-                    ref={(button) => {
-                      eventButtonRefs.current[index] = button;
-                    }}
-                    type="button"
-                    onClick={() => controller.seekToEvent(index)}
-                    className="group flex w-full min-w-0 flex-col items-center rounded-xl px-1 pb-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[#d5a400]/60"
-                    aria-current={isCurrent ? 'step' : undefined}
-                  >
-                    <span
-                      className={`relative z-10 grid size-3 place-items-center rounded-full transition-all ${
-                        isCurrent
-                          ? 'scale-110 bg-[#efb900] ring-4 ring-[#efb900]/18'
-                          : isPast
-                            ? 'bg-[#efb900]'
-                            : 'border border-black/25 bg-[#f8f7f2] group-hover:border-black/50'
-                      }`}
-                      aria-hidden
-                    />
-                    <span className={`mt-1.5 text-[8px] font-semibold ${isCurrent ? 'text-[#8a6a00]' : 'text-black/35'}`}>
-                      {event.timeLabel}
-                    </span>
-                    <span className={`mt-0.5 line-clamp-1 text-[10px] ${isCurrent ? 'font-semibold text-black/75' : 'text-black/48'}`}>
-                      {event.phase} · {event.label}
-                    </span>
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        ref={(button) => {
+                          eventButtonRefs.current[index] = button;
+                        }}
+                        type="button"
+                        onClick={() => controller.seekToEvent(index)}
+                        className="group flex w-full min-w-0 flex-col items-center rounded-xl px-1 pb-0.5 outline-none focus-visible:ring-2 focus-visible:ring-[#d5a400]/60"
+                        aria-current={isCurrent ? 'step' : undefined}
+                      >
+                        <span
+                          className={`relative z-10 grid size-3 place-items-center rounded-full transition-all ${
+                            isCurrent
+                              ? 'scale-110 bg-[#efb900] ring-4 ring-[#efb900]/18'
+                              : isPast
+                                ? 'bg-[#efb900]'
+                                : 'border border-black/25 bg-[#f8f7f2] group-hover:border-black/50'
+                          }`}
+                          aria-hidden
+                        />
+                        <span className={`mt-1.5 text-[8px] font-semibold ${isCurrent ? 'text-[#8a6a00]' : 'text-black/35'}`}>
+                          {event.timeLabel}
+                        </span>
+                        <span className={`mt-0.5 line-clamp-1 text-[10px] ${isCurrent ? 'font-semibold text-black/75' : 'text-black/48'}`}>
+                          {fullLabel}
+                        </span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" sideOffset={8} className="max-w-80 text-left leading-5">
+                      {fullLabel}
+                    </TooltipContent>
+                  </Tooltip>
                 </li>
               );
-            })}
-          </ol>
+              })}
+            </ol>
+          </TooltipProvider>
         </div>
       </section>
 

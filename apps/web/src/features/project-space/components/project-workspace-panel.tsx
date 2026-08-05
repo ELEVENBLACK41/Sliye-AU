@@ -70,7 +70,12 @@ export function ProjectWorkspacePanel(props: ProjectWorkspacePanelProps) {
         />
       ) : null}
       {activeSection === 'decisions' ? (
-        <ProjectDecisionsWorkspace key={project.id} project={project} decisions={props.decisions} />
+        <ProjectDecisionsWorkspace
+          key={project.id}
+          project={project}
+          areas={props.areas}
+          decisions={props.decisions}
+        />
       ) : null}
       {activeSection === 'meetings' ? (
         <ProjectMeetingWorkspace meetings={props.meetings} />

@@ -8,7 +8,7 @@ import { hierarchy, select, tree, zoom, zoomIdentity } from 'd3';
 import type { HierarchyPointLink, ZoomBehavior } from 'd3';
 import { CheckCircle2, GitBranch, Radio, Vote } from 'lucide-react';
 
-import type { DecisionReplayEvent, DecisionTreeNode, DecisionTreeNodeType } from '../types/project-space.type';
+import type { DecisionReplayEvent, DecisionTreeNode } from '../types/project-space.type';
 import { Badge } from '@workspace/ui/components/badge';
 
 /** 中央决策树画布的外部播放状态。 */
@@ -38,22 +38,52 @@ const TREE_VIEWBOX_HEIGHT = 940;
 const TREE_OFFSET_X = 130;
 const TREE_OFFSET_Y = 70;
 const NODE_VERTICAL_GAP = 82;
-const NODE_HORIZONTAL_GAP = 250;
+const NODE_LEVEL_GAP = 54;
 const NODE_APPEAR_PROGRESS = 0.82;
+const NODE_MAX_WIDTH = 420;
+const NODE_HORIZONTAL_PADDING = 42;
 /** 首次进入画布时项目根节点使用的放大倍率。 */
 const INITIAL_ROOT_SCALE = 1.2;
 
-/** 为不同业务层级返回稳定的节点尺寸。 */
-function getNodeSize(type: DecisionTreeNodeType): { width: number; height: number } {
-  if (type === 'project') return { width: 230, height: 76 };
-  if (type === 'decision') return { width: 220, height: 70 };
-  return { width: 210, height: 64 };
+/** 近似计算 SVG 单行文字宽度，兼顾中文、英文和数字的字宽差异。 */
+function estimateSvgTextWidth(text: string, fontSize: number): number {
+  return [...text].reduce((width, character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (/\s/u.test(character)) return width + fontSize * 0.35;
+    return width + (codePoint > 0xff ? fontSize : fontSize * 0.58);
+  }, 0);
+}
+
+/** 为不同业务层级返回由真实标题和副标题共同决定的节点尺寸。 */
+function getNodeSize(node: DecisionTreeNode): { width: number; height: number } {
+  const minimumWidth = node.type === 'project' ? 230 : node.type === 'area' ? 220 : node.type === 'decision' ? 220 : 210;
+  const height = node.type === 'project' ? 76 : node.type === 'area' ? 68 : node.type === 'decision' ? 70 : 64;
+  const contentWidth = Math.max(
+    estimateSvgTextWidth(node.title, 14),
+    estimateSvgTextWidth(node.subtitle, 10),
+  );
+  return {
+    width: Math.min(NODE_MAX_WIDTH, Math.max(minimumWidth, Math.ceil(contentWidth + NODE_HORIZONTAL_PADDING * 2))),
+    height,
+  };
+}
+
+/** 在节点达到最大宽度后安全省略 SVG 文本，并由节点 title 保留完整内容。 */
+function truncateSvgText(text: string, availableWidth: number, fontSize: number): string {
+  if (estimateSvgTextWidth(text, fontSize) <= availableWidth) return text;
+  const characters = [...text];
+  let result = '';
+  for (const character of characters) {
+    if (estimateSvgTextWidth(`${result}${character}…`, fontSize) > availableWidth) break;
+    result += character;
+  }
+  return `${result}…`;
 }
 
 /** 生成从来源卡片右边缘到目标卡片左边缘的贝塞尔连线。 */
 function buildTreeLinkPath(treeLink: HierarchyPointLink<DecisionTreeNode>): string {
-  const sourceSize = getNodeSize(treeLink.source.data.type);
-  const targetSize = getNodeSize(treeLink.target.data.type);
+  const sourceSize = getNodeSize(treeLink.source.data);
+  const targetSize = getNodeSize(treeLink.target.data);
   const sourceX = treeLink.source.y + TREE_OFFSET_X + sourceSize.width / 2;
   const sourceY = treeLink.source.x + TREE_OFFSET_Y;
   const targetX = treeLink.target.y + TREE_OFFSET_X - targetSize.width / 2;
@@ -82,7 +112,7 @@ function getNodeDetailEventIndex(
   currentIndex: number,
   progress: number,
   eventIndexById: Map<string, number>,
-): number {
+): number | null {
   const availableEventIndex = progress >= NODE_APPEAR_PROGRESS ? currentIndex : currentIndex - 1;
   const resultEventIds = [node.detailEventId, node.statusEventId, node.completionEventId];
 
@@ -92,7 +122,7 @@ function getNodeDetailEventIndex(
     if (resultIndex !== undefined && resultIndex <= availableEventIndex) return resultIndex;
   }
 
-  return eventIndexById.get(node.id) ?? 0;
+  return eventIndexById.get(node.appearanceEventId ?? node.id) ?? null;
 }
 
 /** 渲染 D3 决策树，并按照底部胶囊进度分层同时生长节点与连线。 */
@@ -106,10 +136,25 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
   const eventIndexById = useMemo(() => new Map(events.map((event, index) => [event.id, index])), [events]);
   const treeRoot = useMemo(() => {
     const root = hierarchy<DecisionTreeNode>(treeData);
-    const layoutRoot = tree<DecisionTreeNode>().nodeSize([NODE_VERTICAL_GAP, NODE_HORIZONTAL_GAP])(root);
+    const layoutRoot = tree<DecisionTreeNode>().nodeSize([NODE_VERTICAL_GAP, 1])(root);
     const minimumX = Math.min(...layoutRoot.descendants().map((node) => node.x));
+    const maximumWidthByDepth = new Map<number, number>();
+    layoutRoot.each((node) => {
+      maximumWidthByDepth.set(
+        node.depth,
+        Math.max(maximumWidthByDepth.get(node.depth) ?? 0, getNodeSize(node.data).width),
+      );
+    });
+    const horizontalOffsetByDepth = new Map<number, number>([[0, 0]]);
+    for (let depth = 1; depth <= layoutRoot.height; depth += 1) {
+      const previousOffset = horizontalOffsetByDepth.get(depth - 1) ?? 0;
+      const previousWidth = maximumWidthByDepth.get(depth - 1) ?? 0;
+      const currentWidth = maximumWidthByDepth.get(depth) ?? 0;
+      horizontalOffsetByDepth.set(depth, previousOffset + previousWidth / 2 + NODE_LEVEL_GAP + currentWidth / 2);
+    }
     layoutRoot.each((node) => {
       node.x -= minimumX;
+      node.y = horizontalOffsetByDepth.get(node.depth) ?? 0;
     });
     return layoutRoot;
   }, [treeData]);
@@ -122,6 +167,24 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
     ? getNodeDetailEventIndex(selectedTreeNode.data, currentIndex, progress, eventIndexById)
     : null;
   const detailEvent = events[selectedDetailEventIndex ?? currentIndex] ?? currentEvent;
+  const isStructuralNodeSelected =
+    selectedTreeNode?.data.type === 'project' || selectedTreeNode?.data.type === 'area';
+  const detailPhase = isStructuralNodeSelected
+    ? selectedTreeNode.data.type === 'area'
+      ? '范围'
+      : '项目'
+    : detailEvent.phase;
+  const detailTimeLabel = isStructuralNodeSelected ? '回放起点' : detailEvent.timeLabel;
+  const detailLabel = isStructuralNodeSelected ? selectedTreeNode.data.title : detailEvent.label;
+  const detailSummary = isStructuralNodeSelected ? selectedTreeNode.data.subtitle : detailEvent.summary;
+  const detailActor = isStructuralNodeSelected
+    ? selectedTreeNode.data.type === 'area'
+      ? '小群组分区'
+      : '项目空间'
+    : detailEvent.actor;
+  const detailEvidence = isStructuralNodeSelected
+    ? `${selectedTreeNode.data.children?.length ?? 0} 个直属节点`
+    : detailEvent.evidence;
 
   /** 安装 D3 缩放行为，使鼠标拖动画布和滚轮缩放与工具栏共用同一视口状态。 */
   useEffect(() => {
@@ -223,9 +286,8 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
           statusIndex < currentIndex ||
           (statusIndex === currentIndex && progress >= NODE_APPEAR_PROGRESS);
         const isFinalResolutionPath =
-          (routeStatus === 'resolved' || routeStatus === 'superseded' || routeStatus === 'revoked') &&
-          completionReached &&
-          !statusReached;
+          (routeStatus === 'resolved' && completionReached) ||
+          ((routeStatus === 'superseded' || routeStatus === 'revoked') && completionReached && !statusReached);
         const isInactiveResolutionPath =
           (routeStatus === 'superseded' || routeStatus === 'revoked') && statusReached;
 
@@ -281,11 +343,13 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className="rounded-full border border-black/10 bg-white/70 px-2.5 py-1 text-[10px] font-semibold text-black/58 shadow-none">
-              {detailEvent.phase}
+              {detailPhase}
             </Badge>
-            <span className="text-[11px] font-medium text-black/45">{detailEvent.timeLabel}</span>
+            <span className="text-[11px] font-medium text-black/45">{detailTimeLabel}</span>
             <span className="text-[10px] font-medium tracking-[0.14em] text-black/35">
-              EVENT {String(detailEvent.sequence).padStart(2, '0')} / {String(events.length).padStart(2, '0')}
+              {isStructuralNodeSelected
+                ? 'PROJECT STRUCTURE'
+                : `EVENT ${String(detailEvent.sequence).padStart(2, '0')} / ${String(events.length).padStart(2, '0')}`}
             </span>
             {selectedNodeId !== null ? (
               <button
@@ -299,9 +363,9 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
             ) : null}
           </div>
           <h2 id="d3-replay-title" className="mt-2 text-xl font-semibold tracking-[-0.025em] text-[#292a27]">
-            {detailEvent.label}
+            {detailLabel}
           </h2>
-          <p className="mt-1 max-w-xl text-xs leading-5 text-black/50">{detailEvent.summary}</p>
+          <p className="mt-1 max-w-xl text-xs leading-5 text-black/50">{detailSummary}</p>
         </div>
 
         <aside
@@ -310,11 +374,11 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
         >
           <div className="flex items-center gap-2 text-[10px] font-medium text-black/42">
             <Vote className="size-3.5" aria-hidden />
-            {detailEvent.actor}
+            {detailActor}
           </div>
           <div className="mt-2 flex items-start gap-2 text-[11px] leading-4 text-black/65">
             <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#16885a]" aria-hidden />
-            <span>{detailEvent.evidence}</span>
+            <span>{detailEvidence}</span>
           </div>
         </aside>
       </header>
@@ -331,7 +395,7 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
             <g ref={viewportRef}>
             <g aria-hidden>
               {treeLinks.map((treeLink) => {
-                const eventIndex = eventIndexById.get(treeLink.target.data.id) ?? -1;
+                const eventIndex = eventIndexById.get(treeLink.target.data.appearanceEventId ?? treeLink.target.data.id) ?? -1;
                 const isLinkVisible =
                   eventIndex < currentIndex || (eventIndex === currentIndex && progress > 0);
                 const completionIndex = treeLink.target.data.completionEventId
@@ -361,7 +425,7 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
 
             <g>
               {treeNodes.map((treeNode) => {
-                const eventIndex = eventIndexById.get(treeNode.data.id) ?? -1;
+                const eventIndex = eventIndexById.get(treeNode.data.appearanceEventId ?? treeNode.data.id) ?? -1;
                 const completionIndex = treeNode.data.completionEventId
                   ? (eventIndexById.get(treeNode.data.completionEventId) ?? Number.POSITIVE_INFINITY)
                   : Number.POSITIVE_INFINITY;
@@ -388,7 +452,10 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
                 const isVisible =
                   eventIndex < 0 || eventIndex < currentIndex || (eventIndex === currentIndex && progress >= NODE_APPEAR_PROGRESS);
                 const isSelected = treeNode.data.id === selectedNodeId;
-                const { width, height } = getNodeSize(treeNode.data.type);
+                const isAreaNode = treeNode.data.type === 'area';
+                const { width, height } = getNodeSize(treeNode.data);
+                const title = truncateSvgText(treeNode.data.title, width - NODE_HORIZONTAL_PADDING * 2, 14);
+                const subtitle = truncateSvgText(treeNode.data.subtitle, width - NODE_HORIZONTAL_PADDING * 2, 10);
                 const x = treeNode.y + TREE_OFFSET_X;
                 const y = treeNode.x + TREE_OFFSET_Y;
 
@@ -404,32 +471,35 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
                     tabIndex={0}
                     aria-label={
                       eventIndex < 0
-                        ? `项目根节点：${treeNode.data.title}`
+                        ? `${isAreaNode ? '小组范围' : '项目'}节点：${treeNode.data.title}`
                         : `查看第 ${eventIndex + 1} 个事件：${treeNode.data.title}`
                     }
                     onClick={(mouseEvent) => {
                       mouseEvent.stopPropagation();
-                      if (eventIndex >= 0) setSelectedNodeId(treeNode.data.id);
+                      setSelectedNodeId(treeNode.data.id);
                     }}
                     onKeyDown={(keyboardEvent) =>
                       handleNodeKeyDown(
                         keyboardEvent,
                         treeNode.data.id,
-                        eventIndex >= 0,
+                        true,
                         setSelectedNodeId,
                       )
                     }
                     className="cursor-pointer outline-none focus-visible:[&>rect]:stroke-[#292a27] focus-visible:[&>rect]:stroke-[3]"
                   >
+                    <title>{`${treeNode.data.title}\n${treeNode.data.subtitle}`}</title>
                     <rect
                       x={-width / 2}
                       y={-height / 2}
                       width={width}
                       height={height}
-                      rx={treeNode.data.type === 'project' ? 20 : 12}
+                      rx={treeNode.data.type === 'project' || isAreaNode ? 20 : 12}
                       fill={
                         treeNode.data.type === 'project'
                           ? '#30312e'
+                          : isAreaNode
+                            ? '#fff8dc'
                           : isInactiveResolution
                             ? isRevokedPath
                               ? '#fff0f0'
@@ -447,6 +517,8 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
                       stroke={
                         isSelected
                           ? '#e7b200'
+                          : isAreaNode
+                            ? '#d6ae2f'
                           : isInactiveResolution
                           ? isRevokedPath
                             ? '#b65b5b'
@@ -464,16 +536,16 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
                     <text
                       y={-3}
                       textAnchor="middle"
-                      className={`text-[14px] font-semibold ${treeNode.data.type === 'project' ? 'fill-white' : 'fill-[#292a27]'}`}
+                      className={`text-[14px] font-semibold ${treeNode.data.type === 'project' ? 'fill-white' : isAreaNode ? 'fill-[#735600]' : 'fill-[#292a27]'}`}
                     >
-                      {treeNode.data.title}
+                      {title}
                     </text>
                     <text
                       y={14}
                       textAnchor="middle"
-                      className={`text-[10px] ${treeNode.data.type === 'project' ? 'fill-white/55' : isAbandonedPath || isSupersededPath ? 'fill-[#6d6f69]' : isRejectedResult || (isRevokedPath && statusReached) ? 'fill-[#b42323]' : 'fill-black/45'}`}
+                      className={`text-[10px] ${treeNode.data.type === 'project' ? 'fill-white/55' : isAreaNode ? 'fill-[#8a6500]' : isAbandonedPath || isSupersededPath ? 'fill-[#6d6f69]' : isRejectedResult || (isRevokedPath && statusReached) ? 'fill-[#b42323]' : 'fill-black/45'}`}
                     >
-                      {treeNode.data.subtitle}
+                      {subtitle}
                     </text>
                   </g>
                 );
@@ -485,8 +557,9 @@ function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forward
       </div>
 
       <div className="pointer-events-none absolute right-5 bottom-28 flex items-center gap-3 rounded-full border border-black/[0.06] bg-white/62 px-3 py-2 text-[9px] font-medium text-black/38 backdrop-blur-sm" aria-hidden>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full border border-black/20 bg-white" />未发起投票</span>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#dc4c4c]" />投票拒绝</span>
+        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full border border-[#d6ae2f] bg-[#fff8dc]" />小组范围</span>
+        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full border border-black/20 bg-white" />过程进行中</span>
+        <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#dc4c4c]" />未通过</span>
         <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#22a06b]" />正式决议路径</span>
         <span className="flex items-center gap-1.5"><span className="h-px w-3 border-t border-dashed border-black/45" />废弃或失效</span>
         <GitBranch className="size-3.5" />

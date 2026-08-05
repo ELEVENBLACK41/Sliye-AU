@@ -18,7 +18,7 @@ export type ProjectSpaceSummary = {
 export type ProjectSectionKey = 'discussion' | 'decisions' | 'meetings';
 
 /** D3 决策树中的节点类型。 */
-export type DecisionTreeNodeType = 'project' | 'decision' | 'proposal' | 'resolution' | 'abandoned';
+export type DecisionTreeNodeType = 'project' | 'area' | 'decision' | 'proposal' | 'vote' | 'resolution' | 'abandoned';
 
 /** D3 决策树路径最终形成的业务结果。 */
 export type DecisionTreeRouteStatus =
@@ -34,6 +34,8 @@ export type DecisionTreeRouteStatus =
 export type DecisionTreeNode = {
   /** 节点稳定标识，并与回放事件保持一致。 */
   id: string;
+  /** 驱动当前实体首次出现在回放画布上的事件标识；省略时使用节点标识匹配。 */
+  appearanceEventId?: string;
   /** 节点业务类型。 */
   type: DecisionTreeNodeType;
   /** 节点主要名称。 */
@@ -58,6 +60,8 @@ export type DecisionReplayEvent = {
   id: string;
   /** 节点在完整决策过程中的顺序。 */
   sequence: number;
+  /** 当前事件属于项目级决策还是某个小组讨论分区。 */
+  scopeLabel?: string;
   /** 节点所属的决策阶段。 */
   phase: '决策' | '提案' | '投票' | '决议' | '废弃';
   /** 事件在模拟时间线中的可读发生时间。 */
