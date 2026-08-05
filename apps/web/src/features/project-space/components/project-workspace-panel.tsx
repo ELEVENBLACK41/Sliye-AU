@@ -6,9 +6,11 @@
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
 import type {
+  DiscussionAreaMember,
   DiscussionAreaSummary,
   ProjectChatMessagePage,
   ProjectDetail,
+  ProjectMember,
   ProjectUserSummary,
 } from '@workspace/contracts/projects';
 
@@ -26,6 +28,10 @@ type ProjectWorkspacePanelProps = {
   areas: DiscussionAreaSummary[];
   /** 当前选中的讨论分区。 */
   currentArea: DiscussionAreaSummary;
+  /** 当前私有分区的显式成员。 */
+  currentAreaMembers: DiscussionAreaMember[];
+  /** 当前项目全部成员。 */
+  projectMembers: ProjectMember[];
   /** 当前分区首屏消息。 */
   initialMessages: ProjectChatMessagePage;
   /** 当前项目决策。 */
@@ -65,7 +71,9 @@ export function ProjectWorkspacePanel(props: ProjectWorkspacePanelProps) {
           project={project}
           areas={props.areas}
           currentArea={props.currentArea}
+          currentAreaMembers={props.currentAreaMembers}
           initialMessages={props.initialMessages}
+          projectMembers={props.projectMembers}
           currentUser={props.currentUser}
         />
       ) : null}

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
 import type {
+  DiscussionAreaMember,
   DiscussionAreaSummary,
   ProjectChatMessagePage,
   ProjectDetail,
@@ -31,6 +32,8 @@ type ProjectSpacePageProps = {
   areas: DiscussionAreaSummary[];
   /** 当前选中的讨论分区。 */
   currentArea: DiscussionAreaSummary;
+  /** 当前私有分区的显式成员；公共分区复用项目成员。 */
+  currentAreaMembers: DiscussionAreaMember[];
   /** 当前分区的首屏聊天消息。 */
   initialMessages: ProjectChatMessagePage;
   /** 当前项目成员。 */
@@ -71,7 +74,9 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
           project={props.project}
           areas={props.areas}
           currentArea={props.currentArea}
+          currentAreaMembers={props.currentAreaMembers}
           initialMessages={props.initialMessages}
+          projectMembers={props.members}
           decisions={props.decisions}
           meetings={props.meetings}
           currentUser={props.currentUser}
@@ -81,11 +86,14 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
         <ProjectOverviewPanel
           project={props.project}
           areas={props.areas}
+          currentArea={props.currentArea}
+          currentAreaMembers={props.currentAreaMembers}
           members={props.members}
           memberCandidates={props.memberCandidates}
           decisions={props.decisions}
           meetings={props.meetings}
           canManage={props.canManageProject}
+          showCurrentArea={activeSection === 'discussion'}
         />
       </div>
     </section>

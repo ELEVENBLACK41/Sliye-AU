@@ -4,9 +4,16 @@
 import { Building2, FolderKanban, UsersRound } from 'lucide-react';
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
-import type { DiscussionAreaSummary, ProjectDetail, ProjectMember, ProjectMemberCandidate } from '@workspace/contracts/projects';
+import type {
+  DiscussionAreaMember,
+  DiscussionAreaSummary,
+  ProjectDetail,
+  ProjectMember,
+  ProjectMemberCandidate,
+} from '@workspace/contracts/projects';
 
 import { ProjectCollaborationManagementSheet } from './project-collaboration-management-sheet';
+import { ProjectCurrentAreaMembersCard } from './project-current-area-members';
 import {
   Avatar,
   AvatarFallback,
@@ -21,6 +28,10 @@ type ProjectOverviewPanelProps = {
   project: ProjectDetail;
   /** 当前用户可见的讨论分区。 */
   areas: DiscussionAreaSummary[];
+  /** 当前选中的讨论分区。 */
+  currentArea: DiscussionAreaSummary;
+  /** 当前私有分区的显式成员。 */
+  currentAreaMembers: DiscussionAreaMember[];
   /** 当前项目成员。 */
   members: ProjectMember[];
   /** 当前项目尚可添加的组织用户。 */
@@ -31,6 +42,8 @@ type ProjectOverviewPanelProps = {
   meetings: MeetingSummary[];
   /** 当前用户是否可以维护项目成员和私有小群组。 */
   canManage: boolean;
+  /** 当前是否处于讨论模块，需要展示分区上下文。 */
+  showCurrentArea: boolean;
 };
 
 /** 项目状态中文文案。 */
@@ -44,11 +57,14 @@ const statusText: Record<ProjectDetail['status'], string> = {
 export function ProjectOverviewPanel({
   project,
   areas,
+  currentArea,
+  currentAreaMembers,
   members,
   memberCandidates,
   decisions,
   meetings,
   canManage,
+  showCurrentArea,
 }: ProjectOverviewPanelProps) {
   const resolvedDecisionCount = decisions.filter((decision) => decision.status === 'RESOLVED').length;
   const scheduledMeetingCount = meetings.filter((meeting) => meeting.status === 'SCHEDULED' || meeting.status === 'LIVE').length;
@@ -71,6 +87,14 @@ export function ProjectOverviewPanel({
           </span>
         </div>
       </header>
+
+      {showCurrentArea ? (
+        <ProjectCurrentAreaMembersCard
+          area={currentArea}
+          projectMembers={members}
+          privateAreaMembers={currentAreaMembers}
+        />
+      ) : null}
 
       <dl className="grid grid-cols-[4rem_1fr] gap-x-3 gap-y-3 border-t border-black/8 px-4 py-4 text-xs">
         <dt className="text-black/40">负责人</dt>

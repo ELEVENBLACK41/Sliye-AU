@@ -6,6 +6,7 @@ import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
 import type {
+  DiscussionAreaMember,
   DiscussionAreaSummary,
   ProjectChatMessagePage,
   ProjectDetail,
@@ -22,6 +23,7 @@ import { ProjectSpaceEmptyState } from '@/features/project-space/components/proj
 import { ProjectSpacePage } from '@/features/project-space/components/project-space-page';
 import {
   getProjectSpaceAreas,
+  getProjectSpaceAreaMembers,
   getProjectSpaceDecisions,
   getProjectSpaceMeetings,
   getProjectSpaceMembers,
@@ -48,6 +50,8 @@ type ProjectSpaceRouteData = {
   areas: DiscussionAreaSummary[];
   /** 当前选中的讨论分区。 */
   currentArea: DiscussionAreaSummary;
+  /** 当前私有分区的显式成员；公共分区复用项目成员。 */
+  currentAreaMembers: DiscussionAreaMember[];
   /** 当前分区首屏消息。 */
   initialMessages: ProjectChatMessagePage;
   /** 当前项目成员。 */
@@ -108,10 +112,13 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
     const canManageProject =
       hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.update) &&
       (project.currentUserRole === 'OWNER' || project.currentUserRole === 'MANAGER');
-    const [initialMessages, memberCandidates] = await Promise.all([
+    const [initialMessages, memberCandidates, currentAreaMembers] = await Promise.all([
       getProjectSpaceMessages(project.id, currentArea.id),
       canManageProject && project.status === 'ACTIVE'
         ? getProjectSpaceMemberCandidates(project.id)
+        : Promise.resolve([]),
+      currentArea.type === 'PRIVATE'
+        ? getProjectSpaceAreaMembers(project.id, currentArea.id)
         : Promise.resolve([]),
     ]);
     pageData = {
@@ -119,6 +126,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
       project,
       areas,
       currentArea,
+      currentAreaMembers,
       initialMessages,
       members,
       memberCandidates,

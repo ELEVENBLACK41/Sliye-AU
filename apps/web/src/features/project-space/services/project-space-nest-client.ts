@@ -4,6 +4,7 @@
 import type { DecisionListResponse } from '@workspace/contracts/decisions';
 import type { MeetingListResponse } from '@workspace/contracts/meetings';
 import type {
+  DiscussionAreaMemberListResponse,
   DiscussionAreaListResponse,
   ProjectMemberCandidateListQuery,
   ProjectMemberCandidateListResponse,
@@ -35,6 +36,17 @@ export function requestProjectSpaceAreas(
   projectId: number,
 ): Promise<NestResponse<DiscussionAreaListResponse>> {
   return requestNest<DiscussionAreaListResponse>(`/projects/${projectId}/areas`, {
+    headers: createAuthHeaders(accessToken),
+  });
+}
+
+/** 查询新版项目空间当前私有分区的成员列表。 */
+export function requestProjectSpaceAreaMembers(
+  accessToken: string,
+  projectId: number,
+  areaId: number,
+): Promise<NestResponse<DiscussionAreaMemberListResponse>> {
+  return requestNest<DiscussionAreaMemberListResponse>(`/projects/${projectId}/areas/${areaId}/members`, {
     headers: createAuthHeaders(accessToken),
   });
 }

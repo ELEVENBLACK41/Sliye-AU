@@ -1,3 +1,11 @@
+/*
+ * @Author: shaoliye elevenblack41@gmail.com
+ * @Date: 2026-08-05 12:13:55
+ * @LastEditors: shaoliye elevenblack41@gmail.com
+ * @LastEditTime: 2026-08-05 17:17:35
+ * @FilePath: \NextNest\apps\web\src\app\(newroute)\projects\loading.tsx
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 /**
  * 本文件展示新版项目空间等待服务端数据期间的结构化骨架。
  */
@@ -20,7 +28,7 @@ export default function ProjectsLoading() {
       <section className="space-y-4 p-5">
         <Skeleton className="h-5 w-52" />
         <Skeleton className="h-8 w-60 rounded-full" />
-        <Skeleton className="h-[31rem] w-full rounded-2xl" />
+        <Skeleton className="h-[60rem] w-full rounded-2xl" />
       </section>
       <aside className="space-y-4 border-l border-black/10 p-4">
         <Skeleton className="h-12 w-full" />

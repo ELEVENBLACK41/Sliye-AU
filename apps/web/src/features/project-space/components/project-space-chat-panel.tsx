@@ -6,8 +6,15 @@
 import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Lightbulb, MoreHorizontal, Paperclip, Search, Send, UsersRound, Video, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import type { DiscussionAreaSummary, ProjectChatMessagePage, ProjectUserSummary } from '@workspace/contracts/projects';
+import type {
+  DiscussionAreaMember,
+  DiscussionAreaSummary,
+  ProjectChatMessagePage,
+  ProjectMember,
+  ProjectUserSummary,
+} from '@workspace/contracts/projects';
 
+import { ProjectCurrentAreaMembersSheet } from './project-current-area-members';
 import { ProjectSpaceChatMessageList } from './project-space-chat-message-list';
 import { useProjectSpaceChat, type ProjectSpaceChatViewMessage } from '../hooks/use-project-space-chat';
 import type { ProjectSpaceChatConnectionStatus } from '../hooks/use-project-space-chat-realtime';
@@ -20,6 +27,10 @@ type ProjectSpaceChatPanelProps = {
   projectId: number;
   /** 当前讨论分区。 */
   area: DiscussionAreaSummary;
+  /** 当前私有分区的显式成员。 */
+  privateAreaMembers: DiscussionAreaMember[];
+  /** 当前项目全部成员。 */
+  projectMembers: ProjectMember[];
   /** 当前分区首屏消息页。 */
   initialPage: ProjectChatMessagePage;
   /** 当前认证用户安全摘要。 */
@@ -51,7 +62,7 @@ type ChatScrollSnapshot = {
 
 /** 渲染新版聊天视觉，同时复用真实分页、乐观发送和 Socket 状态。 */
 export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
-  const { projectId, area, initialPage, currentUser, canSend, readOnlyReason } = props;
+  const { projectId, area, privateAreaMembers, initialPage, projectMembers, currentUser, canSend, readOnlyReason } = props;
   const router = useRouter();
   const [draft, setDraft] = useState('');
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
@@ -146,6 +157,11 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
           </p>
         </div>
         <div className="flex items-center gap-1.5" aria-label="群组操作">
+          <ProjectCurrentAreaMembersSheet
+            area={area}
+            projectMembers={projectMembers}
+            privateAreaMembers={privateAreaMembers}
+          />
           <Button type="button" variant="outline" size="icon" className="size-8 rounded-lg border-black/10 bg-white/55 shadow-none" aria-label="搜索群消息">
             <Search className="size-3.5" aria-hidden />
           </Button>

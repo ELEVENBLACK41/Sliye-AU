@@ -10,6 +10,7 @@ import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
 import type { NestResponse } from '@/services/bff-request';
 import {
   requestProjectSpaceAreas,
+  requestProjectSpaceAreaMembers,
   requestProjectSpaceDecisions,
   requestProjectSpaceDetail,
   requestProjectSpaceMeetings,
@@ -51,6 +52,11 @@ export const getProjectSpaceProject = cache(async (projectId: number) =>
 /** 读取新版项目空间当前项目的可见分区。 */
 export const getProjectSpaceAreas = cache(async (projectId: number) =>
   unwrap(await requestProjectSpaceAreas(await getAccessToken(), projectId)),
+);
+
+/** 读取新版项目空间当前私有分区的成员列表。 */
+export const getProjectSpaceAreaMembers = cache(async (projectId: number, areaId: number) =>
+  unwrap(await requestProjectSpaceAreaMembers(await getAccessToken(), projectId, areaId)),
 );
 
 /** 读取新版项目空间当前项目成员。 */

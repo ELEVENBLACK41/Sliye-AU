@@ -4,9 +4,11 @@
 import Link from 'next/link';
 import { Hash, LockKeyhole, Plus, UsersRound } from 'lucide-react';
 import type {
+  DiscussionAreaMember,
   DiscussionAreaSummary,
   ProjectChatMessagePage,
   ProjectDetail,
+  ProjectMember,
   ProjectUserSummary,
 } from '@workspace/contracts/projects';
 
@@ -21,6 +23,10 @@ type ProjectDiscussionWorkspaceProps = {
   areas: DiscussionAreaSummary[];
   /** 当前选中的讨论分区。 */
   currentArea: DiscussionAreaSummary;
+  /** 当前私有分区的显式成员。 */
+  currentAreaMembers: DiscussionAreaMember[];
+  /** 当前项目全部成员。 */
+  projectMembers: ProjectMember[];
   /** 当前分区首屏消息。 */
   initialMessages: ProjectChatMessagePage;
   /** 当前认证用户摘要。 */
@@ -29,7 +35,7 @@ type ProjectDiscussionWorkspaceProps = {
 
 /** 渲染可分享分区地址的项目聊天工作区。 */
 export function ProjectDiscussionWorkspace(props: ProjectDiscussionWorkspaceProps) {
-  const { project, areas, currentArea, initialMessages, currentUser } = props;
+  const { project, areas, currentArea, currentAreaMembers, initialMessages, projectMembers, currentUser } = props;
   const canSend = project.status === 'ACTIVE' && currentArea.status === 'ACTIVE' && project.currentUserRole !== 'VIEWER';
 
   return (
@@ -81,7 +87,9 @@ export function ProjectDiscussionWorkspace(props: ProjectDiscussionWorkspaceProp
           key={currentArea.id}
           projectId={project.id}
           area={currentArea}
+          privateAreaMembers={currentAreaMembers}
           initialPage={initialMessages}
+          projectMembers={projectMembers}
           currentUser={currentUser}
           canSend={canSend}
           readOnlyReason={getReadOnlyReason(project, currentArea)}
