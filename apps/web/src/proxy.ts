@@ -21,7 +21,10 @@ export async function proxy(request: NextRequest) {
   const accessToken = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const needsRefresh = !accessToken || isAccessTokenExpired(accessToken);
   const hasRefreshToken = request.cookies.has(AUTH_REFRESH_COOKIE_NAME);
-  const isProtectedPath = pathname.startsWith('/dashboard') || pathname.startsWith('/projects');
+  const isProtectedPath =
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/projects') ||
+    pathname.startsWith('/decisions');
 
   if (isProtectedPath && needsRefresh && hasRefreshToken) {
     // 刷新后的 Cookie 要在下一次请求中被 Server Component 读取，因此主动回跳一次原地址。
@@ -70,7 +73,7 @@ export async function proxy(request: NextRequest) {
 
 /** Next.js Proxy 只拦截登录页和当前已上线的受保护业务路由。 */
 export const config = {
-  matcher: ['/login', '/dashboard/:path*', '/projects/:path*'],
+  matcher: ['/login', '/dashboard/:path*', '/projects/:path*', '/decisions/:path*'],
 };
 
 /** 在 Proxy 阶段请求 NestJS refresh，保证进入 Server Component 前 Cookie 已续签。 */
