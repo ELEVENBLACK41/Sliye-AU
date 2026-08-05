@@ -3,13 +3,13 @@
  */
 'use client';
 
-import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Lightbulb, MoreHorizontal, Paperclip, Search, Send, UsersRound, Video, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type { DiscussionAreaSummary, ProjectChatMessagePage, ProjectUserSummary } from '@workspace/contracts/projects';
 
 import { ProjectSpaceChatMessageList } from './project-space-chat-message-list';
-import { useProjectChat } from '@/features/projects/chat/hooks/use-project-chat';
+import { useProjectChat, type ProjectChatViewMessage } from '@/features/projects/chat/hooks/use-project-chat';
 import type { ProjectChatConnectionStatus } from '@/features/projects/chat/hooks/use-project-chat-realtime';
 import { Button } from '@workspace/ui/components/button';
 import { Textarea } from '@workspace/ui/components/textarea';
@@ -39,11 +39,24 @@ const connectionText: Record<ProjectChatConnectionStatus, string> = {
   disconnected: '实时已断开',
 };
 
+/** 聊天视口上一次渲染后的滚动快照。 */
+type ChatScrollSnapshot = {
+  /** 当时第一条消息的稳定标识。 */
+  firstMessageKey: string | null;
+  /** 当时最后一条消息的稳定标识。 */
+  lastMessageKey: string | null;
+  /** 当时消息内容的完整高度。 */
+  scrollHeight: number;
+};
+
 /** 渲染新版聊天视觉，同时复用真实分页、乐观发送和 Socket 状态。 */
 export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
   const { projectId, area, initialPage, currentUser, canSend, readOnlyReason } = props;
   const router = useRouter();
   const [draft, setDraft] = useState('');
+  const messageViewportRef = useRef<HTMLDivElement | null>(null);
+  const scrollSnapshotRef = useRef<ChatScrollSnapshot | null>(null);
+  const isNearBottomRef = useRef(true);
   const chat = useProjectChat({
     projectId,
     areaId: area.id,
@@ -55,6 +68,46 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
       router.refresh();
     },
   });
+
+  /** 初次进入定位最新消息，新增消息按阅读位置跟随，加载历史时保持原视口。 */
+  useLayoutEffect(() => {
+    const viewport = messageViewportRef.current;
+    if (!viewport) return;
+    const firstMessage = chat.messages[0];
+    const lastMessage = chat.messages.at(-1);
+    const firstMessageKey = firstMessage ? getMessageKey(firstMessage) : null;
+    const lastMessageKey = lastMessage ? getMessageKey(lastMessage) : null;
+    const previousSnapshot = scrollSnapshotRef.current;
+
+    if (!previousSnapshot) {
+      viewport.scrollTop = viewport.scrollHeight;
+      isNearBottomRef.current = true;
+    } else {
+      const historyWasPrepended =
+        previousSnapshot.firstMessageKey !== firstMessageKey &&
+        previousSnapshot.lastMessageKey === lastMessageKey;
+      const latestMessageChanged = previousSnapshot.lastMessageKey !== lastMessageKey;
+
+      if (historyWasPrepended) {
+        viewport.scrollTop += viewport.scrollHeight - previousSnapshot.scrollHeight;
+      } else if (
+        latestMessageChanged &&
+        (lastMessage?.author?.id === currentUser.id || isNearBottomRef.current)
+      ) {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
+      }
+    }
+
+    scrollSnapshotRef.current = { firstMessageKey, lastMessageKey, scrollHeight: viewport.scrollHeight };
+  }, [chat.messages, currentUser.id]);
+
+  /** 记录用户是否仍在消息底部附近，避免阅读历史时被实时消息强制打断。 */
+  function handleMessageScroll(): void {
+    const viewport = messageViewportRef.current;
+    if (!viewport) return;
+    isNearBottomRef.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 72;
+  }
 
   /** 提交当前草稿，并在乐观入队成功后清空输入。 */
   function submitDraft(): void {
@@ -105,7 +158,12 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" aria-label="项目群聊天消息">
+      <div
+        ref={messageViewportRef}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        aria-label="项目群聊天消息"
+        onScroll={handleMessageScroll}
+      >
         <ProjectSpaceChatMessageList
           messages={chat.messages}
           currentUserId={currentUser.id}
@@ -159,4 +217,9 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
       </footer>
     </section>
   );
+}
+
+/** 返回乐观消息和持久化消息都稳定一致的客户端标识。 */
+function getMessageKey(message: ProjectChatViewMessage): string {
+  return message.clientMessageId ? `client:${message.clientMessageId}` : `id:${message.id}`;
 }
