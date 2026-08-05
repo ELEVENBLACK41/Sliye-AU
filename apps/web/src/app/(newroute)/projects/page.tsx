@@ -15,18 +15,20 @@ import type {
 } from '@workspace/contracts/projects';
 
 import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
+import { getAccessDepartments } from '@/features/access-management/services/access-management-server.service';
+import { flattenDepartments } from '@/features/access-management/utils/flatten-departments';
 import { ProjectSpaceEmptyState } from '@/features/project-space/components/project-space-empty-state';
 import { ProjectSpacePage } from '@/features/project-space/components/project-space-page';
 import {
-  getProject,
-  getProjectAreas,
-  getProjectDecisions,
-  getProjectMeetings,
-  getProjectMembers,
-  getProjectMessages,
-  getProjects,
-  ProjectServerError,
-} from '@/features/projects/services/projects-server.service';
+  getProjectSpaceAreas,
+  getProjectSpaceDecisions,
+  getProjectSpaceMeetings,
+  getProjectSpaceMembers,
+  getProjectSpaceMessages,
+  getProjectSpaceProject,
+  getProjectSpaceProjects,
+  ProjectSpaceServerError,
+} from '@/features/project-space/services/project-space-server.service';
 
 /** 项目空间路由支持的稳定查询参数。 */
 type ProjectsPageProps = {
@@ -57,12 +59,23 @@ type ProjectSpaceRouteData = {
 /** 渲染当前用户的新版项目协作空间。 */
 export default async function ProjectsPage({ searchParams }: ProjectsPageProps) {
   const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.project.read);
-  const [query, projects] = await Promise.all([searchParams, getProjects()]);
+  const canCreateProject = hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.create);
+  const [query, projects, departmentTree] = await Promise.all([
+    searchParams,
+    getProjectSpaceProjects(),
+    canCreateProject && hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.access.department.read)
+      ? getAccessDepartments()
+      : Promise.resolve([]),
+  ]);
+  const createDepartmentOptions = flattenDepartments(departmentTree)
+    .filter(({ department }) => department.status === 'ACTIVE')
+    .map(({ department, depth }) => ({ id: department.id, label: `${'　'.repeat(depth)}${department.name}` }));
 
   if (projects.length === 0) {
     return (
       <ProjectSpaceEmptyState
-        canCreate={hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.create)}
+        canCreate={canCreateProject}
+        createDepartmentOptions={createDepartmentOptions}
       />
     );
   }
@@ -75,11 +88,11 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
   let pageData: ProjectSpaceRouteData;
   try {
     const [project, areas, members, decisions, meetings] = await Promise.all([
-      getProject(selectedProjectId),
-      getProjectAreas(selectedProjectId),
-      getProjectMembers(selectedProjectId),
-      getProjectDecisions(selectedProjectId),
-      getProjectMeetings(selectedProjectId),
+      getProjectSpaceProject(selectedProjectId),
+      getProjectSpaceAreas(selectedProjectId),
+      getProjectSpaceMembers(selectedProjectId),
+      getProjectSpaceDecisions(selectedProjectId),
+      getProjectSpaceMeetings(selectedProjectId),
     ]);
     const requestedAreaId = parsePositiveInteger(query.areaId) ?? project.publicAreaId;
     const currentArea = areas.find((area) => area.id === requestedAreaId);
@@ -88,11 +101,11 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
       redirect(`/projects?projectId=${project.id}&areaId=${project.publicAreaId}`);
     }
 
-    const initialMessages = await getProjectMessages(project.id, currentArea.id);
+    const initialMessages = await getProjectSpaceMessages(project.id, currentArea.id);
     pageData = { projects, project, areas, currentArea, initialMessages, members, decisions, meetings };
   } catch (error) {
     unstable_rethrow(error);
-    if (error instanceof ProjectServerError && error.status === 404) {
+    if (error instanceof ProjectSpaceServerError && error.status === 404) {
       redirect('/projects');
     }
     throw error;
@@ -108,7 +121,8 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
     <ProjectSpacePage
       {...pageData}
       currentUser={currentUserSummary}
-      canCreateProject={hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.create)}
+      canCreateProject={canCreateProject}
+      createDepartmentOptions={createDepartmentOptions}
     />
   );
 }

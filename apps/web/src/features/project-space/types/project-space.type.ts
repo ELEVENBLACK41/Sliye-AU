@@ -17,6 +17,14 @@ export type ProjectSpaceSummary = {
 /** 项目空间中央区域可切换的一级业务模块。 */
 export type ProjectSectionKey = 'discussion' | 'decisions' | 'meetings';
 
+/** 新版项目创建表单可选择的启用部门。 */
+export type ProjectCreateDepartmentOption = {
+  /** 部门数据库主键。 */
+  id: number;
+  /** 带组织层级缩进的部门显示名称。 */
+  label: string;
+};
+
 /** D3 决策树中的节点类型。 */
 export type DecisionTreeNodeType = 'project' | 'area' | 'decision' | 'proposal' | 'vote' | 'resolution' | 'abandoned';
 

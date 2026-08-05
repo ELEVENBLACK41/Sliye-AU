@@ -5,7 +5,7 @@
 
 import { FileText, Lightbulb, LoaderCircle, Reply } from 'lucide-react';
 
-import type { ProjectChatViewMessage } from '@/features/projects/chat/hooks/use-project-chat';
+import type { ProjectSpaceChatViewMessage } from '../hooks/use-project-space-chat';
 import { Avatar, AvatarFallback, AvatarImage } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
 import { cn } from '@workspace/ui/lib/utils';
@@ -13,7 +13,7 @@ import { cn } from '@workspace/ui/lib/utils';
 /** 新版项目空间消息列表属性。 */
 type ProjectSpaceChatMessageListProps = {
   /** 当前分区已经加载并合并实时状态的消息。 */
-  messages: ProjectChatViewMessage[];
+  messages: ProjectSpaceChatViewMessage[];
   /** 当前认证用户主键。 */
   currentUserId: number;
   /** 当前用户是否可以发送和回复。 */
@@ -27,7 +27,7 @@ type ProjectSpaceChatMessageListProps = {
   /** 请求更早一页消息。 */
   onLoadOlder: () => void;
   /** 选择一条消息作为回复目标。 */
-  onReply: (message: ProjectChatViewMessage) => void;
+  onReply: (message: ProjectSpaceChatViewMessage) => void;
 };
 
 /** 渲染符合新版视觉的消息流，并保留聊天闭环的全部反馈状态。 */

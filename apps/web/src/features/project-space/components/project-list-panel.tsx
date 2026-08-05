@@ -5,11 +5,12 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { FolderSearch, Plus, Search } from 'lucide-react';
+import { FolderSearch, Search } from 'lucide-react';
 import type { ProjectSummary } from '@workspace/contracts/projects';
 
-import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
+import type { ProjectCreateDepartmentOption } from '../types/project-space.type';
+import { ProjectCreateSheet } from './project-create-sheet';
 
 /** 项目列表面板属性。 */
 type ProjectListPanelProps = {
@@ -19,6 +20,8 @@ type ProjectListPanelProps = {
   currentProjectId: number;
   /** 当前用户是否可以创建项目。 */
   canCreate: boolean;
+  /** 当前用户创建项目时可以选择的启用部门。 */
+  createDepartmentOptions: ProjectCreateDepartmentOption[];
 };
 
 /** 项目状态中文文案。 */
@@ -29,7 +32,12 @@ const statusText: Record<ProjectSummary['status'], string> = {
 };
 
 /** 渲染项目空间左侧项目导航，并在本地完成轻量搜索。 */
-export function ProjectListPanel({ projects, currentProjectId, canCreate }: ProjectListPanelProps) {
+export function ProjectListPanel({
+  projects,
+  currentProjectId,
+  canCreate,
+  createDepartmentOptions,
+}: ProjectListPanelProps) {
   const [keyword, setKeyword] = useState('');
   const filteredProjects = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLocaleLowerCase('zh-CN');
@@ -98,12 +106,7 @@ export function ProjectListPanel({ projects, currentProjectId, canCreate }: Proj
 
       {canCreate ? (
         <div className="p-3">
-          <Button asChild className="h-10 w-full rounded-full bg-[#f5bf19] text-[#292a27] shadow-none hover:bg-[#eeb50b]">
-            <Link href="/dashboard/projects">
-              <Plus className="size-4" aria-hidden />
-              新建项目
-            </Link>
-          </Button>
+          <ProjectCreateSheet departments={createDepartmentOptions} placement="sidebar" />
         </div>
       ) : null}
     </aside>

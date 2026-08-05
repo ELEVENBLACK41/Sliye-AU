@@ -8,7 +8,7 @@ import { Minus, RefreshCw, Search, GitBranch, Plus } from 'lucide-react';
 import type { DecisionEventTimelineItem, DecisionSummary } from '@workspace/contracts/decisions';
 import type { DiscussionAreaSummary, ProjectDetail } from '@workspace/contracts/projects';
 
-import { getDecisionEvents } from '@/features/decisions/services/decisions-client.service';
+import { getProjectSpaceDecisionEvents } from '../services/project-space-client.service';
 import { useDecisionReplay } from '../hooks/use-decision-replay';
 import {
   buildProjectDecisionReplayModel,
@@ -52,7 +52,7 @@ export function ProjectDecisionsWorkspace({ project, areas, decisions }: Project
     void Promise.all(
       decisions.map(async (decision) => ({
         decisionId: decision.id,
-        events: await getDecisionEvents(decision.id),
+        events: await getProjectSpaceDecisionEvents(decision.id),
       })),
     )
       .then((results) => {

@@ -15,7 +15,7 @@ import type {
   ProjectUserSummary,
 } from '@workspace/contracts/projects';
 
-import type { ProjectSectionKey } from '../types/project-space.type';
+import type { ProjectCreateDepartmentOption, ProjectSectionKey } from '../types/project-space.type';
 import { ProjectListPanel } from './project-list-panel';
 import { ProjectOverviewPanel } from './project-overview-panel';
 import { ProjectWorkspacePanel } from './project-workspace-panel';
@@ -42,6 +42,8 @@ type ProjectSpacePageProps = {
   currentUser: ProjectUserSummary;
   /** 当前用户是否具备创建项目权限。 */
   canCreateProject: boolean;
+  /** 当前用户创建项目时可以选择的启用部门。 */
+  createDepartmentOptions: ProjectCreateDepartmentOption[];
 };
 
 /** 渲染接入真实业务数据后的项目空间。 */
@@ -58,6 +60,7 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
           projects={props.projects}
           currentProjectId={props.project.id}
           canCreate={props.canCreateProject}
+          createDepartmentOptions={props.createDepartmentOptions}
         />
         <ProjectWorkspacePanel
           project={props.project}

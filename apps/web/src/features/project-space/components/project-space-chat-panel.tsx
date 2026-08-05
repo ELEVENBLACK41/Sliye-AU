@@ -9,8 +9,8 @@ import { useRouter } from 'next/navigation';
 import type { DiscussionAreaSummary, ProjectChatMessagePage, ProjectUserSummary } from '@workspace/contracts/projects';
 
 import { ProjectSpaceChatMessageList } from './project-space-chat-message-list';
-import { useProjectChat, type ProjectChatViewMessage } from '@/features/projects/chat/hooks/use-project-chat';
-import type { ProjectChatConnectionStatus } from '@/features/projects/chat/hooks/use-project-chat-realtime';
+import { useProjectSpaceChat, type ProjectSpaceChatViewMessage } from '../hooks/use-project-space-chat';
+import type { ProjectSpaceChatConnectionStatus } from '../hooks/use-project-space-chat-realtime';
 import { Button } from '@workspace/ui/components/button';
 import { Textarea } from '@workspace/ui/components/textarea';
 
@@ -31,7 +31,7 @@ type ProjectSpaceChatPanelProps = {
 };
 
 /** 实时连接状态的新版轻量文案。 */
-const connectionText: Record<ProjectChatConnectionStatus, string> = {
+const connectionText: Record<ProjectSpaceChatConnectionStatus, string> = {
   unavailable: '实时服务未配置',
   connecting: '实时连接中',
   connected: '实时已连接',
@@ -57,7 +57,7 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
   const scrollSnapshotRef = useRef<ChatScrollSnapshot | null>(null);
   const isNearBottomRef = useRef(true);
-  const chat = useProjectChat({
+  const chat = useProjectSpaceChat({
     projectId,
     areaId: area.id,
     initialPage,
@@ -220,6 +220,6 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
 }
 
 /** 返回乐观消息和持久化消息都稳定一致的客户端标识。 */
-function getMessageKey(message: ProjectChatViewMessage): string {
+function getMessageKey(message: ProjectSpaceChatViewMessage): string {
   return message.clientMessageId ? `client:${message.clientMessageId}` : `id:${message.id}`;
 }
