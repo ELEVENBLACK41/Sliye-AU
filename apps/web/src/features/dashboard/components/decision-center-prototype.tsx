@@ -11,6 +11,7 @@ import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
+import { DecisionActivityHeatmap } from '@/features/decisions/components/decision-activity-heatmap';
 
 /** 决策中心列表卡片在聚合接口中需要提供的最小展示字段。 */
 type DecisionCenterItem = {
@@ -68,6 +69,8 @@ export function DecisionCenterPrototype() {
         <p className="text-xs font-medium tracking-[0.16em] text-[#555751]">DECISION ARCHIVE</p>
         <Button className="rounded-full bg-[#ffd653] text-[#292a27] hover:bg-[#ffd653]/85"><Plus aria-hidden />创建决策</Button>
       </div>
+
+      <DecisionActivityHeatmap />
 
       <section className="grid gap-2.5 sm:grid-cols-3" aria-label="决策概览">
         <Metric label="讨论中" value={discussingCount} description="正在推进中的决策" dark />
