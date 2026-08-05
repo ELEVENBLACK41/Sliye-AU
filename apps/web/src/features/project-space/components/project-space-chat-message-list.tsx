@@ -79,26 +79,35 @@ export function ProjectSpaceChatMessageList(props: ProjectSpaceChatMessageListPr
                       {authorName.slice(0, 1)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className={cn('min-w-0 max-w-[78%]', isMine && 'text-right')}>
-                    <div className={cn('flex items-center gap-2 text-[10px] text-black/40', isMine && 'justify-end')}>
+                  <div
+                    className={cn(
+                      'flex w-fit min-w-0 max-w-[78%] flex-col items-start',
+                      isMine && 'items-end text-right',
+                    )}
+                  >
+                    <div className={cn('flex items-center gap-2 text-[12px] text-black/60', isMine && 'justify-end')}>
                       <span className="font-medium text-black/65">{authorName}</span>
                       <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
                       {message.meetingId ? <span>会议 #{message.meetingId}</span> : null}
                     </div>
                     <div
                       className={cn(
-                        'mt-1 rounded-2xl px-3 py-2 text-left text-xs leading-5 shadow-sm shadow-black/[0.02]',
-                        isMine ? 'rounded-tr-sm bg-[#292a27] text-white' : 'rounded-tl-sm bg-white/75 text-black/70',
+                        'mt-1 w-fit max-w-full rounded-2xl px-3 py-2 text-left text-[14px] leading-5 shadow-sm shadow-black/[0.03]',
+                        isMine
+                          ? 'rounded-tr-sm bg-[#292a27] text-white'
+                          : 'rounded-tl-sm border border-black/[0.045] bg-white/70 text-black/85',
                         message.deliveryStatus === 'failed' && 'ring-1 ring-red-400',
                       )}
                     >
                       {message.replyTo ? (
-                        <div className={cn('mb-2 border-l-2 pl-2 text-[10px]', isMine ? 'border-white/35 text-white/65' : 'border-black/15 text-black/45')}>
+                        <div className={cn('mb-2 border-l-2 pl-2 text-[12px]', isMine ? 'border-white/35 text-white/65' : 'border-black/15 text-black/45')}>
                           <p>{message.replyTo.author?.name || '原消息'}</p>
                           <p className="line-clamp-2">{message.replyTo.content || '该消息已删除'}</p>
                         </div>
                       ) : null}
-                      <p className="whitespace-pre-wrap break-words">{message.content || '该消息已删除'}</p>
+                      <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                        {message.content || '该消息已删除'}
+                      </p>
                     </div>
                     <div className={cn('mt-1 flex min-h-6 items-center gap-2', isMine && 'justify-end')}>
                       {message.deliveryStatus === 'sending' ? <span className="text-[10px] text-black/35">发送中…</span> : null}

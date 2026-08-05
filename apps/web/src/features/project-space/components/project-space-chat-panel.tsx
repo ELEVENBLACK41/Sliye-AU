@@ -88,7 +88,7 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
               {connectionText[chat.connectionStatus]}
             </span>
           </div>
-          <p className="mt-0.5 text-[10px] text-black/40">
+          <p className="mt-0.5 text-[12px] text-black/60">
             {area.type === 'PUBLIC' ? `全部 ${area.memberCount} 位项目成员` : `${area.memberCount} 位分区成员 · 私有群组`}
           </p>
         </div>

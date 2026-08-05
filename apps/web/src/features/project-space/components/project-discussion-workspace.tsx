@@ -63,7 +63,7 @@ export function ProjectDiscussionWorkspace(props: ProjectDiscussionWorkspaceProp
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-medium">{area.name}</span>
-                      <span className="mt-0.5 block truncate text-[10px] text-black/40">
+                      <span className="mt-0.5 block truncate text-[12px] text-black/60">
                         {area.type === 'PUBLIC' ? '公共分区' : `${area.memberCount} 位成员`}
                       </span>
                     </span>
