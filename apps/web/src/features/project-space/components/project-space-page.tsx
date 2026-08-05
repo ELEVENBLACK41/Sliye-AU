@@ -2,7 +2,7 @@
  * @Author: shaoliye elevenblack41@gmail.com
  * @Date: 2026-08-03 12:20:00
  * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-08-03 13:34:14
+ * @LastEditTime: 2026-08-05 11:31:29
  * @FilePath: \NextNest\apps\web\src\features\project-space\components\project-space-page.tsx
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
@@ -22,7 +22,7 @@ import { ProjectWorkspacePanel } from './project-workspace-panel';
 
 /** 渲染项目空间完整线框，并明确各业务区域未来的数据与交互边界。 */
 export function ProjectSpacePage() {
-  const [activeSection, setActiveSection] = useState<ProjectSectionKey>('decisions');
+  const [activeSection, setActiveSection] = useState<ProjectSectionKey>('discussion');
   const replayController = useDecisionReplay();
 
   return (
