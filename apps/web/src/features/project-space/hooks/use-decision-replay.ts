@@ -5,8 +5,7 @@
 
 import { useCallback, useEffect, useReducer, useState } from 'react';
 
-import { replayEvents } from '../project-space.constants';
-import type { DecisionReplaySpeed } from '../types/project-space.type';
+import type { DecisionReplayEvent, DecisionReplaySpeed } from '../types/project-space.type';
 
 const REPLAY_EVENT_DURATION = 1400;
 const REPLAY_TICK_INTERVAL = 40;
@@ -31,12 +30,12 @@ type ReplayCursorAction =
 const initialReplayCursor: ReplayCursor = { index: 0, progress: 0, isPlaying: false };
 
 /** 原子推进一次回放游标，任何一次 tick 最多只进入下一个事件。 */
-function replayCursorReducer(cursor: ReplayCursor, action: ReplayCursorAction): ReplayCursor {
+function replayCursorReducer(cursor: ReplayCursor, action: ReplayCursorAction, eventCount: number): ReplayCursor {
   if (action.type === 'reset') return initialReplayCursor;
 
   if (action.type === 'toggle') {
     if (cursor.isPlaying) return { ...cursor, isPlaying: false };
-    if (cursor.index === replayEvents.length - 1 && cursor.progress >= 1) {
+    if (cursor.index === eventCount - 1 && cursor.progress >= 1) {
       return { index: 0, progress: 0, isPlaying: true };
     }
     return { ...cursor, isPlaying: true };
@@ -44,7 +43,7 @@ function replayCursorReducer(cursor: ReplayCursor, action: ReplayCursorAction): 
 
   if (action.type === 'seek') {
     return {
-      index: Math.min(Math.max(action.index, 0), replayEvents.length - 1),
+      index: Math.min(Math.max(action.index, 0), eventCount - 1),
       progress: 0,
       isPlaying: false,
     };
@@ -53,7 +52,7 @@ function replayCursorReducer(cursor: ReplayCursor, action: ReplayCursorAction): 
   if (!cursor.isPlaying) return cursor;
   const nextProgress = cursor.progress + action.delta;
   if (nextProgress < 1) return { ...cursor, progress: nextProgress };
-  if (cursor.index >= replayEvents.length - 1) return { ...cursor, progress: 1, isPlaying: false };
+  if (cursor.index >= eventCount - 1) return { ...cursor, progress: 1, isPlaying: false };
 
   return { ...cursor, index: cursor.index + 1, progress: 0 };
 }
@@ -79,8 +78,12 @@ export type DecisionReplayController = {
 };
 
 /** 创建一份由回放胶囊和 D3 画布共同消费的播放状态。 */
-export function useDecisionReplay(): DecisionReplayController {
-  const [cursor, dispatchCursor] = useReducer(replayCursorReducer, initialReplayCursor);
+export function useDecisionReplay(events: DecisionReplayEvent[]): DecisionReplayController {
+  const [cursor, dispatchCursor] = useReducer(
+    (currentCursor: ReplayCursor, action: ReplayCursorAction) =>
+      replayCursorReducer(currentCursor, action, events.length),
+    initialReplayCursor,
+  );
   const [speed, setSpeed] = useState<DecisionReplaySpeed>(1);
 
   /** 播放时以短间隔原子推进游标，避免 React 重复执行更新函数造成跳帧。 */
@@ -96,6 +99,11 @@ export function useDecisionReplay(): DecisionReplayController {
 
     return () => window.clearInterval(timer);
   }, [cursor.isPlaying, speed]);
+
+  /** 真实事件集合变化时回到起点，避免项目切换后游标越界。 */
+  useEffect(() => {
+    dispatchCursor({ type: 'reset' });
+  }, [events]);
 
   /** 从当前位置切换播放状态，结束后再次播放会从头开始。 */
   const togglePlayback = useCallback((): void => {

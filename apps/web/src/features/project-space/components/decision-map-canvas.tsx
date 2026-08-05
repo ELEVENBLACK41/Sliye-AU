@@ -8,12 +8,15 @@ import { hierarchy, select, tree, zoom, zoomIdentity } from 'd3';
 import type { HierarchyPointLink, ZoomBehavior } from 'd3';
 import { CheckCircle2, GitBranch, Radio, Vote } from 'lucide-react';
 
-import { decisionReplayTree, replayEvents } from '../project-space.constants';
-import type { DecisionTreeNode, DecisionTreeNodeType } from '../types/project-space.type';
+import type { DecisionReplayEvent, DecisionTreeNode, DecisionTreeNodeType } from '../types/project-space.type';
 import { Badge } from '@workspace/ui/components/badge';
 
 /** 中央决策树画布的外部播放状态。 */
 type DecisionMapCanvasProps = {
+  /** 当前项目基于真实事件构建的决策过程树。 */
+  treeData: DecisionTreeNode;
+  /** 当前项目按发生时间排序的真实决策事件。 */
+  events: DecisionReplayEvent[];
   /** 当前播放到的事件索引。 */
   currentIndex: number;
   /** 当前事件内部的播放进度。 */
@@ -94,22 +97,22 @@ function getNodeDetailEventIndex(
 
 /** 渲染 D3 决策树，并按照底部胶囊进度分层同时生长节点与连线。 */
 export const DecisionMapCanvas = forwardRef<DecisionMapCanvasHandle, DecisionMapCanvasProps>(
-function DecisionMapCanvas({ currentIndex, progress }, forwardedRef) {
+function DecisionMapCanvas({ treeData, events, currentIndex, progress }, forwardedRef) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const viewportRef = useRef<SVGGElement | null>(null);
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const currentEvent = replayEvents[currentIndex] ?? replayEvents[0];
-  const eventIndexById = useMemo(() => new Map(replayEvents.map((event, index) => [event.id, index])), []);
+  const currentEvent = events[currentIndex] ?? events[0];
+  const eventIndexById = useMemo(() => new Map(events.map((event, index) => [event.id, index])), [events]);
   const treeRoot = useMemo(() => {
-    const root = hierarchy<DecisionTreeNode>(decisionReplayTree);
+    const root = hierarchy<DecisionTreeNode>(treeData);
     const layoutRoot = tree<DecisionTreeNode>().nodeSize([NODE_VERTICAL_GAP, NODE_HORIZONTAL_GAP])(root);
     const minimumX = Math.min(...layoutRoot.descendants().map((node) => node.x));
     layoutRoot.each((node) => {
       node.x -= minimumX;
     });
     return layoutRoot;
-  }, []);
+  }, [treeData]);
   const treeLinks = useMemo(() => treeRoot.links(), [treeRoot]);
   const treeNodes = useMemo(() => treeRoot.descendants(), [treeRoot]);
   const selectedTreeNode = selectedNodeId
@@ -118,7 +121,7 @@ function DecisionMapCanvas({ currentIndex, progress }, forwardedRef) {
   const selectedDetailEventIndex = selectedTreeNode
     ? getNodeDetailEventIndex(selectedTreeNode.data, currentIndex, progress, eventIndexById)
     : null;
-  const detailEvent = replayEvents[selectedDetailEventIndex ?? currentIndex] ?? currentEvent;
+  const detailEvent = events[selectedDetailEventIndex ?? currentIndex] ?? currentEvent;
 
   /** 安装 D3 缩放行为，使鼠标拖动画布和滚轮缩放与工具栏共用同一视口状态。 */
   useEffect(() => {
@@ -282,7 +285,7 @@ function DecisionMapCanvas({ currentIndex, progress }, forwardedRef) {
             </Badge>
             <span className="text-[11px] font-medium text-black/45">{detailEvent.timeLabel}</span>
             <span className="text-[10px] font-medium tracking-[0.14em] text-black/35">
-              EVENT {String(detailEvent.sequence).padStart(2, '0')} / {String(replayEvents.length).padStart(2, '0')}
+              EVENT {String(detailEvent.sequence).padStart(2, '0')} / {String(events.length).padStart(2, '0')}
             </span>
             {selectedNodeId !== null ? (
               <button

@@ -9,6 +9,7 @@ import type {
   CreateDecisionVoteRoundRequestPayload,
   DecisionBallotReceipt,
   DecisionDetail,
+  DecisionEventTimelineResponse,
   DecisionParticipant,
   DecisionParticipantCandidateListResponse,
   DecisionProposal,
@@ -19,6 +20,14 @@ import type {
 } from '@workspace/contracts/decisions';
 
 import { requestData } from '@/services/request';
+
+/** 查询单项决策的完整事件时间线，供按需加载的过程回放使用。 */
+export function getDecisionEvents(decisionId: number): Promise<DecisionEventTimelineResponse> {
+  return requestData<DecisionEventTimelineResponse>(`/api/decisions/${decisionId}/events`, {
+    method: 'GET',
+    errorMessage: '决策过程加载失败，请稍后重试',
+  });
+}
 
 /** 更新决策状态，当前共享契约仅允许提交开始讨论状态。 */
 export function updateDecisionStatus(

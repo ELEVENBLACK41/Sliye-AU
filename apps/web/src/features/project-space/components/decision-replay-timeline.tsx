@@ -8,17 +8,19 @@ import { gsap } from 'gsap';
 import { ChevronDown, ChevronUp, Pause, Play, RotateCcw } from 'lucide-react';
 
 import type { DecisionReplayController } from '../hooks/use-decision-replay';
-import { replayEvents } from '../project-space.constants';
+import type { DecisionReplayEvent } from '../types/project-space.type';
 import { Button } from '@workspace/ui/components/button';
 
 /** 决策过程回放胶囊的共享控制状态。 */
 type DecisionReplayTimelineProps = {
   /** 页面层创建的决策回放控制器。 */
   controller: DecisionReplayController;
+  /** 当前项目按时间合并后的真实决策事件。 */
+  events: DecisionReplayEvent[];
 };
 
 /** 渲染可控制中央 D3 动画的决策过程回放胶囊。 */
-export function DecisionReplayTimeline({ controller }: DecisionReplayTimelineProps) {
+export function DecisionReplayTimeline({ controller, events }: DecisionReplayTimelineProps) {
   const [isReplayVisible, setIsReplayVisible] = useState(false);
   const replayPanelRef = useRef<HTMLElement | null>(null);
   const revealControlRef = useRef<HTMLButtonElement | null>(null);
@@ -180,14 +182,14 @@ export function DecisionReplayTimeline({ controller }: DecisionReplayTimelinePro
           aria-label="决策回放事件轨道"
         >
           <ol className="relative grid w-full grid-flow-col auto-cols-[12.5%] items-start px-1 pt-0.5 [@media(max-height:800px)]:pt-0">
-            {replayEvents.map((event, index) => {
+            {events.map((event, index) => {
               const isCurrent = index === controller.currentIndex;
               const isPast = index < controller.currentIndex;
               const connectionProgress = isPast ? 100 : isCurrent ? controller.progress * 100 : 0;
 
               return (
                 <li key={event.id} className="relative flex min-w-0 justify-center px-1 text-center">
-                  {index < replayEvents.length - 1 ? (
+                  {index < events.length - 1 ? (
                     <span
                       className="absolute top-[0.57rem] left-1/2 h-px w-full bg-black/12"
                       style={{

@@ -1,46 +1,83 @@
-/*
- * @Author: shaoliye elevenblack41@gmail.com
- * @Date: 2026-08-03 12:20:00
- * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-08-05 11:31:29
- * @FilePath: \NextNest\apps\web\src\features\project-space\components\project-space-page.tsx
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 /**
- * 本文件组合新版项目空间的项目导航、决策画布、上下文详情和过程回放区域。
+ * 本文件组合新版项目空间的项目导航、当前业务工作区和项目概览。
  */
 'use client';
 
 import { useState } from 'react';
+import type { DecisionSummary } from '@workspace/contracts/decisions';
+import type { MeetingSummary } from '@workspace/contracts/meetings';
+import type {
+  DiscussionAreaSummary,
+  ProjectChatMessagePage,
+  ProjectDetail,
+  ProjectMember,
+  ProjectSummary,
+  ProjectUserSummary,
+} from '@workspace/contracts/projects';
 
-import { useDecisionReplay } from '../hooks/use-decision-replay';
 import type { ProjectSectionKey } from '../types/project-space.type';
-import { DecisionReplayTimeline } from './decision-replay-timeline';
 import { ProjectListPanel } from './project-list-panel';
 import { ProjectOverviewPanel } from './project-overview-panel';
 import { ProjectWorkspacePanel } from './project-workspace-panel';
 
-/** 渲染项目空间完整线框，并明确各业务区域未来的数据与交互边界。 */
-export function ProjectSpacePage() {
+/** 新版项目空间组合页属性。 */
+type ProjectSpacePageProps = {
+  /** 当前用户可见的全部项目。 */
+  projects: ProjectSummary[];
+  /** 当前选中项目。 */
+  project: ProjectDetail;
+  /** 当前项目下用户可见的讨论分区。 */
+  areas: DiscussionAreaSummary[];
+  /** 当前选中的讨论分区。 */
+  currentArea: DiscussionAreaSummary;
+  /** 当前分区的首屏聊天消息。 */
+  initialMessages: ProjectChatMessagePage;
+  /** 当前项目成员。 */
+  members: ProjectMember[];
+  /** 当前项目决策摘要。 */
+  decisions: DecisionSummary[];
+  /** 当前项目会议摘要。 */
+  meetings: MeetingSummary[];
+  /** 当前认证用户的安全摘要。 */
+  currentUser: ProjectUserSummary;
+  /** 当前用户是否具备创建项目权限。 */
+  canCreateProject: boolean;
+};
+
+/** 渲染接入真实业务数据后的项目空间。 */
+export function ProjectSpacePage(props: ProjectSpacePageProps) {
   const [activeSection, setActiveSection] = useState<ProjectSectionKey>('discussion');
-  const replayController = useDecisionReplay();
 
   return (
-    <section className="relative mt-6 flex min-w-0 flex-none flex-col overflow-visible rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] lg:-mb-6 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-b-none" aria-label="项目空间">
-      <div className="grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_14rem] xl:grid-cols-[14rem_minmax(0,1fr)_16rem]">
-        {/* 左侧项目列表 */}
-        <ProjectListPanel />
-        {/* 决策地图画布 */}
+    <section
+      className="relative mt-6 flex min-w-0 flex-none flex-col overflow-visible rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] lg:-mb-6 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-b-none"
+      aria-label="项目空间"
+    >
+      <div className="grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_14rem] lg:overflow-hidden xl:grid-cols-[14rem_minmax(0,1fr)_16rem]">
+        <ProjectListPanel
+          projects={props.projects}
+          currentProjectId={props.project.id}
+          canCreate={props.canCreateProject}
+        />
         <ProjectWorkspacePanel
+          project={props.project}
+          areas={props.areas}
+          currentArea={props.currentArea}
+          initialMessages={props.initialMessages}
+          decisions={props.decisions}
+          meetings={props.meetings}
+          currentUser={props.currentUser}
           activeSection={activeSection}
           onSectionChange={setActiveSection}
-          replayController={replayController}
         />
-        {/* 右侧项目级详情与讨论频道快捷入口 */}
-        <ProjectOverviewPanel />
+        <ProjectOverviewPanel
+          project={props.project}
+          areas={props.areas}
+          members={props.members}
+          decisions={props.decisions}
+          meetings={props.meetings}
+        />
       </div>
-      {/* 决策回放只属于决策模块，并用于驱动后续 D3 动画。 */}
-      {activeSection === 'decisions' ? <DecisionReplayTimeline controller={replayController} /> : null}
     </section>
   );
 }

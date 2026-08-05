@@ -1,80 +1,85 @@
-/*
- * @Author: shaoliye elevenblack41@gmail.com
- * @Date: 2026-08-03 14:24:09
- * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-08-03 15:10:13
- * @FilePath: \NextNest\apps\web\src\features\project-space\components\project-workspace-panel.tsx
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 /**
- * 本文件负责项目内部讨论、决策和会议模块的切换与中央工作区域组合。
+ * 本文件负责项目内部讨论、决策和会议模块的切换与中央工作区组合。
  */
 'use client';
 
-import { useRef } from 'react';
-import { Minus, Plus, Search } from 'lucide-react';
+import type { DecisionSummary } from '@workspace/contracts/decisions';
+import type { MeetingSummary } from '@workspace/contracts/meetings';
+import type {
+  DiscussionAreaSummary,
+  ProjectChatMessagePage,
+  ProjectDetail,
+  ProjectUserSummary,
+} from '@workspace/contracts/projects';
 
 import type { ProjectSectionKey } from '../types/project-space.type';
-import { DecisionMapCanvas } from './decision-map-canvas';
-import type { DecisionMapCanvasHandle } from './decision-map-canvas';
+import { ProjectDecisionsWorkspace } from './project-decisions-workspace';
 import { ProjectDiscussionWorkspace } from './project-discussion-workspace';
 import { ProjectMeetingWorkspace } from './project-meeting-workspace';
 import { ProjectSectionNavigation } from './project-section-navigation';
-import { Button } from '@workspace/ui/components/button';
-import type { DecisionReplayController } from '../hooks/use-decision-replay';
 
-/** 项目中央工作区域属性。 */
+/** 项目中央工作区属性。 */
 type ProjectWorkspacePanelProps = {
+  /** 当前项目。 */
+  project: ProjectDetail;
+  /** 当前用户可见的讨论分区。 */
+  areas: DiscussionAreaSummary[];
+  /** 当前选中的讨论分区。 */
+  currentArea: DiscussionAreaSummary;
+  /** 当前分区首屏消息。 */
+  initialMessages: ProjectChatMessagePage;
+  /** 当前项目决策。 */
+  decisions: DecisionSummary[];
+  /** 当前项目会议。 */
+  meetings: MeetingSummary[];
+  /** 当前认证用户摘要。 */
+  currentUser: ProjectUserSummary;
   /** 当前正在展示的项目模块。 */
   activeSection: ProjectSectionKey;
   /** 用户切换项目模块时触发的状态更新。 */
   onSectionChange: (section: ProjectSectionKey) => void;
-  /** 中央 D3 画布消费的过程回放状态。 */
-  replayController: DecisionReplayController;
 };
 
-/** 渲染项目标题、内部导航和当前选中的中央业务模块。 */
-export function ProjectWorkspacePanel({ activeSection, onSectionChange, replayController }: ProjectWorkspacePanelProps) {
-  const decisionMapRef = useRef<DecisionMapCanvasHandle | null>(null);
+/** 渲染项目标题、内部导航和当前选中的真实业务模块。 */
+export function ProjectWorkspacePanel(props: ProjectWorkspacePanelProps) {
+  const { project, activeSection, onSectionChange } = props;
 
   return (
-    <section className="flex min-h-[31rem] min-w-0 flex-col bg-white/18 lg:min-h-0" aria-labelledby="project-workspace-title">
-      <header className="flex flex-col items-stretch justify-between gap-3 border-b border-black/[0.06] px-5 py-4 sm:flex-row sm:flex-wrap sm:items-start">
+    <section className="flex min-h-[31rem] min-w-0 flex-col bg-white/18 lg:h-full lg:min-h-0 lg:overflow-hidden" aria-labelledby="project-workspace-title">
+      <header className="flex shrink-0 flex-col items-stretch justify-between gap-3 border-b border-black/[0.06] px-5 py-4 sm:flex-row sm:flex-wrap sm:items-start">
         <div className="w-full min-w-0 sm:flex-1">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-black/45">项目空间</span>
             <span aria-hidden>/</span>
-            <h1 id="project-workspace-title" className="font-semibold">产品体验升级计划</h1>
+            <h1 id="project-workspace-title" className="truncate font-semibold">{project.title}</h1>
           </div>
-          <p className="mt-1 text-[11px] text-black/40">进行中 · 12 位成员 · 3 个部门</p>
+          <p className="mt-1 text-[11px] text-black/40">
+            {getProjectStatusText(project.status)} · {project.memberCount} 位成员 · {project.areaCount} 个讨论分区
+          </p>
           <ProjectSectionNavigation activeSection={activeSection} onSectionChange={onSectionChange} />
         </div>
-
-        {activeSection === 'decisions' ? (
-          <div className="flex items-center gap-1.5" aria-label="关系画布工具">
-            {/* <Button type="button" variant="outline" size="sm" className="h-8 rounded-lg border-black/10 bg-white/45 text-xs shadow-none">全部状态</Button> */}
-            <Button type="button" variant="outline" size="sm" onClick={() => decisionMapRef.current?.fitCanvas()} className="h-8 rounded-lg border-black/10 bg-white/45 text-xs shadow-none">适应画布</Button>
-            <Button type="button" variant="outline" size="icon" onClick={() => decisionMapRef.current?.zoomOut()} className="size-8 rounded-lg border-black/10 bg-white/45 shadow-none" aria-label="缩小画布">
-              <Search className="size-3.5" aria-hidden /><Minus className="size-2.5" aria-hidden />
-            </Button>
-            <Button type="button" variant="outline" size="icon" onClick={() => decisionMapRef.current?.zoomIn()} className="size-8 rounded-lg border-black/10 bg-white/45 shadow-none" aria-label="放大画布">
-              <Search className="size-3.5" aria-hidden /><Plus className="size-2.5" aria-hidden />
-            </Button>
-          </div>
-        ) : null}
       </header>
-      {/* 群组展示区域 */}
-      {activeSection === 'discussion' ? <ProjectDiscussionWorkspace /> : null}
-      {/* 中间D3流程展示区域 */}
-      {activeSection === 'decisions' ? (
-        <DecisionMapCanvas
-          ref={decisionMapRef}
-          currentIndex={replayController.currentIndex}
-          progress={replayController.progress}
+
+      {activeSection === 'discussion' ? (
+        <ProjectDiscussionWorkspace
+          project={project}
+          areas={props.areas}
+          currentArea={props.currentArea}
+          initialMessages={props.initialMessages}
+          currentUser={props.currentUser}
         />
       ) : null}
-      {/* 会议展示区域 */}
-      {/* {activeSection === 'meetings' ? <ProjectMeetingWorkspace /> : null} */}
+      {activeSection === 'decisions' ? (
+        <ProjectDecisionsWorkspace key={project.id} project={project} decisions={props.decisions} />
+      ) : null}
+      {activeSection === 'meetings' ? (
+        <ProjectMeetingWorkspace meetings={props.meetings} />
+      ) : null}
     </section>
   );
+}
+
+/** 返回项目生命周期的中文文案。 */
+function getProjectStatusText(status: ProjectDetail['status']): string {
+  return { ACTIVE: '进行中', CLOSED: '已关闭', ARCHIVED: '已归档' }[status];
 }

@@ -1,9 +1,122 @@
 /**
- * 本文件提供新版“项目空间”一级业务路由的线框预览入口。
+ * 本文件为新版项目空间路由，在服务端完成权限校验并准备当前项目首屏数据。
  */
-import { ProjectSpacePage } from '@/features/project-space/components/project-space-page';
+import { redirect, unstable_rethrow } from 'next/navigation';
+import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
+import type { DecisionSummary } from '@workspace/contracts/decisions';
+import type { MeetingSummary } from '@workspace/contracts/meetings';
+import type {
+  DiscussionAreaSummary,
+  ProjectChatMessagePage,
+  ProjectDetail,
+  ProjectMember,
+  ProjectSummary,
+  ProjectUserSummary,
+} from '@workspace/contracts/projects';
 
-/** 渲染用于确认项目空间信息架构与页面比例的线框页面。 */
-export default function ProjectsPage() {
-  return <ProjectSpacePage />;
+import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
+import { ProjectSpaceEmptyState } from '@/features/project-space/components/project-space-empty-state';
+import { ProjectSpacePage } from '@/features/project-space/components/project-space-page';
+import {
+  getProject,
+  getProjectAreas,
+  getProjectDecisions,
+  getProjectMeetings,
+  getProjectMembers,
+  getProjectMessages,
+  getProjects,
+  ProjectServerError,
+} from '@/features/projects/services/projects-server.service';
+
+/** 项目空间路由支持的稳定查询参数。 */
+type ProjectsPageProps = {
+  /** 项目和讨论分区选择通过查询参数持久化。 */
+  searchParams: Promise<{ projectId?: string; areaId?: string }>;
+};
+
+/** 当前项目首屏需要一次性交给展示层的数据。 */
+type ProjectSpaceRouteData = {
+  /** 当前用户可见的项目列表。 */
+  projects: ProjectSummary[];
+  /** 当前选中项目详情。 */
+  project: ProjectDetail;
+  /** 当前项目下用户可见的讨论分区。 */
+  areas: DiscussionAreaSummary[];
+  /** 当前选中的讨论分区。 */
+  currentArea: DiscussionAreaSummary;
+  /** 当前分区首屏消息。 */
+  initialMessages: ProjectChatMessagePage;
+  /** 当前项目成员。 */
+  members: ProjectMember[];
+  /** 当前项目决策摘要。 */
+  decisions: DecisionSummary[];
+  /** 当前项目会议摘要。 */
+  meetings: MeetingSummary[];
+};
+
+/** 渲染当前用户的新版项目协作空间。 */
+export default async function ProjectsPage({ searchParams }: ProjectsPageProps) {
+  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.project.read);
+  const [query, projects] = await Promise.all([searchParams, getProjects()]);
+
+  if (projects.length === 0) {
+    return (
+      <ProjectSpaceEmptyState
+        canCreate={hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.create)}
+      />
+    );
+  }
+
+  const selectedProjectId = parsePositiveInteger(query.projectId) ?? projects[0]?.id;
+  if (!selectedProjectId || !projects.some((project) => project.id === selectedProjectId)) {
+    redirect('/projects');
+  }
+
+  let pageData: ProjectSpaceRouteData;
+  try {
+    const [project, areas, members, decisions, meetings] = await Promise.all([
+      getProject(selectedProjectId),
+      getProjectAreas(selectedProjectId),
+      getProjectMembers(selectedProjectId),
+      getProjectDecisions(selectedProjectId),
+      getProjectMeetings(selectedProjectId),
+    ]);
+    const requestedAreaId = parsePositiveInteger(query.areaId) ?? project.publicAreaId;
+    const currentArea = areas.find((area) => area.id === requestedAreaId);
+
+    if (!currentArea) {
+      redirect(`/projects?projectId=${project.id}&areaId=${project.publicAreaId}`);
+    }
+
+    const initialMessages = await getProjectMessages(project.id, currentArea.id);
+    pageData = { projects, project, areas, currentArea, initialMessages, members, decisions, meetings };
+  } catch (error) {
+    unstable_rethrow(error);
+    if (error instanceof ProjectServerError && error.status === 404) {
+      redirect('/projects');
+    }
+    throw error;
+  }
+
+  const currentUserSummary: ProjectUserSummary = {
+    id: currentUser.id,
+    name: currentUser.name,
+    avatarUrl: currentUser.avatarUrl,
+  };
+
+  return (
+    <ProjectSpacePage
+      {...pageData}
+      currentUser={currentUserSummary}
+      canCreateProject={hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.create)}
+    />
+  );
+}
+
+/** 将可选查询参数解析为安全的正整数主键。 */
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+
+  const parsedValue = Number(value);
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : undefined;
 }
