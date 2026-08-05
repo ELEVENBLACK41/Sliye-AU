@@ -3,13 +3,19 @@
  */
 import type { DecisionEventTimelineResponse } from '@workspace/contracts/decisions';
 import type {
+  AddDiscussionAreaMemberRequestPayload,
+  AddProjectMemberRequestPayload,
   CreateProjectChatMessageRequestPayload,
+  CreateDiscussionAreaRequestPayload,
   CreateProjectRequestPayload,
+  DiscussionAreaMember,
+  DiscussionAreaSummary,
   ProjectChatMessage,
   ProjectChatMessageListQuery,
   ProjectChatMessagePage,
   ProjectChatTicket,
   ProjectDetail,
+  ProjectMember,
 } from '@workspace/contracts/projects';
 
 import { requestData } from '@/services/request';
@@ -21,6 +27,52 @@ export function createProjectSpaceProject(payload: CreateProjectRequestPayload):
     body: payload,
     errorMessage: '项目创建失败，请稍后重试',
   });
+}
+
+/** 向新版项目空间当前项目添加一名组织用户。 */
+export function addProjectSpaceMember(
+  projectId: number,
+  payload: AddProjectMemberRequestPayload,
+): Promise<ProjectMember> {
+  return requestData<ProjectMember, AddProjectMemberRequestPayload>(`/api/projects/${projectId}/members`, {
+    method: 'POST',
+    body: payload,
+    errorMessage: '项目成员添加失败',
+  });
+}
+
+/** 创建新版项目空间私有小群组及其初始成员。 */
+export function createProjectSpaceArea(
+  projectId: number,
+  payload: CreateDiscussionAreaRequestPayload,
+): Promise<DiscussionAreaSummary> {
+  return requestData<DiscussionAreaSummary, CreateDiscussionAreaRequestPayload>(`/api/projects/${projectId}/areas`, {
+    method: 'POST',
+    body: payload,
+    errorMessage: '小群组创建失败',
+  });
+}
+
+/** 读取新版项目空间一个私有小群组的显式成员。 */
+export function getProjectSpaceAreaMembers(
+  projectId: number,
+  areaId: number,
+): Promise<DiscussionAreaMember[]> {
+  return requestData<DiscussionAreaMember[]>(`/api/projects/${projectId}/areas/${areaId}/members`, {
+    errorMessage: '小群组成员加载失败',
+  });
+}
+
+/** 把一名已有项目成员加入新版项目空间私有小群组。 */
+export function addProjectSpaceAreaMember(
+  projectId: number,
+  areaId: number,
+  payload: AddDiscussionAreaMemberRequestPayload,
+): Promise<DiscussionAreaMember> {
+  return requestData<DiscussionAreaMember, AddDiscussionAreaMemberRequestPayload>(
+    `/api/projects/${projectId}/areas/${areaId}/members`,
+    { method: 'POST', body: payload, errorMessage: '加入小群组失败' },
+  );
 }
 
 /** 加载新版项目空间当前分区的消息页。 */

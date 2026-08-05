@@ -10,6 +10,7 @@ import type {
   ProjectChatMessagePage,
   ProjectDetail,
   ProjectMember,
+  ProjectMemberCandidate,
   ProjectSummary,
   ProjectUserSummary,
 } from '@workspace/contracts/projects';
@@ -24,6 +25,7 @@ import {
   getProjectSpaceDecisions,
   getProjectSpaceMeetings,
   getProjectSpaceMembers,
+  getProjectSpaceMemberCandidates,
   getProjectSpaceMessages,
   getProjectSpaceProject,
   getProjectSpaceProjects,
@@ -50,6 +52,8 @@ type ProjectSpaceRouteData = {
   initialMessages: ProjectChatMessagePage;
   /** 当前项目成员。 */
   members: ProjectMember[];
+  /** 当前项目尚可添加的组织用户。 */
+  memberCandidates: ProjectMemberCandidate[];
   /** 当前项目决策摘要。 */
   decisions: DecisionSummary[];
   /** 当前项目会议摘要。 */
@@ -101,8 +105,26 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
       redirect(`/projects?projectId=${project.id}&areaId=${project.publicAreaId}`);
     }
 
-    const initialMessages = await getProjectSpaceMessages(project.id, currentArea.id);
-    pageData = { projects, project, areas, currentArea, initialMessages, members, decisions, meetings };
+    const canManageProject =
+      hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.update) &&
+      (project.currentUserRole === 'OWNER' || project.currentUserRole === 'MANAGER');
+    const [initialMessages, memberCandidates] = await Promise.all([
+      getProjectSpaceMessages(project.id, currentArea.id),
+      canManageProject && project.status === 'ACTIVE'
+        ? getProjectSpaceMemberCandidates(project.id)
+        : Promise.resolve([]),
+    ]);
+    pageData = {
+      projects,
+      project,
+      areas,
+      currentArea,
+      initialMessages,
+      members,
+      memberCandidates,
+      decisions,
+      meetings,
+    };
   } catch (error) {
     unstable_rethrow(error);
     if (error instanceof ProjectSpaceServerError && error.status === 404) {
@@ -122,6 +144,10 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
       {...pageData}
       currentUser={currentUserSummary}
       canCreateProject={canCreateProject}
+      canManageProject={
+        hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.update) &&
+        (pageData.project.currentUserRole === 'OWNER' || pageData.project.currentUserRole === 'MANAGER')
+      }
       createDepartmentOptions={createDepartmentOptions}
     />
   );

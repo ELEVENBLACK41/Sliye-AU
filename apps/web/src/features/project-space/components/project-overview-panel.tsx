@@ -4,9 +4,16 @@
 import { Building2, FolderKanban, UsersRound } from 'lucide-react';
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
-import type { DiscussionAreaSummary, ProjectDetail, ProjectMember } from '@workspace/contracts/projects';
+import type { DiscussionAreaSummary, ProjectDetail, ProjectMember, ProjectMemberCandidate } from '@workspace/contracts/projects';
 
-import { Avatar, AvatarFallback, AvatarImage } from '@workspace/ui/components/avatar';
+import { ProjectCollaborationManagementSheet } from './project-collaboration-management-sheet';
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarGroup,
+  AvatarGroupCount,
+  AvatarImage,
+} from '@workspace/ui/components/avatar';
 
 /** 项目概览面板属性。 */
 type ProjectOverviewPanelProps = {
@@ -16,10 +23,14 @@ type ProjectOverviewPanelProps = {
   areas: DiscussionAreaSummary[];
   /** 当前项目成员。 */
   members: ProjectMember[];
+  /** 当前项目尚可添加的组织用户。 */
+  memberCandidates: ProjectMemberCandidate[];
   /** 当前项目决策。 */
   decisions: DecisionSummary[];
   /** 当前项目会议。 */
   meetings: MeetingSummary[];
+  /** 当前用户是否可以维护项目成员和私有小群组。 */
+  canManage: boolean;
 };
 
 /** 项目状态中文文案。 */
@@ -30,10 +41,18 @@ const statusText: Record<ProjectDetail['status'], string> = {
 };
 
 /** 渲染项目空间右侧的真实项目级信息。 */
-export function ProjectOverviewPanel({ project, areas, members, decisions, meetings }: ProjectOverviewPanelProps) {
+export function ProjectOverviewPanel({
+  project,
+  areas,
+  members,
+  memberCandidates,
+  decisions,
+  meetings,
+  canManage,
+}: ProjectOverviewPanelProps) {
   const resolvedDecisionCount = decisions.filter((decision) => decision.status === 'RESOLVED').length;
   const scheduledMeetingCount = meetings.filter((meeting) => meeting.status === 'SCHEDULED' || meeting.status === 'LIVE').length;
-  const visibleMembers = members.slice(0, 5);
+  const visibleMembers = members.slice(0, 30);
 
   return (
     <aside
@@ -77,27 +96,41 @@ export function ProjectOverviewPanel({ project, areas, members, decisions, meeti
       </section>
 
       <section className="border-t border-black/8 px-4 py-4" aria-labelledby="project-members-title">
-        <h3 id="project-members-title" className="flex items-center gap-1.5 text-xs font-semibold">
-          <UsersRound className="size-3.5" aria-hidden />
-          项目成员
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 id="project-members-title" className="flex items-center gap-1.5 text-xs font-semibold">
+            <UsersRound className="size-3.5" aria-hidden />
+            项目成员
+          </h3>
+          {canManage ? (
+            <ProjectCollaborationManagementSheet
+              project={project}
+              areas={areas}
+              members={members}
+              memberCandidates={memberCandidates}
+            />
+          ) : null}
+        </div>
         {visibleMembers.length ? (
-          <div className="mt-3 flex -space-x-1.5" aria-label="项目成员头像组">
+          <AvatarGroup className="mt-3 flex-wrap gap-1.5 space-x-0" aria-label="项目成员头像组">
             {visibleMembers.map((member) => {
               const memberName = member.user.name || `用户 ${member.user.id}`;
               return (
-                <Avatar key={member.id} size="sm" className="border-2 border-[#f8f7f2]">
-                  <AvatarImage src={member.user.avatarUrl ?? undefined} alt="" />
+                <Avatar key={member.id} title={memberName}>
+                  <AvatarImage src={member.user.avatarUrl ?? undefined} alt={memberName} />
                   <AvatarFallback>{memberName.slice(0, 1)}</AvatarFallback>
                 </Avatar>
               );
             })}
             {members.length > visibleMembers.length ? (
-              <span className="grid size-8 place-items-center rounded-full border-2 border-[#f8f7f2] bg-black/8 text-[9px] text-black/45">
+              <AvatarGroupCount
+                title={`还有 ${members.length - visibleMembers.length} 位项目成员`}
+                aria-label={`还有 ${members.length - visibleMembers.length} 位项目成员`}
+                className="text-[10px]"
+              >
                 +{members.length - visibleMembers.length}
-              </span>
+              </AvatarGroupCount>
             ) : null}
-          </div>
+          </AvatarGroup>
         ) : (
           <p className="mt-3 text-xs text-black/40">暂无项目成员</p>
         )}

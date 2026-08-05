@@ -5,6 +5,8 @@ import type { DecisionListResponse } from '@workspace/contracts/decisions';
 import type { MeetingListResponse } from '@workspace/contracts/meetings';
 import type {
   DiscussionAreaListResponse,
+  ProjectMemberCandidateListQuery,
+  ProjectMemberCandidateListResponse,
   ProjectChatMessageListQuery,
   ProjectChatMessagePage,
   ProjectDetail,
@@ -43,6 +45,20 @@ export function requestProjectSpaceMembers(
   projectId: number,
 ): Promise<NestResponse<ProjectMemberListResponse>> {
   return requestNest<ProjectMemberListResponse>(`/projects/${projectId}/members`, {
+    headers: createAuthHeaders(accessToken),
+  });
+}
+
+/** 查询新版项目空间当前项目尚可添加的组织用户。 */
+export function requestProjectSpaceMemberCandidates(
+  accessToken: string,
+  projectId: number,
+  query: ProjectMemberCandidateListQuery = {},
+): Promise<NestResponse<ProjectMemberCandidateListResponse>> {
+  const searchParams = new URLSearchParams();
+  if (query.q) searchParams.set('q', query.q);
+  const suffix = searchParams.size > 0 ? `?${searchParams}` : '';
+  return requestNest<ProjectMemberCandidateListResponse>(`/projects/${projectId}/member-candidates${suffix}`, {
     headers: createAuthHeaders(accessToken),
   });
 }

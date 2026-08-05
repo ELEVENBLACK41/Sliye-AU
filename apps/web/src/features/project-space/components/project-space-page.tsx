@@ -11,6 +11,7 @@ import type {
   ProjectChatMessagePage,
   ProjectDetail,
   ProjectMember,
+  ProjectMemberCandidate,
   ProjectSummary,
   ProjectUserSummary,
 } from '@workspace/contracts/projects';
@@ -34,6 +35,8 @@ type ProjectSpacePageProps = {
   initialMessages: ProjectChatMessagePage;
   /** 当前项目成员。 */
   members: ProjectMember[];
+  /** 当前项目尚可添加的组织用户。 */
+  memberCandidates: ProjectMemberCandidate[];
   /** 当前项目决策摘要。 */
   decisions: DecisionSummary[];
   /** 当前项目会议摘要。 */
@@ -42,6 +45,8 @@ type ProjectSpacePageProps = {
   currentUser: ProjectUserSummary;
   /** 当前用户是否具备创建项目权限。 */
   canCreateProject: boolean;
+  /** 当前用户是否可以维护项目成员和私有小群组。 */
+  canManageProject: boolean;
   /** 当前用户创建项目时可以选择的启用部门。 */
   createDepartmentOptions: ProjectCreateDepartmentOption[];
 };
@@ -77,8 +82,10 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
           project={props.project}
           areas={props.areas}
           members={props.members}
+          memberCandidates={props.memberCandidates}
           decisions={props.decisions}
           meetings={props.meetings}
+          canManage={props.canManageProject}
         />
       </div>
     </section>

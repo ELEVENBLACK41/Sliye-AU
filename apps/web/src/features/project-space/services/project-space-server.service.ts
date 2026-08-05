@@ -4,7 +4,7 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import type { ApiErrorCode } from '@workspace/contracts/common';
-import type { ProjectChatMessageListQuery } from '@workspace/contracts/projects';
+import type { ProjectChatMessageListQuery, ProjectMemberCandidateListQuery } from '@workspace/contracts/projects';
 
 import { AUTH_ACCESS_COOKIE_NAME } from '@/features/auth/constants';
 import type { NestResponse } from '@/services/bff-request';
@@ -14,6 +14,7 @@ import {
   requestProjectSpaceDetail,
   requestProjectSpaceMeetings,
   requestProjectSpaceMembers,
+  requestProjectSpaceMemberCandidates,
   requestProjectSpaceMessages,
   requestProjectSpaceProjects,
 } from './project-space-nest-client';
@@ -55,6 +56,12 @@ export const getProjectSpaceAreas = cache(async (projectId: number) =>
 /** 读取新版项目空间当前项目成员。 */
 export const getProjectSpaceMembers = cache(async (projectId: number) =>
   unwrap(await requestProjectSpaceMembers(await getAccessToken(), projectId)),
+);
+
+/** 读取新版项目空间当前项目尚可添加的组织用户。 */
+export const getProjectSpaceMemberCandidates = cache(
+  async (projectId: number, query: ProjectMemberCandidateListQuery = {}) =>
+    unwrap(await requestProjectSpaceMemberCandidates(await getAccessToken(), projectId, query)),
 );
 
 /** 读取新版项目空间当前项目内的决策摘要。 */
