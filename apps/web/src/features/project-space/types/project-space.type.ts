@@ -1,6 +1,13 @@
 /**
  * 本文件定义项目空间线框阶段使用的页面展示类型，后续接入接口时可逐步替换为 contracts 契约。
  */
+import type {
+  DecisionDetail,
+  DecisionEventTimelineItem,
+  DecisionProposal,
+  DecisionResolution,
+  DecisionVoteRound,
+} from '@workspace/contracts/decisions';
 
 /** 项目空间左侧列表中的项目摘要。 */
 export type ProjectSpaceSummary = {
@@ -23,6 +30,28 @@ export type ProjectCreateDepartmentOption = {
   id: number;
   /** 带组织层级缩进的部门显示名称。 */
   label: string;
+};
+
+/** 新版项目空间单项决策工作台一次加载的完整业务数据。 */
+export type ProjectDecisionWorkspaceData = {
+  /** 当前选中的决策详情与参与者。 */
+  decision: DecisionDetail;
+  /** 当前决策的全部提案。 */
+  proposals: DecisionProposal[];
+  /** 当前决策的全部投票轮次。 */
+  voteRounds: DecisionVoteRound[];
+  /** 当前决策已经形成的正式决议。 */
+  resolutions: DecisionResolution[];
+  /** 当前决策的稳定事件时间线。 */
+  events: DecisionEventTimelineItem[];
+};
+
+/** 新版项目空间针对当前用户计算后的决策操作能力。 */
+export type ProjectDecisionCapabilities = {
+  /** 当前用户是否拥有创建决策的系统权限。 */
+  canCreate: boolean;
+  /** 当前用户是否拥有更新参与决策的系统权限。 */
+  canUpdate: boolean;
 };
 
 /** D3 决策树中的节点类型。 */

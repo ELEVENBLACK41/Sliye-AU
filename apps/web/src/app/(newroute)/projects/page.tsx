@@ -156,6 +156,8 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
         hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.update) &&
         (pageData.project.currentUserRole === 'OWNER' || pageData.project.currentUserRole === 'MANAGER')
       }
+      canCreateDecision={hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.create)}
+      canUpdateDecision={hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update)}
       createDepartmentOptions={createDepartmentOptions}
     />
   );

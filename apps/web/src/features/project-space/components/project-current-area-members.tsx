@@ -57,17 +57,17 @@ export function ProjectCurrentAreaMembersCard(props: ProjectCurrentAreaMembersPr
           <AreaIcon className="size-3.5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-medium tracking-[0.12em] text-black/35">当前分区</p>
+          <p className="text-[10px] font-medium tracking-[0.1em] text-black/72">当前分区</p>
           <h3 id="current-area-members-title" className="mt-0.5 truncate text-xs font-semibold">
             {props.area.name}
           </h3>
         </div>
-        <span className="shrink-0 rounded-full border border-black/[0.07] bg-white/60 px-2 py-0.5 text-[9px] text-black/45">
+        <span className="shrink-0 rounded-full border border-black/[0.2] bg-white/60 px-2 py-0.5 text-[10px] text-black/72">
           {members.length} 人
         </span>
       </div>
 
-      <p className="mt-3 text-[10px] leading-4 text-black/42">
+      <p className="mt-3 text-[12px] leading-4 text-black/72">
         {props.area.type === 'PUBLIC' ? '公共分区，继承项目全部成员。' : '私有分区，仅以下成员可以参与。'}
       </p>
       <AreaMemberList members={members} className="mt-3" />
@@ -129,7 +129,7 @@ function AreaMemberList({ members, className = '' }: AreaMemberListProps) {
             <AvatarFallback className="text-[10px]">{member.name.slice(0, 1)}</AvatarFallback>
           </Avatar>
           <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{member.name}</span>
-          <span className="shrink-0 text-[9px] text-black/35">{member.roleText}</span>
+          <span className="shrink-0 text-[10px] text-black/72">{member.roleText}</span>
         </li>
       ))}
     </ul>

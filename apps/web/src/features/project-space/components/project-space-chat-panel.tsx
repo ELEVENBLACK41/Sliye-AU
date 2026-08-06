@@ -4,17 +4,19 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { Lightbulb, MoreHorizontal, Paperclip, Search, Send, UsersRound, Video, X } from 'lucide-react';
+import { MoreHorizontal, Paperclip, Search, Send, UsersRound, Video, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import type {
   DiscussionAreaMember,
   DiscussionAreaSummary,
   ProjectChatMessagePage,
   ProjectMember,
+  ProjectDetail,
   ProjectUserSummary,
 } from '@workspace/contracts/projects';
 
 import { ProjectCurrentAreaMembersSheet } from './project-current-area-members';
+import { ProjectDecisionCreateSheet } from './project-decision-create-sheet';
 import { ProjectSpaceChatMessageList } from './project-space-chat-message-list';
 import { useProjectSpaceChat, type ProjectSpaceChatViewMessage } from '../hooks/use-project-space-chat';
 import type { ProjectSpaceChatConnectionStatus } from '../hooks/use-project-space-chat-realtime';
@@ -25,6 +27,8 @@ import { Textarea } from '@workspace/ui/components/textarea';
 type ProjectSpaceChatPanelProps = {
   /** 当前项目主键。 */
   projectId: number;
+  /** 当前项目详情。 */
+  project: ProjectDetail;
   /** 当前讨论分区。 */
   area: DiscussionAreaSummary;
   /** 当前私有分区的显式成员。 */
@@ -37,6 +41,8 @@ type ProjectSpaceChatPanelProps = {
   currentUser: ProjectUserSummary;
   /** 当前用户是否可以发送消息。 */
   canSend: boolean;
+  /** 当前用户是否拥有创建决策权限。 */
+  canCreateDecision: boolean;
   /** 禁止发送时展示的明确原因。 */
   readOnlyReason: string;
 };
@@ -62,7 +68,7 @@ type ChatScrollSnapshot = {
 
 /** 渲染新版聊天视觉，同时复用真实分页、乐观发送和 Socket 状态。 */
 export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
-  const { projectId, area, privateAreaMembers, initialPage, projectMembers, currentUser, canSend, readOnlyReason } = props;
+  const { projectId, project, area, privateAreaMembers, initialPage, projectMembers, currentUser, canSend, canCreateDecision, readOnlyReason } = props;
   const router = useRouter();
   const [draft, setDraft] = useState('');
   const messageViewportRef = useRef<HTMLDivElement | null>(null);
@@ -129,6 +135,11 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     submitDraft();
+  }
+
+  /** 创建当前群组范围的决策后直接进入新版决策工作区。 */
+  function handleDecisionCreated(decision: { id: number }): void {
+    router.push(`/projects?projectId=${projectId}&areaId=${area.id}&section=decisions&decisionId=${decision.id}`);
   }
 
   /** 处理 Enter 发送和 Shift+Enter 换行。 */
@@ -218,9 +229,13 @@ export function ProjectSpaceChatPanel(props: ProjectSpaceChatPanelProps) {
                 <Button type="button" variant="ghost" size="icon" className="size-7 rounded-lg" aria-label="添加附件">
                   <Paperclip className="size-3.5" aria-hidden />
                 </Button>
-                <Button type="button" variant="ghost" size="sm" className="h-7 rounded-lg px-2 text-[10px]">
-                  <Lightbulb className="size-3.5" aria-hidden />发起决策
-                </Button>
+                <ProjectDecisionCreateSheet
+                  project={project}
+                  currentArea={area}
+                  canCreate={canCreateDecision}
+                  onCreated={handleDecisionCreated}
+                  composer
+                />
               </div>
               <Button type="submit" size="sm" disabled={!draft.trim()} className="h-7 rounded-full bg-[#292a27] px-3 text-[10px] text-white hover:bg-[#3b3c38]">
                 发送 <Send className="size-3" aria-hidden />

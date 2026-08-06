@@ -44,6 +44,10 @@ type ProjectWorkspacePanelProps = {
   activeSection: ProjectSectionKey;
   /** 用户切换项目模块时触发的状态更新。 */
   onSectionChange: (section: ProjectSectionKey) => void;
+  /** 当前用户是否拥有创建决策权限。 */
+  canCreateDecision: boolean;
+  /** 当前用户是否拥有更新参与决策权限。 */
+  canUpdateDecision: boolean;
 };
 
 /** 渲染项目标题、内部导航和当前选中的真实业务模块。 */
@@ -75,14 +79,19 @@ export function ProjectWorkspacePanel(props: ProjectWorkspacePanelProps) {
           initialMessages={props.initialMessages}
           projectMembers={props.projectMembers}
           currentUser={props.currentUser}
+          canCreateDecision={props.canCreateDecision}
         />
       ) : null}
       {activeSection === 'decisions' ? (
         <ProjectDecisionsWorkspace
-          key={project.id}
+          key={`${project.id}:${props.currentArea.id}`}
           project={project}
           areas={props.areas}
+          currentArea={props.currentArea}
           decisions={props.decisions}
+          currentUser={props.currentUser}
+          canCreate={props.canCreateDecision}
+          canUpdate={props.canUpdateDecision}
         />
       ) : null}
       {activeSection === 'meetings' ? (

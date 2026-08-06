@@ -31,6 +31,8 @@ type ProjectDiscussionWorkspaceProps = {
   initialMessages: ProjectChatMessagePage;
   /** 当前认证用户摘要。 */
   currentUser: ProjectUserSummary;
+  /** 当前用户是否拥有创建决策权限。 */
+  canCreateDecision: boolean;
 };
 
 /** 渲染可分享分区地址的项目聊天工作区。 */
@@ -61,10 +63,10 @@ export function ProjectDiscussionWorkspace(props: ProjectDiscussionWorkspaceProp
                     href={`/projects?projectId=${project.id}&areaId=${area.id}`}
                     aria-current={isCurrent ? 'page' : undefined}
                     className={`flex w-full items-center gap-2 rounded-xl border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/25 ${
-                      isCurrent ? 'border-[#e5bd37]/50 bg-[#fff6d2]/75' : 'border-transparent hover:bg-white/55'
+                      isCurrent ? 'border-project-accent/50 bg-project-accent-soft/75' : 'border-transparent hover:bg-white/55'
                     }`}
                   >
-                    <span className={`grid size-7 shrink-0 place-items-center rounded-full ${isCurrent ? 'bg-[#f5bf19]' : 'bg-black/7'}`}>
+                    <span className={`grid size-7 shrink-0 place-items-center rounded-full ${isCurrent ? 'bg-project-accent' : 'bg-black/7'}`}>
                       {area.type === 'PUBLIC' ? <UsersRound className="size-3.5" aria-hidden /> : <LockKeyhole className="size-3.5" aria-hidden />}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -86,12 +88,14 @@ export function ProjectDiscussionWorkspace(props: ProjectDiscussionWorkspaceProp
         <ProjectSpaceChatPanel
           key={currentArea.id}
           projectId={project.id}
+          project={project}
           area={currentArea}
           privateAreaMembers={currentAreaMembers}
           initialPage={initialMessages}
           projectMembers={projectMembers}
           currentUser={currentUser}
           canSend={canSend}
+          canCreateDecision={props.canCreateDecision}
           readOnlyReason={getReadOnlyReason(project, currentArea)}
         />
       </div>

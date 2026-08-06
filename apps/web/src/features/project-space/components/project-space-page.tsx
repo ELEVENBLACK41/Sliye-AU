@@ -3,7 +3,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
 import type {
@@ -50,13 +50,28 @@ type ProjectSpacePageProps = {
   canCreateProject: boolean;
   /** 当前用户是否可以维护项目成员和私有小群组。 */
   canManageProject: boolean;
+  /** 当前用户是否拥有创建决策权限。 */
+  canCreateDecision: boolean;
+  /** 当前用户是否拥有更新参与决策权限。 */
+  canUpdateDecision: boolean;
   /** 当前用户创建项目时可以选择的启用部门。 */
   createDepartmentOptions: ProjectCreateDepartmentOption[];
 };
 
 /** 渲染接入真实业务数据后的项目空间。 */
 export function ProjectSpacePage(props: ProjectSpacePageProps) {
-  const [activeSection, setActiveSection] = useState<ProjectSectionKey>('discussion');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const querySection = searchParams.get('section');
+  const activeSection: ProjectSectionKey = isProjectSectionKey(querySection) ? querySection : 'discussion';
+
+  /** 切换项目模块，并把当前位置写入查询参数以支持刷新和浏览器返回。 */
+  function handleSectionChange(section: ProjectSectionKey): void {
+    const nextSearchParams = new URLSearchParams(searchParams.toString());
+    nextSearchParams.set('section', section);
+    router.push(`${pathname}?${nextSearchParams}`, { scroll: false });
+  }
 
   return (
     <section
@@ -81,7 +96,9 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
           meetings={props.meetings}
           currentUser={props.currentUser}
           activeSection={activeSection}
-          onSectionChange={setActiveSection}
+          onSectionChange={handleSectionChange}
+          canCreateDecision={props.canCreateDecision}
+          canUpdateDecision={props.canUpdateDecision}
         />
         <ProjectOverviewPanel
           project={props.project}
@@ -98,4 +115,9 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
       </div>
     </section>
   );
+}
+
+/** 判断查询参数是否为项目空间支持的一级模块。 */
+function isProjectSectionKey(value: string | null): value is ProjectSectionKey {
+  return value === 'discussion' || value === 'decisions' || value === 'meetings';
 }

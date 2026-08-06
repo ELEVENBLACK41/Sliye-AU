@@ -36,6 +36,10 @@
   --sidebar-accent-foreground: oklch(0.212 0.019 322.12);
   --sidebar-border: oklch(0.922 0.005 325.62);
   --sidebar-ring: oklch(0.711 0.019 323.02);
+  --project-accent: oklch(0.82 0.17 88);
+  --project-accent-soft: oklch(0.96 0.07 91);
+  --project-surface: oklch(0.975 0.008 92);
+  --project-ink: oklch(0.28 0.012 105);
 }
 
 .dark {
@@ -70,6 +74,10 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.542 0.034 322.5);
+  --project-accent: oklch(0.82 0.17 88);
+  --project-accent-soft: oklch(0.34 0.05 88);
+  --project-surface: oklch(0.19 0.008 92);
+  --project-ink: oklch(0.96 0.004 95);
 }
 
 @theme inline {
@@ -106,6 +114,10 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-project-accent: var(--project-accent);
+  --color-project-accent-soft: var(--project-accent-soft);
+  --color-project-surface: var(--project-surface);
+  --color-project-ink: var(--project-ink);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

@@ -39,9 +39,9 @@ export function ProjectCollaborationManagementSheet({
           管理协作范围
         </Button>
       </SheetTrigger>
-      <SheetContent className="border-black/10 bg-[#f8f7f2] sm:max-w-[32rem]">
+      <SheetContent className="border-black/10 bg-project-surface sm:max-w-[32rem]">
         <SheetHeader className="border-b border-black/[0.07] px-5 py-5">
-          <span className="mb-3 grid size-10 place-items-center rounded-2xl bg-[#f5bf19] text-[#292a27]">
+          <span className="mb-3 grid size-10 place-items-center rounded-2xl bg-project-accent text-project-ink">
             <UsersRound className="size-5" aria-hidden />
           </span>
           <SheetTitle className="text-xl font-semibold tracking-[-0.025em]">管理协作范围</SheetTitle>
