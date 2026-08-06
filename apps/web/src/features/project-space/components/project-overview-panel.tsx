@@ -125,6 +125,7 @@ export function ProjectOverviewPanel({
             <UsersRound className="size-3.5" aria-hidden />
             项目成员
           </h3>
+          {/* 管理协作范围的按钮 */}
           {canManage ? (
             <ProjectCollaborationManagementSheet
               project={project}
