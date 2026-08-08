@@ -4,6 +4,7 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useState } from 'react';
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
 import type {
@@ -63,8 +64,14 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isOverviewCollapsed, setIsOverviewCollapsed] = useState(false);
   const querySection = searchParams.get('section');
   const activeSection: ProjectSectionKey = isProjectSectionKey(querySection) ? querySection : 'discussion';
+
+  /** 切换桌面端右侧项目概览栏，扩大中央工作区的可用宽度。 */
+  function handleOverviewCollapseToggle(): void {
+    setIsOverviewCollapsed((currentValue) => !currentValue);
+  }
 
   /** 切换项目模块，并把当前位置写入查询参数以支持刷新和浏览器返回。 */
   function handleSectionChange(section: ProjectSectionKey): void {
@@ -78,7 +85,13 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
       className="relative mt-6 flex min-w-0 flex-none flex-col overflow-visible rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] lg:-mb-6 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-b-none"
       aria-label="项目空间"
     >
-      <div className="grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_14rem] lg:overflow-hidden xl:grid-cols-[14rem_minmax(0,1fr)_16rem]">
+      <div
+        className={
+          isOverviewCollapsed
+            ? 'grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] transition-[grid-template-columns] duration-300 ease-out motion-reduce:transition-none lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_3.5rem] lg:overflow-hidden xl:grid-cols-[14rem_minmax(0,1fr)_3.5rem]'
+            : 'grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] transition-[grid-template-columns] duration-300 ease-out motion-reduce:transition-none lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_14rem] lg:overflow-hidden xl:grid-cols-[14rem_minmax(0,1fr)_16rem]'
+        }
+      >
         <ProjectListPanel
           projects={props.projects}
           currentProjectId={props.project.id}
@@ -111,6 +124,8 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
           meetings={props.meetings}
           canManage={props.canManageProject}
           showCurrentArea={activeSection === 'discussion'}
+          isCollapsed={isOverviewCollapsed}
+          onToggleCollapsed={handleOverviewCollapseToggle}
         />
       </div>
     </section>

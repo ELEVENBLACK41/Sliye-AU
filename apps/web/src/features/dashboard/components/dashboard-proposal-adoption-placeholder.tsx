@@ -37,23 +37,21 @@ export function DashboardProposalAdoptionPlaceholder() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-medium tracking-tight text-[#292a27] xl:text-[clamp(1.125rem,calc(2.2cqh+0.495rem),1.25rem)]">
-            提案采纳率
-          </h2>
+          <h2 className="text-xl font-medium tracking-tight text-[#292a27]">提案采纳率</h2>
           <p className="mt-1 text-xs text-black/40">全部已结束提案 · 共 {totalProposals} 份</p>
         </div>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="size-10 rounded-full bg-white/75 text-[#292a27] shadow-sm hover:bg-white xl:size-[clamp(2rem,calc(4.5cqh+1.0125rem),2.5rem)]"
+          className="size-10 rounded-full bg-white/75 text-[#292a27] shadow-sm hover:bg-white"
           aria-label="查看提案采纳详情"
         >
           <ArrowUpRight className="size-4" aria-hidden />
         </Button>
       </div>
 
-      <div className="relative mt-2 min-h-48 flex-1 xl:min-h-0">
+      <div className="relative mt-2 min-h-48 flex-1">
         <ChartContainer
           config={proposalAdoptionConfig}
           className="absolute inset-0 h-full w-full aspect-auto"
@@ -81,26 +79,21 @@ export function DashboardProposalAdoptionPlaceholder() {
         </ChartContainer>
 
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center" aria-hidden>
-          <strong className="text-4xl leading-none font-light tracking-[-0.06em] text-[#292a27] tabular-nums xl:text-[clamp(1.875rem,calc(4cqh+0.9rem),2.25rem)]">
+          <strong className="text-4xl leading-none font-light tracking-[-0.06em] text-[#292a27] tabular-nums">
             {adoptionRate}%
           </strong>
           <span className="mt-1 text-[11px] font-medium text-black/40">采纳率</span>
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-2 xl:gap-[clamp(0.375rem,calc(0.8cqh+0.18rem),0.5rem)]">
+      <dl className="grid grid-cols-2 gap-2">
         {proposalAdoptionData.map((item) => (
-          <div
-            key={item.status}
-            className="rounded-2xl bg-white/55 px-3 py-2.5 xl:py-[clamp(0.5rem,calc(1.1cqh+0.2475rem),0.625rem)]"
-          >
+          <div key={item.status} className="rounded-2xl bg-white/55 px-3 py-2.5">
             <dt className="flex items-center gap-2 text-xs text-black/45">
               <span className="size-2 rounded-full" style={{ backgroundColor: item.color }} aria-hidden />
               {item.label}
             </dt>
-            <dd className="mt-1 text-lg leading-none font-medium text-[#292a27] tabular-nums xl:text-[clamp(1rem,calc(2cqh+0.45rem),1.125rem)]">
-              {item.value}
-            </dd>
+            <dd className="mt-1 text-lg leading-none font-medium text-[#292a27] tabular-nums">{item.value}</dd>
           </div>
         ))}
       </dl>
