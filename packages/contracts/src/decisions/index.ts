@@ -3,3 +3,4 @@
  */
 
 export type * from './decision.types.ts';
+export type * from './decision-center.types.ts';

@@ -6,6 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { MeetingsModule } from '../meetings/meetings.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { DecisionsController } from './decisions.controller';
+import { DecisionCenterController } from './decision-center.controller';
 import { ProjectDecisionsController } from './project-decisions.controller';
 import { DecisionsService } from './decisions.service';
 import { DecisionCoreService } from './services/decision-core.service';
@@ -13,10 +14,15 @@ import { DecisionParticipantService } from './services/decision-participant.serv
 import { DecisionProposalService } from './services/decision-proposal.service';
 import { DecisionResolutionService } from './services/decision-resolution.service';
 import { DecisionVoteService } from './services/decision-vote.service';
+import { DecisionCenterQueryService } from './services/decision-center-query.service';
 
 @Module({
   imports: [AuthModule, MeetingsModule, ProjectsModule],
-  controllers: [DecisionsController, ProjectDecisionsController],
+  controllers: [
+    DecisionsController,
+    ProjectDecisionsController,
+    DecisionCenterController,
+  ],
   providers: [
     DecisionsService,
     DecisionCoreService,
@@ -24,6 +30,7 @@ import { DecisionVoteService } from './services/decision-vote.service';
     DecisionProposalService,
     DecisionResolutionService,
     DecisionVoteService,
+    DecisionCenterQueryService,
   ],
 })
 export class DecisionsModule {}
