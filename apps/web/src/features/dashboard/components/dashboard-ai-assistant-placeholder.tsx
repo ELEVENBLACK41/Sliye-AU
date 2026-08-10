@@ -24,7 +24,7 @@ import { Input } from '@workspace/ui/components/input';
 
 /** AI 卡片在普通与放大状态下共用的完整外观，确保动画过程中样式不发生切换。 */
 const aiAssistantCardClassName =
-  'relative h-full min-h-[20rem] gap-0 overflow-hidden rounded-[1.75rem] border border-white/50 bg-transparent bg-[linear-gradient(to_bottom,rgba(247,244,193,0.09)_0%,rgba(255,241,132,0.18)_50%,rgba(255,224,68,0.3)_100%)] py-0 text-[#252622] shadow-[0_24px_48px_rgba(112,89,11,0.08),inset_0_1px_0_rgba(255,255,255,0.62)] backdrop-blur-[8px] backdrop-saturate-125 xl:min-h-0 xl:[container-type:size]';
+  'relative h-full min-h-[20rem] gap-0 overflow-hidden rounded-[1.75rem] border border-white/50 bg-transparent bg-[linear-gradient(to_bottom,rgba(247,244,193,0.09)_0%,rgba(255,241,132,0.18)_50%,rgba(255,224,68,0.3)_100%)] py-0 text-[#252622] shadow-[0_24px_48px_rgba(112,89,11,0.08),inset_0_1px_0_rgba(255,255,255,0.62)] backdrop-blur-[8px] backdrop-saturate-125';
 
 /** 动画计算所需的卡片视口矩形。 */
 type AssistantCardRect = Pick<DOMRect, 'height' | 'left' | 'top' | 'width'>;
@@ -81,7 +81,7 @@ function AssistantCardContent({
 }: AssistantCardContentProps) {
   return (
     <section
-      className="relative flex h-full min-h-[20rem] flex-col overflow-hidden rounded-[inherit] px-6 pt-6 pb-5 xl:min-h-0 xl:px-[clamp(1rem,calc(2.6cqh+0.585rem),1.5rem)] xl:pt-[clamp(1rem,calc(2.6cqh+0.585rem),1.5rem)] xl:pb-[clamp(0.75rem,calc(2.2cqh+0.495rem),1.25rem)]"
+      className="relative flex h-full min-h-[20rem] flex-col overflow-hidden rounded-[inherit] px-6 pt-6 pb-5"
       aria-labelledby="dashboard-ai-assistant-title"
     >
       <div
@@ -95,7 +95,7 @@ function AssistantCardContent({
 
       <header className="relative flex items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#171813] text-white shadow-[0_5px_12px_rgba(32,31,18,0.18)] xl:size-[clamp(2rem,calc(4cqh+0.9rem),2.25rem)]">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#171813] text-white shadow-[0_5px_12px_rgba(32,31,18,0.18)]">
             <Zap className="size-4 fill-current" aria-hidden />
           </span>
           <h2 id="dashboard-ai-assistant-title" className="truncate text-sm font-semibold text-[#292a27]">
@@ -109,7 +109,7 @@ function AssistantCardContent({
           variant="ghost"
           size="icon"
           onClick={onToggle}
-          className="size-10 rounded-2xl border border-white/75 bg-[#f4f4f1]/80 text-[#343532] shadow-[0_8px_20px_rgba(41,42,39,0.08)] backdrop-blur-md hover:bg-[#fafaf8]/90 xl:size-[clamp(2rem,calc(4.5cqh+1.0125rem),2.5rem)]"
+          className="size-10 rounded-2xl border border-white/75 bg-[#f4f4f1]/80 text-[#343532] shadow-[0_8px_20px_rgba(41,42,39,0.08)] backdrop-blur-md hover:bg-[#fafaf8]/90"
           aria-label={expanded ? '缩小 AI 决策助手' : '放大 AI 决策助手'}
         >
           {expanded ? (
@@ -120,8 +120,8 @@ function AssistantCardContent({
         </Button>
       </header>
 
-      <div className="relative flex flex-1 flex-col justify-end pt-14 pb-7 xl:pt-[clamp(1rem,calc(6cqh+1.35rem),3.5rem)] xl:pb-[clamp(0.75rem,calc(3cqh+0.675rem),1.75rem)]">
-        <p className="max-w-[16rem] text-[1.55rem] leading-[1.16] font-normal tracking-[-0.045em] text-[#292a27] xl:text-[clamp(1.25rem,calc(2.6cqh+0.585rem),1.55rem)]">
+      <div className="relative flex flex-1 flex-col justify-end pt-14 pb-7">
+        <p className="max-w-[16rem] text-[1.55rem] leading-[1.16] font-normal tracking-[-0.045em] text-[#292a27]">
           今天有哪些决策
           <br />
           <strong className="font-semibold">需要我关注？</strong>

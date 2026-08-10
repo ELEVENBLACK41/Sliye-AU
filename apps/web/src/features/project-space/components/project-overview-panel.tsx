@@ -1,7 +1,7 @@
 /**
  * 本文件展示当前项目的真实基础信息、发起部门和项目成员。
  */
-import { Building2, FolderKanban, UsersRound } from 'lucide-react';
+import { Building2, FolderKanban, PanelRightClose, PanelRightOpen, UsersRound } from 'lucide-react';
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
 import type {
@@ -21,6 +21,7 @@ import {
   AvatarGroupCount,
   AvatarImage,
 } from '@workspace/ui/components/avatar';
+import { Button } from '@workspace/ui/components/button';
 
 /** 项目概览面板属性。 */
 type ProjectOverviewPanelProps = {
@@ -44,6 +45,10 @@ type ProjectOverviewPanelProps = {
   canManage: boolean;
   /** 当前是否处于讨论模块，需要展示分区上下文。 */
   showCurrentArea: boolean;
+  /** 桌面端是否已经收起项目概览栏。 */
+  isCollapsed: boolean;
+  /** 切换桌面端项目概览栏的展开状态。 */
+  onToggleCollapsed: () => void;
 };
 
 /** 项目状态中文文案。 */
@@ -65,6 +70,8 @@ export function ProjectOverviewPanel({
   meetings,
   canManage,
   showCurrentArea,
+  isCollapsed,
+  onToggleCollapsed,
 }: ProjectOverviewPanelProps) {
   const resolvedDecisionCount = decisions.filter((decision) => decision.status === 'RESOLVED').length;
   const scheduledMeetingCount = meetings.filter((meeting) => meeting.status === 'SCHEDULED' || meeting.status === 'LIVE').length;
@@ -72,101 +79,143 @@ export function ProjectOverviewPanel({
 
   return (
     <aside
-      className="flex min-h-[34rem] min-w-0 shrink-0 flex-col border-t border-black/10 bg-white/35 lg:min-h-0 lg:shrink lg:overflow-y-auto lg:border-t-0 lg:border-l"
-      aria-labelledby="project-overview-title"
+      className={`flex min-h-[34rem] min-w-0 shrink-0 flex-col border-t border-black/10 bg-white/35 lg:min-h-0 lg:shrink-0 lg:border-t-0 lg:border-l ${isCollapsed ? 'lg:overflow-hidden' : 'lg:overflow-y-auto'}`}
+      aria-label="项目概览"
     >
-      <header className="flex items-start gap-3 px-4 py-4">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#292a27] text-white">
-          <FolderKanban className="size-4" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] text-black/40">当前项目</p>
-          <h2 id="project-overview-title" className="mt-0.5 text-sm font-semibold">{project.title}</h2>
-          <span className="mt-1.5 inline-flex rounded-full border border-amber-300/70 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
-            {statusText[project.status]}
+      <div
+        id="project-overview-content"
+        className={`block opacity-100 transition-[opacity,transform,visibility] duration-200 ease-out motion-reduce:transition-none ${isCollapsed ? 'lg:pointer-events-none lg:invisible lg:translate-x-2 lg:opacity-0' : 'lg:translate-x-0'}`}
+      >
+        <header className="flex items-start gap-3 px-4 py-4">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#292a27] text-white">
+            <FolderKanban className="size-4" aria-hidden />
           </span>
-        </div>
-      </header>
-
-      {showCurrentArea ? (
-        <ProjectCurrentAreaMembersCard
-          area={currentArea}
-          projectMembers={members}
-          privateAreaMembers={currentAreaMembers}
-        />
-      ) : null}
-
-      <dl className="grid grid-cols-[4rem_1fr] gap-x-3 gap-y-3 border-t border-black/8 px-4 py-4 text-xs">
-        <dt className="text-black/40">负责人</dt>
-        <dd className="truncate">{project.owner?.name || project.createdBy.name || `用户 ${project.createdBy.id}`}</dd>
-        <dt className="text-black/40">成员</dt>
-        <dd>{project.memberCount} 人</dd>
-        <dt className="text-black/40">决策</dt>
-        <dd>{resolvedDecisionCount} 项已决议 · {decisions.length - resolvedDecisionCount} 项其他状态</dd>
-        <dt className="text-black/40">会议</dt>
-        <dd>{scheduledMeetingCount} 场待开始或进行中</dd>
-        <dt className="text-black/40">分区</dt>
-        <dd>{areas.length} 个当前可见</dd>
-      </dl>
-
-      <section className="border-t border-black/8 px-4 py-4" aria-labelledby="department-title">
-        <h3 id="department-title" className="flex items-center gap-1.5 text-xs font-semibold">
-          <Building2 className="size-3.5" aria-hidden />
-          发起部门
-        </h3>
-        <span className="mt-3 inline-flex rounded-full border border-black/10 bg-white/55 px-2 py-1 text-[10px] text-black/55">
-          {project.department.name}
-        </span>
-      </section>
-
-      <section className="border-t border-black/8 px-4 py-4" aria-labelledby="project-members-title">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 id="project-members-title" className="flex items-center gap-1.5 text-xs font-semibold">
-            <UsersRound className="size-3.5" aria-hidden />
-            项目成员
-          </h3>
-          {/* 管理协作范围的按钮 */}
-          {canManage ? (
-            <ProjectCollaborationManagementSheet
-              project={project}
-              areas={areas}
-              members={members}
-              memberCandidates={memberCandidates}
-            />
-          ) : null}
-        </div>
-        {visibleMembers.length ? (
-          <AvatarGroup className="mt-3 flex-wrap gap-1.5 space-x-0" aria-label="项目成员头像组">
-            {visibleMembers.map((member) => {
-              const memberName = member.user.name || `用户 ${member.user.id}`;
-              return (
-                <Avatar key={member.id} title={memberName}>
-                  <AvatarImage src={member.user.avatarUrl ?? undefined} alt={memberName} />
-                  <AvatarFallback>{memberName.slice(0, 1)}</AvatarFallback>
-                </Avatar>
-              );
-            })}
-            {members.length > visibleMembers.length ? (
-              <AvatarGroupCount
-                title={`还有 ${members.length - visibleMembers.length} 位项目成员`}
-                aria-label={`还有 ${members.length - visibleMembers.length} 位项目成员`}
-                className="text-[10px]"
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] text-black/40">当前项目</p>
+                <h2 id="project-overview-title" className="mt-0.5 text-sm font-semibold">{project.title}</h2>
+                <span className="mt-1.5 inline-flex rounded-full border border-amber-300/70 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
+                  {statusText[project.status]}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="hidden size-8 shrink-0 rounded-full text-muted-foreground hover:bg-muted lg:inline-flex"
+                onClick={onToggleCollapsed}
+                aria-label="收起项目概览栏"
+                aria-expanded={!isCollapsed}
+                aria-controls="project-overview-content"
+                title="收起项目概览栏"
               >
-                +{members.length - visibleMembers.length}
-              </AvatarGroupCount>
-            ) : null}
-          </AvatarGroup>
-        ) : (
-          <p className="mt-3 text-xs text-black/40">暂无项目成员</p>
-        )}
-      </section>
+                <PanelRightClose className="size-4" aria-hidden />
+              </Button>
+            </div>
+          </div>
+        </header>
 
-      {project.description ? (
-        <section className="border-t border-black/8 px-4 py-4" aria-labelledby="project-description-title">
-          <h3 id="project-description-title" className="text-xs font-semibold">项目说明</h3>
-          <p className="mt-2 text-xs leading-5 text-black/50">{project.description}</p>
+        {showCurrentArea ? (
+          <ProjectCurrentAreaMembersCard
+            area={currentArea}
+            projectMembers={members}
+            privateAreaMembers={currentAreaMembers}
+          />
+        ) : null}
+
+        <dl className="grid grid-cols-[4rem_1fr] gap-x-3 gap-y-3 border-t border-black/8 px-4 py-4 text-xs">
+          <dt className="text-black/40">负责人</dt>
+          <dd className="truncate">{project.owner?.name || project.createdBy.name || `用户 ${project.createdBy.id}`}</dd>
+          <dt className="text-black/40">成员</dt>
+          <dd>{project.memberCount} 人</dd>
+          <dt className="text-black/40">决策</dt>
+          <dd>{resolvedDecisionCount} 项已决议 · {decisions.length - resolvedDecisionCount} 项其他状态</dd>
+          <dt className="text-black/40">会议</dt>
+          <dd>{scheduledMeetingCount} 场待开始或进行中</dd>
+          <dt className="text-black/40">分区</dt>
+          <dd>{areas.length} 个当前可见</dd>
+        </dl>
+
+        <section className="border-t border-black/8 px-4 py-4" aria-labelledby="department-title">
+          <h3 id="department-title" className="flex items-center gap-1.5 text-xs font-semibold">
+            <Building2 className="size-3.5" aria-hidden />
+            发起部门
+          </h3>
+          <span className="mt-3 inline-flex rounded-full border border-black/10 bg-white/55 px-2 py-1 text-[10px] text-black/55">
+            {project.department.name}
+          </span>
         </section>
-      ) : null}
+
+        <section className="border-t border-black/8 px-4 py-4" aria-labelledby="project-members-title">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="project-members-title" className="flex items-center gap-1.5 text-xs font-semibold">
+              <UsersRound className="size-3.5" aria-hidden />
+              项目成员
+            </h3>
+            {/* 管理协作范围的按钮 */}
+            {canManage ? (
+              <ProjectCollaborationManagementSheet
+                project={project}
+                areas={areas}
+                members={members}
+                memberCandidates={memberCandidates}
+              />
+            ) : null}
+          </div>
+          {visibleMembers.length ? (
+            <AvatarGroup className="mt-3 flex-wrap gap-1.5 space-x-0" aria-label="项目成员头像组">
+              {visibleMembers.map((member) => {
+                const memberName = member.user.name || `用户 ${member.user.id}`;
+                return (
+                  <Avatar key={member.id} title={memberName}>
+                    <AvatarImage src={member.user.avatarUrl ?? undefined} alt={memberName} />
+                    <AvatarFallback>{memberName.slice(0, 1)}</AvatarFallback>
+                  </Avatar>
+                );
+              })}
+              {members.length > visibleMembers.length ? (
+                <AvatarGroupCount
+                  title={`还有 ${members.length - visibleMembers.length} 位项目成员`}
+                  aria-label={`还有 ${members.length - visibleMembers.length} 位项目成员`}
+                  className="text-[10px]"
+                >
+                  +{members.length - visibleMembers.length}
+                </AvatarGroupCount>
+              ) : null}
+            </AvatarGroup>
+          ) : (
+            <p className="mt-3 text-xs text-black/40">暂无项目成员</p>
+          )}
+        </section>
+
+        {project.description ? (
+          <section className="border-t border-black/8 px-4 py-4" aria-labelledby="project-description-title">
+            <h3 id="project-description-title" className="text-xs font-semibold">项目说明</h3>
+            <p className="mt-2 text-xs leading-5 text-black/50">{project.description}</p>
+          </section>
+        ) : null}
+      </div>
+
+      <div
+        className={`hidden h-full min-h-0 flex-col items-center gap-3 px-2 py-4 transition-[opacity,transform,visibility] duration-200 ease-out motion-reduce:transition-none lg:flex ${isCollapsed ? 'lg:translate-x-0 lg:opacity-100' : 'lg:pointer-events-none lg:invisible lg:-translate-x-2 lg:opacity-0'}`}
+        aria-hidden={!isCollapsed}
+      >
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0 rounded-full text-muted-foreground hover:bg-muted"
+          onClick={onToggleCollapsed}
+          aria-label="展开项目概览栏"
+          aria-expanded={false}
+          aria-controls="project-overview-content"
+          title="展开项目概览栏"
+        >
+          <PanelRightOpen className="size-4" aria-hidden />
+        </Button>
+        <span className="text-[10px] text-muted-foreground [writing-mode:vertical-rl]">项目资料</span>
+      </div>
     </aside>
   );
 }
