@@ -4,6 +4,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { LoaderCircle, Phone, PhoneOff, Video } from 'lucide-react';
 import type {
   IncomingMeetingCall,
@@ -13,6 +14,8 @@ import type {
 } from '@workspace/contracts/meetings';
 
 import { Button } from '@workspace/ui/components/button';
+import { toast } from '@workspace/ui/components/sonner';
+import { useMeetingSessionStore } from '@/features/meeting-session/store/meeting-session-store';
 import { requestData } from '@/services/request';
 import { useNotificationStore } from '../store/notification-store';
 
@@ -37,8 +40,11 @@ function respondToCall(
 
 /** 渲染位于应用右上角的实时来电卡片。 */
 export function IncomingCallRuntime() {
+  const router = useRouter();
   const notifications = useNotificationStore((state) => state.notifications);
   const connectionStatus = useNotificationStore((state) => state.connectionStatus);
+  const currentMeetingId = useMeetingSessionStore((state) => state.meetingId);
+  const currentMeetingStatus = useMeetingSessionStore((state) => state.status);
   const [calls, setCalls] = useState<IncomingMeetingCall[]>([]);
   const [dismissedIds, setDismissedIds] = useState<number[]>([]);
   const [now, setNow] = useState(0);
@@ -82,12 +88,22 @@ export function IncomingCallRuntime() {
   /** 提交响应并在接听成功后进入自研会议房间。 */
   async function handleResponse(response: 'ACCEPT' | 'DECLINE'): Promise<void> {
     if (!activeCall) return;
+    if (
+      response === 'ACCEPT' &&
+      currentMeetingId !== null &&
+      currentMeetingId !== activeCall.id &&
+      currentMeetingStatus !== 'IDLE' &&
+      currentMeetingStatus !== 'ENDED'
+    ) {
+      toast.error('当前已有一场会议正在进行，请先离开后再接听其他会议');
+      return;
+    }
     setResponding(true);
     try {
       await respondToCall(activeCall.id, response);
       setDismissedIds((current) => [...current, activeCall.id]);
       if (response === 'ACCEPT') {
-        window.location.assign(`/meetings/${activeCall.id}/room`);
+        router.push(`/meetings/${activeCall.id}/room`);
       }
     } finally {
       setResponding(false);
