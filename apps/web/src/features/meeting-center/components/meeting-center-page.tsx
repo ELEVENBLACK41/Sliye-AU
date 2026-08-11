@@ -45,7 +45,16 @@ type MeetingCenterPageProps = {
 export function MeetingCenterPage({ query, projects, overview, records }: MeetingCenterPageProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [selectedMeeting, setSelectedMeeting] = useState<MeetingCenterListItem | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<MeetingCenterListItem | null>(() => {
+    if (!query.meetingId) return null;
+    return (
+      records?.items.find((meeting) => meeting.id === query.meetingId) ??
+      overview?.calendarItems.find((meeting) => meeting.id === query.meetingId) ??
+      overview?.activeMeetings.find((meeting) => meeting.id === query.meetingId) ??
+      overview?.upcomingMeetings.find((meeting) => meeting.id === query.meetingId) ??
+      null
+    );
+  });
 
   /** 合并查询条件并触发服务端重新取数。 */
   function updateQuery(changes: Record<string, string | number | undefined>) {
@@ -216,7 +225,10 @@ export function MeetingCenterPage({ query, projects, overview, records }: Meetin
             : undefined
         }
         onOpenChange={(open) => {
-          if (!open) setSelectedMeeting(null);
+          if (!open) {
+            setSelectedMeeting(null);
+            if (query.meetingId) updateQuery({ meetingId: undefined });
+          }
         }}
       />
     </section>

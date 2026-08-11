@@ -8,6 +8,8 @@ export type MeetingCenterView = 'schedule' | 'records';
 
 /** 从 URL 解析后交给会议中心页面的稳定查询状态。 */
 export type MeetingCenterPageQuery = {
+  /** 通过通知或分享链接直接打开详情的会议主键。 */
+  meetingId?: number;
   /** 当前一级视图。 */
   view: MeetingCenterView;
   /** 作为周视图锚点的 UTC+8 日期。 */

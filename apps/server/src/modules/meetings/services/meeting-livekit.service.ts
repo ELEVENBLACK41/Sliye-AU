@@ -183,6 +183,33 @@ export class MeetingLiveKitService {
     }
   }
 
+  /** 查询指定业务用户是否已经真实连入 LiveKit 房间，用于 webhook 延迟时补偿生命周期。 */
+  async isParticipantConnected(
+    meetingId: number,
+    userId: number,
+  ): Promise<boolean> {
+    const configuration = this.readConfiguration();
+    const client = this.createRoomServiceClient(configuration);
+
+    try {
+      const participants = await client.listParticipants(
+        `${LIVEKIT_ROOM_PREFIX}:${meetingId}`,
+      );
+      return participants.some(
+        (participant) =>
+          participant.identity === `${LIVEKIT_PARTICIPANT_PREFIX}:${userId}`,
+      );
+    } catch (error) {
+      if (error instanceof ServerError && error.status === 404) return false;
+      throw new BusinessException({
+        code: API_ERROR_CODES.MEETING_LIVEKIT_ROOM_QUERY_FAILED,
+        message: '暂时无法确认主持人的在线状态，请稍后重试',
+        status: 502,
+        cause: error,
+      });
+    }
+  }
+
   /** 显式创建短暂宽限后关闭的 LiveKit 房间，确保最后一人退出后及时释放房间。 */
   private async ensureRoom(
     configuration: LiveKitConfiguration,

@@ -61,6 +61,9 @@ describe('MeetingLiveKitService', () => {
     jest
       .spyOn(RoomServiceClient.prototype, 'deleteRoom')
       .mockResolvedValue(undefined);
+    jest
+      .spyOn(RoomServiceClient.prototype, 'listParticipants')
+      .mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -116,6 +119,25 @@ describe('MeetingLiveKitService', () => {
     // 直接断言原型方法上的 Jest spy，不会脱离对象执行该方法。
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(RoomServiceClient.prototype.deleteRoom).toHaveBeenCalledWith(
+      'meeting:90',
+    );
+  });
+
+  it('应按稳定 identity 确认主持人已经真实连入房间', async () => {
+    const { service } = createHarness(null);
+    jest
+      .spyOn(RoomServiceClient.prototype, 'listParticipants')
+      .mockResolvedValue([
+        { identity: 'user:7' } as never,
+        { identity: 'user:8' } as never,
+      ]);
+
+    await expect(service.isParticipantConnected(90, 7)).resolves.toBe(true);
+    await expect(service.isParticipantConnected(90, 9)).resolves.toBe(false);
+
+    // 直接断言原型方法上的 Jest spy，不会脱离对象执行该方法。
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    expect(RoomServiceClient.prototype.listParticipants).toHaveBeenCalledWith(
       'meeting:90',
     );
   });

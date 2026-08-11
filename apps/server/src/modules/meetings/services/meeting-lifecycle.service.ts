@@ -8,6 +8,7 @@ import { BusinessException } from '../../../common/exceptions/business.exception
 import { PrismaService } from '../../../database/prisma.service';
 import {
   DecisionEventType,
+  MeetingKind,
   MeetingParticipantRole,
   MeetingStatus,
   type Prisma,
@@ -152,18 +153,50 @@ export class MeetingLifecycleService {
       meeting,
       '只有会议主持人可以结束会议',
     );
-    if (meeting.status !== MeetingStatus.LIVE) {
+    const needsLiveKitReconciliation =
+      meeting.kind === MeetingKind.APPOINTMENT &&
+      meeting.status === MeetingStatus.SCHEDULED;
+    if (
+      needsLiveKitReconciliation &&
+      !(await this.liveKitService.isParticipantConnected(
+        meeting.id,
+        authorization.userId,
+      ))
+    ) {
+      this.throwInvalidTransition('预约会议尚未真正开始，无法结束会议');
+    }
+    if (meeting.status !== MeetingStatus.LIVE && !needsLiveKitReconciliation) {
       this.throwInvalidTransition('只有进行中的会议可以结束');
     }
 
     const endedAt = new Date();
     const updated = await this.prisma.$transaction(async (tx) => {
+      // webhook 延迟时，仅在主持人确实在线的前提下补偿 SCHEDULED -> LIVE；并发 webhook 会让本更新安全跳过。
+      const reconciledStart = needsLiveKitReconciliation
+        ? await tx.meetingSession.updateMany({
+            where: { id: meeting.id, status: MeetingStatus.SCHEDULED },
+            data: { status: MeetingStatus.LIVE, startedAt: endedAt },
+          })
+        : { count: 0 };
       const result = await tx.meetingSession.updateMany({
         where: { id: meeting.id, status: MeetingStatus.LIVE },
         data: { status: MeetingStatus.ENDED, endedAt },
       });
       if (result.count !== 1) {
         this.throwInvalidTransition('会议状态已经变化，请刷新后重试');
+      }
+
+      if (reconciledStart.count === 1) {
+        await this.createLifecycleEvents(
+          tx,
+          meeting,
+          authorization.userId,
+          DecisionEventType.MEETING_STARTED,
+          '主持人已进入 LiveKit，补偿开始会议',
+          MeetingStatus.SCHEDULED,
+          MeetingStatus.LIVE,
+          endedAt,
+        );
       }
 
       await this.createLifecycleEvents(

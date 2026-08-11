@@ -9,6 +9,7 @@ import {
   DiscussionAreaType,
   ProjectMemberRole,
   ProjectStatus,
+  MeetingKind,
   MeetingParticipantRole,
   MeetingStatus,
 } from '../../generated/prisma';
@@ -172,7 +173,10 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
     assertAreaMeetingManager: jest.fn(),
     assertAreaWritable: jest.fn(),
   };
-  const liveKitService = { closeRoom: jest.fn().mockResolvedValue(undefined) };
+  const liveKitService = {
+    closeRoom: jest.fn().mockResolvedValue(undefined),
+    isParticipantConnected: jest.fn().mockResolvedValue(true),
+  };
   const notificationService = {
     notifyMeetingInvited: jest.fn(),
     notifyMeetingEnded: jest.fn(),
@@ -396,5 +400,33 @@ describe('MeetingsService', () => {
         actor: { id: 7, name: '负责人' },
       }),
     );
+  });
+
+  it('预约会议 webhook 延迟时应确认主持人在线后补偿开场并结束', async () => {
+    const { lifecycleService, prisma, transaction, liveKitService } =
+      createHarness();
+    const scheduled = createMeetingRecord({
+      kind: MeetingKind.APPOINTMENT,
+      status: MeetingStatus.SCHEDULED,
+    });
+    const ended = createMeetingRecord({ status: MeetingStatus.ENDED });
+    prisma.meetingSession.findFirst.mockResolvedValue(scheduled);
+    transaction.meetingSession.findUnique.mockResolvedValue(ended);
+
+    await expect(
+      lifecycleService.end(createAuthorization(), 30),
+    ).resolves.toMatchObject({
+      status: MeetingStatus.ENDED,
+    });
+
+    expect(liveKitService.isParticipantConnected).toHaveBeenCalledWith(30, 7);
+    expect(transaction.meetingSession.updateMany).toHaveBeenNthCalledWith(1, {
+      where: { id: 30, status: MeetingStatus.SCHEDULED },
+      data: { status: MeetingStatus.LIVE, startedAt: expect.any(Date) as Date },
+    });
+    expect(transaction.meetingSession.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 30, status: MeetingStatus.LIVE },
+      data: { status: MeetingStatus.ENDED, endedAt: expect.any(Date) as Date },
+    });
   });
 });

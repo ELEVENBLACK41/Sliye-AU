@@ -22,7 +22,9 @@ import {
 import type { MeetingDetail } from '@workspace/contracts/meetings';
 import {
   ConnectionState,
+  DisconnectReason,
   LocalParticipant,
+  MediaDeviceFailure,
   Participant,
   RemoteParticipant,
   Room,
@@ -53,6 +55,29 @@ type TrackAttachmentProps = {
   className?: string;
 };
 
+/** 把浏览器媒体设备异常转换成用户可执行的中文提示。 */
+function resolveMediaDeviceMessage(error: unknown, kind?: MediaDeviceKind): string {
+  const deviceName = kind === 'videoinput' ? '摄像头' : kind === 'audioinput' ? '麦克风' : '媒体设备';
+  const failure = MediaDeviceFailure.getFailure(error);
+
+  if (failure === MediaDeviceFailure.NotFound) return `未检测到可用${deviceName}，你仍可继续参会`;
+  if (failure === MediaDeviceFailure.PermissionDenied) return `${deviceName}权限被拒绝，请在浏览器设置中允许访问`;
+  if (failure === MediaDeviceFailure.DeviceInUse) return `${deviceName}正被其他应用占用，请关闭占用后重试`;
+  return `${deviceName}暂时不可用，你仍可继续参会`;
+}
+
+/** 在请求采集前确认电脑上至少存在一项对应输入设备，避免无设备时触发无意义的 SDK 异常。 */
+async function hasInputDevice(kind: 'audioinput' | 'videoinput'): Promise<boolean> {
+  if (!navigator.mediaDevices?.enumerateDevices) return false;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.some((device) => device.kind === kind);
+  } catch {
+    // 枚举受权限策略限制时仍交给 getUserMedia 返回更准确的权限错误。
+    return true;
+  }
+}
+
 /** 将 LiveKit 原生轨道附着到浏览器媒体元素并在卸载时释放。 */
 function TrackAttachment({ track, muted = false, className }: TrackAttachmentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -79,6 +104,7 @@ function TrackAttachment({ track, muted = false, className }: TrackAttachmentPro
 export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLivePageProps) {
   const router = useRouter();
   const roomRef = useRef<Room | null>(null);
+  const leavingRef = useRef(false);
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
@@ -86,12 +112,14 @@ export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLiveP
   const [screenShareEnabled, setScreenShareEnabled] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [deviceWarning, setDeviceWarning] = useState<string | null>(null);
   const [ending, setEnding] = useState(false);
   const currentRole = meeting.participants.find((item) => item.user.id === currentUserId)?.role;
   const canEndMeeting = currentRole === 'HOST' || currentRole === 'CO_HOST';
 
   useEffect(() => {
     const room = new Room({ adaptiveStream: true, dynacast: true });
+    leavingRef.current = false;
     roomRef.current = room;
 
     /** 触发参与人和轨道列表重新渲染。 */
@@ -111,6 +139,23 @@ export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLiveP
       refreshRoomState();
     }
 
+    /** 主持人删除房间时让全部参与端自动离开页面，其他意外断线则留在当前页提示重试。 */
+    function handleDisconnected(reason?: DisconnectReason): void {
+      setConnectionState(ConnectionState.Disconnected);
+      if (leavingRef.current) return;
+      if (reason === DisconnectReason.ROOM_DELETED) {
+        toast('主持人已结束会议');
+        router.replace('/meetings');
+        return;
+      }
+      setConnectionError('会议连接已断开，请检查网络后重新连接');
+    }
+
+    /** 记录 LiveKit 采集设备异常，但不把已经成功的房间连接判定为失败。 */
+    function handleMediaDevicesError(error: Error, kind?: MediaDeviceKind): void {
+      setDeviceWarning(resolveMediaDeviceMessage(error, kind));
+    }
+
     room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     room.on(RoomEvent.TrackSubscribed, refreshRoomState);
@@ -118,17 +163,38 @@ export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLiveP
     room.on(RoomEvent.LocalTrackPublished, refreshRoomState);
     room.on(RoomEvent.LocalTrackUnpublished, refreshRoomState);
     room.on(RoomEvent.ConnectionStateChanged, setConnectionState);
+    room.on(RoomEvent.Connected, refreshRoomState);
+    room.on(RoomEvent.Disconnected, handleDisconnected);
+    room.on(RoomEvent.MediaDevicesError, handleMediaDevicesError);
 
     /** 获取短期凭证、连接房间并按会议模式开启本地设备。 */
     async function connect(): Promise<void> {
       try {
         const credentials = await getMeetingRoomCredentials(meeting.id);
         await room.connect(credentials.serverUrl, credentials.participantToken);
-        await room.localParticipant.setMicrophoneEnabled(true);
-        setMicrophoneEnabled(true);
-        if (meeting.mediaMode === 'VIDEO') {
-          await room.localParticipant.setCameraEnabled(true);
-          setCameraEnabled(true);
+        // 连接成功后立即渲染本地与远端成员；设备缺失不能让在线人数回退为 0。
+        setConnectionError(null);
+        refreshRoomState();
+
+        if (await hasInputDevice('audioinput')) {
+          try {
+            await room.localParticipant.setMicrophoneEnabled(true);
+            setMicrophoneEnabled(true);
+          } catch (error) {
+            setDeviceWarning(resolveMediaDeviceMessage(error, 'audioinput'));
+          }
+        } else {
+          setDeviceWarning('未检测到可用麦克风，你仍可继续参会');
+        }
+        if (meeting.mediaMode === 'VIDEO' && (await hasInputDevice('videoinput'))) {
+          try {
+            await room.localParticipant.setCameraEnabled(true);
+            setCameraEnabled(true);
+          } catch (error) {
+            setDeviceWarning(resolveMediaDeviceMessage(error, 'videoinput'));
+          }
+        } else if (meeting.mediaMode === 'VIDEO') {
+          setDeviceWarning('未检测到可用摄像头，你仍可继续参会');
         }
         try {
           await room.startAudio();
@@ -145,11 +211,12 @@ export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLiveP
 
     void connect();
     return () => {
+      leavingRef.current = true;
       room.removeAllListeners();
-      room.disconnect();
+      if (room.state !== ConnectionState.Disconnected) void room.disconnect();
       roomRef.current = null;
     };
-  }, [meeting.id, meeting.mediaMode]);
+  }, [meeting.id, meeting.mediaMode, router]);
 
   /** 切换当前用户麦克风并同步按钮状态。 */
   async function toggleMicrophone(): Promise<void> {
@@ -157,8 +224,10 @@ export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLiveP
     try {
       await roomRef.current?.localParticipant.setMicrophoneEnabled(next);
       setMicrophoneEnabled(next);
-    } catch {
-      toast.error('麦克风不可用，请检查浏览器权限或设备占用');
+    } catch (error) {
+      const message = resolveMediaDeviceMessage(error, 'audioinput');
+      setDeviceWarning(message);
+      toast.error(message);
     }
   }
 
@@ -168,8 +237,10 @@ export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLiveP
     try {
       await roomRef.current?.localParticipant.setCameraEnabled(next);
       setCameraEnabled(next);
-    } catch {
-      toast.error('摄像头不可用，请检查浏览器权限或设备占用');
+    } catch (error) {
+      const message = resolveMediaDeviceMessage(error, 'videoinput');
+      setDeviceWarning(message);
+      toast.error(message);
     }
   }
 
@@ -186,18 +257,22 @@ export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLiveP
 
   /** 普通参与人仅离开房间，主持人明确选择时结束整场会议。 */
   async function handleLeave(): Promise<void> {
+    leavingRef.current = true;
     if (canEndMeeting) {
       setEnding(true);
       try {
         await endMeetingRoom(meeting.id);
       } catch (error) {
+        leavingRef.current = false;
         toast.error(error instanceof Error ? error.message : '结束会议失败');
         setEnding(false);
         return;
       }
     }
-    roomRef.current?.disconnect();
-    router.push('/meetings');
+    if (roomRef.current?.state !== ConnectionState.Disconnected) {
+      await roomRef.current?.disconnect();
+    }
+    router.replace('/meetings');
   }
 
   /** 用户手势恢复被浏览器自动播放策略阻止的远端音频。 */
@@ -243,13 +318,23 @@ export function MeetingRoomLivePage({ meeting, currentUserId }: MeetingRoomLiveP
               点击恢复会议声音
             </Button>
           ) : null}
+          {deviceWarning ? (
+            <p className="mb-3 rounded-2xl border border-meeting-room-foreground/10 bg-meeting-room-control px-4 py-2 text-center text-sm text-meeting-room-foreground/70">
+              {deviceWarning}
+            </p>
+          ) : null}
           <div className="grid min-h-0 flex-1 auto-rows-fr gap-3 sm:grid-cols-2" aria-label="会议视频画面">
             {connectionError ? (
               <div className="col-span-full grid place-items-center rounded-3xl border border-meeting-room-foreground/10 bg-meeting-room-video px-6 text-center">
                 <div>
                   <p className="font-medium">暂时无法进入会议</p>
                   <p className="mt-2 text-sm text-meeting-room-foreground/55">{connectionError}</p>
-                  <Button type="button" variant="outline" onClick={() => window.location.reload()} className="mt-4 rounded-xl">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => window.location.reload()}
+                    className="mt-4 rounded-xl"
+                  >
                     重新连接
                   </Button>
                 </div>

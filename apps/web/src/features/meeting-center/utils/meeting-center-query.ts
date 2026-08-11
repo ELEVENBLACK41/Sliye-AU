@@ -30,12 +30,14 @@ export function parseMeetingCenterPageQuery(
   const roleValue = readSingle(searchParams.role) as MeetingParticipantRole | undefined;
   const statusValue = readSingle(searchParams.status) as MeetingCenterRecordStatus | undefined;
   const projectId = parsePositiveInteger(readSingle(searchParams.projectId));
+  const meetingId = parsePositiveInteger(readSingle(searchParams.meetingId));
   const page = parsePositiveInteger(readSingle(searchParams.page)) ?? 1;
   const keyword = readSingle(searchParams.keyword)?.trim().slice(0, 80) || undefined;
   const fromValue = readSingle(searchParams.from);
   const toValue = readSingle(searchParams.to);
 
   return {
+    meetingId,
     view,
     date: isDateKey(dateValue) ? dateValue : formatShanghaiDate(now),
     projectId,
