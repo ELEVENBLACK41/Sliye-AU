@@ -1,19 +1,14 @@
 /**
  * 本文件实现快速通话右侧面板的前端占位结构，为后续成员、上下文和音视频能力接入预留位置。
  */
-import { ChevronDown, Mic, Phone, Search, UsersRound, Video } from 'lucide-react';
+import { ChevronDown, Mic, Phone, Search, UsersRound, Video, X } from 'lucide-react';
 
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@workspace/ui/components/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
@@ -38,12 +33,24 @@ export function QuickCallPanel() {
 
       <SheetContent
         side="right"
-        className="w-full gap-0 border-meeting-line bg-meeting-surface p-0 sm:max-w-[27rem]"
+        showCloseButton={false}
+        className="w-full gap-0 overflow-hidden border-meeting-line bg-card/95 p-0 shadow-2xl backdrop-blur-xl sm:max-w-[27rem] lg:inset-y-4 lg:right-4 lg:h-auto lg:rounded-3xl lg:border"
         aria-describedby="quick-call-description"
       >
-        <SheetHeader className="border-b px-6 py-6 pr-14">
-          <SheetTitle className="text-2xl font-semibold tracking-tight">快速通话</SheetTitle>
-          <SheetDescription id="quick-call-description">
+        <SheetClose asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="absolute right-5 top-5 z-10 rounded-full"
+            aria-label="关闭快速通话"
+          >
+            <X aria-hidden />
+          </Button>
+        </SheetClose>
+        <SheetHeader className="border-b border-meeting-line bg-meeting-accent-soft/40 px-6 py-5 pr-16">
+          <p className="text-xs font-medium text-meeting-accent-foreground">发起通话</p>
+          <SheetTitle className="mt-1 text-xl font-semibold tracking-tight">快速通话</SheetTitle>
+          <SheetDescription id="quick-call-description" className="mt-1">
             先保留选人和业务关联结构，成员数据与通话能力稍后接入。
           </SheetDescription>
         </SheetHeader>

@@ -12,6 +12,7 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Max,
   Min,
   MinLength,
 } from 'class-validator';
@@ -49,6 +50,14 @@ export class CreateMeetingDto implements CreateMeetingRequestPayload {
   @IsOptional()
   @IsISO8601({ strict: true })
   scheduledAt?: string;
+
+  /** 计划持续分钟数；未传时服务端默认使用 60 分钟。 */
+  @ApiPropertyOptional({ minimum: 15, maximum: 480, default: 60 })
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  @Max(480)
+  scheduledDurationMinutes?: number;
 
   /** 同一项目内需要关联的决策主键，普通会议允许为空数组。 */
   @ApiProperty({ type: [Number], example: [11, 12] })

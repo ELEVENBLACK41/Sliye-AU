@@ -1197,9 +1197,10 @@ model MeetingSession {
   /// 外部音视频服务商侧的房间标识。
   providerRoomId String?
 
-  scheduledAt DateTime?
-  startedAt   DateTime?
-  endedAt     DateTime?
+  scheduledAt              DateTime?
+  scheduledDurationMinutes Int?
+  startedAt                DateTime?
+  endedAt                  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
 

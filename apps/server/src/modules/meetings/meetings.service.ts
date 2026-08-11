@@ -64,6 +64,7 @@ export class MeetingsService {
         title: dto.title,
         description: dto.description,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
+        scheduledDurationMinutes: dto.scheduledDurationMinutes ?? 60,
         participants: {
           createMany: {
             data: participantIds.map((userId) => ({

@@ -74,6 +74,8 @@ export type MeetingSummary = {
   decisions: MeetingDecisionSummary[];
   /** 计划开始时间。 */
   scheduledAt: string | null;
+  /** 计划持续分钟数；历史会议未设置时为 `null`。 */
+  scheduledDurationMinutes: number | null;
   /** 实际开始时间。 */
   startedAt: string | null;
   /** 实际结束时间。 */
@@ -100,6 +102,8 @@ export type CreateMeetingRequestPayload = {
   description?: string;
   /** 计划开始时间。 */
   scheduledAt?: string;
+  /** 计划持续分钟数；未传时由服务端使用 60 分钟。 */
+  scheduledDurationMinutes?: number;
   /** 同一项目内需要关联的决策主键。 */
   decisionIds: number[];
   /** 当前分区可见成员中的受邀用户主键。 */
@@ -116,3 +120,68 @@ export type MeetingLiveKitCredentials = {
 
 /** 指定项目下当前用户可见的会议列表。 */
 export type MeetingListResponse = MeetingSummary[];
+
+/** 会议记录页允许筛选的终态。 */
+export type MeetingCenterRecordStatus = Extract<MeetingStatus, 'ENDED' | 'CANCELLED'>;
+
+/** 会议中心跨项目列表使用的会议摘要。 */
+export type MeetingCenterListItem = MeetingSummary & {
+  /** 会议所属项目标题。 */
+  projectTitle: string;
+  /** 当前用户在会议中的业务角色。 */
+  currentUserRole: MeetingParticipantRole;
+};
+
+/** 会议中心周日程聚合查询参数。 */
+export type MeetingCenterOverviewQuery = {
+  /** 周范围开始时刻，包含该时刻，使用 ISO 8601。 */
+  from: string;
+  /** 周范围结束时刻，不包含该时刻，使用 ISO 8601。 */
+  to: string;
+  /** 可选的项目筛选主键。 */
+  projectId?: number;
+  /** 可选的当前用户会议角色筛选。 */
+  role?: MeetingParticipantRole;
+};
+
+/** 会议中心周日程、进行中会议和后续会议聚合结果。 */
+export type MeetingCenterOverviewResponse = {
+  /** 指定周内有计划时间的会议。 */
+  calendarItems: MeetingCenterListItem[];
+  /** 当前用户正在参与的全部进行中会议。 */
+  activeMeetings: MeetingCenterListItem[];
+  /** 当前时间之后最近的三场待开始会议。 */
+  upcomingMeetings: MeetingCenterListItem[];
+};
+
+/** 会议中心历史记录查询参数。 */
+export type MeetingCenterRecordsQuery = {
+  /** 按会议、项目或分区名称搜索的关键词。 */
+  keyword?: string;
+  /** 可选的项目筛选主键。 */
+  projectId?: number;
+  /** 可选的当前用户会议角色筛选。 */
+  role?: MeetingParticipantRole;
+  /** 可选的会议终态筛选。 */
+  status?: MeetingCenterRecordStatus;
+  /** 可选的记录时间范围开始时刻，包含该时刻。 */
+  from?: string;
+  /** 可选的记录时间范围结束时刻，不包含该时刻。 */
+  to?: string;
+  /** 当前页码，从 1 开始。 */
+  page?: number;
+  /** 单页记录数量。 */
+  pageSize?: number;
+};
+
+/** 会议中心分页历史记录。 */
+export type MeetingCenterRecordsResponse = {
+  /** 当前页会议记录。 */
+  items: MeetingCenterListItem[];
+  /** 当前页码。 */
+  page: number;
+  /** 单页记录数量。 */
+  pageSize: number;
+  /** 符合筛选条件的记录总数。 */
+  total: number;
+};

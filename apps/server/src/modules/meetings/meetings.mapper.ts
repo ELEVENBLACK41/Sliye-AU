@@ -3,6 +3,7 @@
  */
 import type {
   MeetingDetail,
+  MeetingCenterListItem,
   MeetingParticipant,
   MeetingSummary,
   MeetingUserSummary,
@@ -33,6 +34,27 @@ export const meetingDetailInclude = {
   },
 } as const satisfies Prisma.MeetingSessionInclude;
 
+/** 为会议中心查询加载项目标题和当前用户的会议角色。 */
+export function createMeetingCenterInclude(userId: number) {
+  return {
+    ...meetingSummaryInclude,
+    area: {
+      select: {
+        id: true,
+        projectId: true,
+        name: true,
+        type: true,
+        project: { select: { title: true } },
+      },
+    },
+    participants: {
+      where: { userId },
+      select: { role: true },
+      take: 1,
+    },
+  } as const satisfies Prisma.MeetingSessionInclude;
+}
+
 /** 会议摘要 Mapper 实际消费的 Prisma 查询结果。 */
 export type MeetingSummaryRecord = Prisma.MeetingSessionGetPayload<{
   include: typeof meetingSummaryInclude;
@@ -41,6 +63,11 @@ export type MeetingSummaryRecord = Prisma.MeetingSessionGetPayload<{
 /** 会议详情 Mapper 实际消费的 Prisma 查询结果。 */
 export type MeetingDetailRecord = Prisma.MeetingSessionGetPayload<{
   include: typeof meetingDetailInclude;
+}>;
+
+/** 会议中心 Mapper 实际消费的跨项目查询结果。 */
+export type MeetingCenterRecord = Prisma.MeetingSessionGetPayload<{
+  include: ReturnType<typeof createMeetingCenterInclude>;
 }>;
 
 /** 将数据库用户字段映射为会议用户摘要。 */
@@ -82,10 +109,27 @@ export function toMeetingSummary(
     participantCount: meeting._count.participants,
     decisions: meeting.decisionLinks.map(({ decision }) => decision),
     scheduledAt: meeting.scheduledAt?.toISOString() ?? null,
+    scheduledDurationMinutes: meeting.scheduledDurationMinutes,
     startedAt: meeting.startedAt?.toISOString() ?? null,
     endedAt: meeting.endedAt?.toISOString() ?? null,
     createdAt: meeting.createdAt.toISOString(),
     updatedAt: meeting.updatedAt.toISOString(),
+  };
+}
+
+/** 将跨项目查询结果映射为会议中心安全摘要。 */
+export function toMeetingCenterListItem(
+  meeting: MeetingCenterRecord,
+): MeetingCenterListItem {
+  const currentUserRole = meeting.participants[0]?.role;
+  if (!currentUserRole) {
+    throw new Error('会议中心查询缺少当前用户参与关系');
+  }
+
+  return {
+    ...toMeetingSummary(meeting),
+    projectTitle: meeting.area.project.title,
+    currentUserRole,
   };
 }
 

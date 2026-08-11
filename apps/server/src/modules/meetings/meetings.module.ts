@@ -10,6 +10,7 @@ import { MeetingsController } from './meetings.controller';
 import { MeetingsService } from './meetings.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
 import { MeetingContextService } from './services/meeting-context.service';
+import { MeetingCenterQueryService } from './services/meeting-center-query.service';
 import { MeetingLiveKitService } from './services/meeting-livekit.service';
 import { MeetingLiveKitWebhookService } from './services/meeting-livekit-webhook.service';
 
@@ -18,6 +19,7 @@ import { MeetingLiveKitWebhookService } from './services/meeting-livekit-webhook
   controllers: [MeetingsController, MeetingLiveKitWebhookController],
   providers: [
     MeetingsService,
+    MeetingCenterQueryService,
     MeetingContextService,
     MeetingLifecycleService,
     MeetingLiveKitService,

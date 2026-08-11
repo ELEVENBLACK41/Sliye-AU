@@ -1,15 +1,33 @@
 /**
- * 本文件实现会议中心右侧状态概览，保留进行中会议、后续日程与最近通话三个业务区域。
+ * 本文件展示会议中心真实的进行中与即将开始会议，并保留最近通话占位。
  */
 import { ArrowRight, Clock3, History, Radio, Video } from 'lucide-react';
+import type { MeetingCenterListItem, MeetingCenterOverviewResponse } from '@workspace/contracts/meetings';
 
-/** 渲染会议中心右侧的三个业务空状态区域。 */
-export function MeetingOverview() {
+import { Button } from '@workspace/ui/components/button';
+
+/** 会议状态概览属性。 */
+type MeetingOverviewProps = {
+  /** 后端已分组的概览数据。 */
+  data: MeetingCenterOverviewResponse;
+  /** 打开详情抽屉。 */
+  onSelect: (meeting: MeetingCenterListItem) => void;
+};
+
+/** 渲染正在进行、接下来与最近通话区域。 */
+export function MeetingOverview({ data, onSelect }: MeetingOverviewProps) {
+  const active = data.activeMeetings[0];
+
   return (
-    <aside className="grid content-start gap-4" aria-label="会议状态概览">
+    <aside
+      className="grid content-start gap-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:pr-1"
+      aria-label="会议状态概览"
+    >
       <section className="relative min-h-56 overflow-hidden rounded-3xl bg-meeting-panel p-6 text-meeting-panel-foreground shadow-sm">
-        <div className="absolute -right-10 -top-16 size-48 rounded-full border border-meeting-panel-foreground/10" aria-hidden />
-        <div className="absolute -bottom-20 right-12 size-52 rounded-full border border-meeting-panel-foreground/10" aria-hidden />
+        <div
+          className="absolute -right-10 -top-16 size-48 rounded-full border border-meeting-panel-foreground/10"
+          aria-hidden
+        />
         <div className="relative">
           <p className="flex items-center gap-2 text-sm text-meeting-panel-foreground/70">
             <span className="relative flex size-2.5" aria-hidden>
@@ -18,17 +36,37 @@ export function MeetingOverview() {
             </span>
             正在进行
           </p>
-          <h2 className="mt-5 text-xl font-semibold">暂无进行中的会议</h2>
-          <p className="mt-2 max-w-xs text-sm leading-6 text-meeting-panel-foreground/60">
-            当有会议开始后，将在这里展示参与状态与进入会议入口。
-          </p>
-          <div className="mt-7 flex items-center justify-between gap-3 text-sm text-meeting-panel-foreground/70">
-            <span className="flex items-center gap-2">
-              <Radio aria-hidden className="size-4" />
-              等待会议开始
-            </span>
-            <ArrowRight aria-hidden className="size-4 opacity-40" />
-          </div>
+          {active ? (
+            <>
+              <h2 className="mt-5 line-clamp-2 text-xl font-semibold">{active.title}</h2>
+              <p className="mt-2 text-sm text-meeting-panel-foreground/60">
+                {active.projectTitle} · {active.areaName}
+              </p>
+              {data.activeMeetings.length > 1 ? (
+                <p className="mt-2 text-xs text-meeting-panel-foreground/60">
+                  另有 {data.activeMeetings.length - 1} 场会议进行中
+                </p>
+              ) : null}
+              <Button
+                variant="ghost"
+                className="mt-6 w-full justify-between px-0 text-meeting-panel-foreground hover:bg-transparent hover:text-meeting-panel-foreground"
+                onClick={() => onSelect(active)}
+              >
+                <span className="flex items-center gap-2">
+                  <Radio aria-hidden className="size-4" />
+                  查看会议详情
+                </span>
+                <ArrowRight aria-hidden className="size-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <h2 className="mt-5 text-xl font-semibold">暂无进行中的会议</h2>
+              <p className="mt-2 max-w-xs text-sm leading-6 text-meeting-panel-foreground/60">
+                你参与的会议开始后，会在这里显示真实状态。
+              </p>
+            </>
+          )}
         </div>
       </section>
 
@@ -39,9 +77,28 @@ export function MeetingOverview() {
           </h2>
           <Clock3 aria-hidden className="size-4 text-muted-foreground" />
         </div>
-        <div className="mt-5 rounded-2xl border border-dashed px-5 py-7 text-center">
-          <p className="text-sm font-medium">暂无可展示的会议</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">接入日程接口后展示即将开始的会议。</p>
+        <div className="mt-4 grid gap-2">
+          {data.upcomingMeetings.length === 0 ? (
+            <div className="rounded-2xl border border-dashed px-5 py-7 text-center">
+              <p className="text-sm font-medium">暂无即将开始的会议</p>
+            </div>
+          ) : (
+            data.upcomingMeetings.map((meeting) => (
+              <Button
+                key={meeting.id}
+                variant="ghost"
+                className="h-auto justify-start rounded-2xl bg-muted/50 px-4 py-3 text-left"
+                onClick={() => onSelect(meeting)}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{meeting.title}</span>
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    {formatDateTime(meeting.scheduledAt)} · {meeting.projectTitle}
+                  </span>
+                </span>
+              </Button>
+            ))
+          )}
         </div>
       </section>
 
@@ -57,11 +114,24 @@ export function MeetingOverview() {
             <Video aria-hidden className="size-4" />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-medium">暂无通话记录</p>
-            <p className="mt-1 truncate text-xs text-muted-foreground">快速通话能力接入后自动保留记录</p>
+            <p className="text-sm font-medium">通话数据待接入</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">快速通话与 LiveKit 不在本轮范围</p>
           </div>
         </div>
       </section>
     </aside>
   );
+}
+
+/** 格式化 UTC+8 会议时间。 */
+function formatDateTime(value: string | null): string {
+  return value
+    ? new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(value))
+    : '时间未设置';
 }

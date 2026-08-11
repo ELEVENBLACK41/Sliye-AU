@@ -52,6 +52,7 @@ function createMeetingRecord(
     provider: null,
     providerRoomId: null,
     scheduledAt: new Date('2026-07-25T06:00:00.000Z'),
+    scheduledDurationMinutes: 60,
     startedAt: null,
     endedAt: null,
     createdAt,
@@ -185,7 +186,6 @@ function createHarness(type: DiscussionAreaType = DiscussionAreaType.PUBLIC) {
       prisma as unknown as PrismaService,
       projectAccessService as unknown as ProjectAccessService,
       notificationService as unknown as NotificationService,
-      liveKitService,
     ),
     lifecycleService: new MeetingLifecycleService(
       prisma as unknown as PrismaService,
@@ -241,6 +241,7 @@ describe('MeetingsService', () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: expect.objectContaining({
           areaId: 40,
+          scheduledDurationMinutes: 60,
           participants: {
             createMany: {
               data: [

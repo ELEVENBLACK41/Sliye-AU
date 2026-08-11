@@ -8,13 +8,17 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuthorization } from '../auth/decorators/current-authorization.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import type { AuthorizationContext } from '../auth/types/auth.types';
 import { CreateMeetingDto } from './dto/create-meeting.dto';
+import { ListMeetingCenterOverviewDto } from './dto/list-meeting-center-overview.dto';
+import { ListMeetingCenterRecordsDto } from './dto/list-meeting-center-records.dto';
 import { MeetingsService } from './meetings.service';
+import { MeetingCenterQueryService } from './services/meeting-center-query.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
 import { MeetingLiveKitService } from './services/meeting-livekit.service';
 
@@ -25,9 +29,32 @@ export class MeetingsController {
   /** 注入会议生命周期服务。 */
   constructor(
     private readonly meetingsService: MeetingsService,
+    private readonly meetingCenterQueryService: MeetingCenterQueryService,
     private readonly lifecycleService: MeetingLifecycleService,
     private readonly liveKitService: MeetingLiveKitService,
   ) {}
+
+  /** 查询当前用户跨项目的周日程、进行中会议和后续会议。 */
+  @Get('meetings/center/overview')
+  @RequirePermissions('project:read')
+  @ApiOperation({ summary: '查询会议中心日程概览' })
+  getCenterOverview(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Query() query: ListMeetingCenterOverviewDto,
+  ) {
+    return this.meetingCenterQueryService.getOverview(authorization, query);
+  }
+
+  /** 查询当前用户跨项目的会议历史记录。 */
+  @Get('meetings/center/records')
+  @RequirePermissions('project:read')
+  @ApiOperation({ summary: '查询会议中心历史记录' })
+  getCenterRecords(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Query() query: ListMeetingCenterRecordsDto,
+  ) {
+    return this.meetingCenterQueryService.getRecords(authorization, query);
+  }
 
   /** 在项目的当前分区中创建一场计划会议。 */
   @Post('projects/:projectId/meetings')
