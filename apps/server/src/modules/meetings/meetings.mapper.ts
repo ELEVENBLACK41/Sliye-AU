@@ -85,6 +85,8 @@ function toMeetingParticipant(
     id: participant.id,
     meetingId: participant.meetingId,
     role: participant.role,
+    invitationStatus: participant.invitationStatus,
+    respondedAt: participant.respondedAt?.toISOString() ?? null,
     user: toMeetingUser(participant.user),
     joinedAt: participant.joinedAt?.toISOString() ?? null,
     leftAt: participant.leftAt?.toISOString() ?? null,
@@ -98,18 +100,21 @@ export function toMeetingSummary(
 ): MeetingSummary {
   return {
     id: meeting.id,
-    projectId: meeting.area.projectId,
-    areaId: meeting.area.id,
-    areaType: meeting.area.type,
-    areaName: meeting.area.name,
+    projectId: meeting.area?.projectId ?? null,
+    areaId: meeting.area?.id ?? null,
+    areaType: meeting.area?.type ?? null,
+    areaName: meeting.area?.name ?? null,
     title: meeting.title,
     description: meeting.description,
     status: meeting.status,
+    kind: meeting.kind,
+    mediaMode: meeting.mediaMode,
     createdBy: toMeetingUser(meeting.createdBy),
     participantCount: meeting._count.participants,
     decisions: meeting.decisionLinks.map(({ decision }) => decision),
     scheduledAt: meeting.scheduledAt?.toISOString() ?? null,
     scheduledDurationMinutes: meeting.scheduledDurationMinutes,
+    ringExpiresAt: meeting.ringExpiresAt?.toISOString() ?? null,
     startedAt: meeting.startedAt?.toISOString() ?? null,
     endedAt: meeting.endedAt?.toISOString() ?? null,
     createdAt: meeting.createdAt.toISOString(),
@@ -128,7 +133,7 @@ export function toMeetingCenterListItem(
 
   return {
     ...toMeetingSummary(meeting),
-    projectTitle: meeting.area.project.title,
+    projectTitle: meeting.area?.project.title ?? null,
     currentUserRole,
   };
 }

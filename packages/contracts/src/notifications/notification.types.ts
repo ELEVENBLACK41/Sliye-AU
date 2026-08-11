@@ -3,7 +3,13 @@
  */
 
 /** 当前已支持的全站通知类型。 */
-export type NotificationType = 'MEETING_INVITED' | 'MEETING_ENDED';
+export type NotificationType =
+  | 'MEETING_INVITED'
+  | 'MEETING_INCOMING_CALL'
+  | 'MEETING_CALL_RESPONSE'
+  | 'MEETING_UPDATED'
+  | 'MEETING_CANCELLED'
+  | 'MEETING_ENDED';
 
 /** 通知中可选的会议导航信息。 */
 export type NotificationMeetingSummary = {
@@ -19,6 +25,14 @@ export type NotificationActorSummary = {
   id: number;
   /** 操作人展示名称。 */
   name: string;
+};
+
+/** 快速来电通知携带的实时响应信息。 */
+export type NotificationMeetingCall = {
+  /** 来电停止振铃的 ISO 8601 时间。 */
+  expiresAt: string;
+  /** 来电默认使用语音或视频。 */
+  mediaMode: 'AUDIO' | 'VIDEO';
 };
 
 /** 服务端实时推送到当前登录用户的通知。 */
@@ -37,6 +51,8 @@ export type RealtimeNotification = {
   meeting?: NotificationMeetingSummary;
   /** 触发通知的操作人；系统事件可以为空。 */
   actor?: NotificationActorSummary;
+  /** 仅快速来电通知提供的倒计时信息。 */
+  call?: NotificationMeetingCall;
 };
 
 /** 浏览器连接全站通知命名空间所需的短期凭证。 */

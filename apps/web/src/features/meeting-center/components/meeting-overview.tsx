@@ -40,7 +40,7 @@ export function MeetingOverview({ data, onSelect }: MeetingOverviewProps) {
             <>
               <h2 className="mt-5 line-clamp-2 text-xl font-semibold">{active.title}</h2>
               <p className="mt-2 text-sm text-meeting-panel-foreground/60">
-                {active.projectTitle} · {active.areaName}
+                {active.projectTitle ?? '独立会议'} · {active.areaName ?? '仅受邀人可见'}
               </p>
               {data.activeMeetings.length > 1 ? (
                 <p className="mt-2 text-xs text-meeting-panel-foreground/60">
@@ -93,7 +93,7 @@ export function MeetingOverview({ data, onSelect }: MeetingOverviewProps) {
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{meeting.title}</span>
                   <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                    {formatDateTime(meeting.scheduledAt)} · {meeting.projectTitle}
+                    {formatDateTime(meeting.scheduledAt)} · {meeting.projectTitle ?? '独立会议'}
                   </span>
                 </span>
               </Button>

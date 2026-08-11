@@ -46,9 +46,9 @@ export class ListMeetingCenterRecordsDto implements MeetingCenterRecordsQuery {
   role?: MeetingParticipantRole;
 
   /** 可选的会议终态筛选。 */
-  @ApiPropertyOptional({ enum: ['ENDED', 'CANCELLED'] })
+  @ApiPropertyOptional({ enum: ['ENDED', 'CANCELLED', 'EXPIRED'] })
   @IsOptional()
-  @IsIn(['ENDED', 'CANCELLED'])
+  @IsIn(['ENDED', 'CANCELLED', 'EXPIRED'])
   status?: MeetingCenterRecordStatus;
 
   /** 可选的记录时间范围开始时刻。 */

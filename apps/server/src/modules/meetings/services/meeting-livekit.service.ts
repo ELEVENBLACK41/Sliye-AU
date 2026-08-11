@@ -12,7 +12,12 @@ import {
 } from 'livekit-server-sdk';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
-import { MeetingStatus } from '../../../generated/prisma';
+import {
+  MeetingInvitationStatus,
+  MeetingKind,
+  MeetingParticipantRole,
+  MeetingStatus,
+} from '../../../generated/prisma';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 
 /** LiveKit 房间和参与者稳定身份的业务前缀。 */
@@ -39,9 +44,17 @@ export class MeetingLiveKitService {
       },
       select: {
         status: true,
+        kind: true,
+        scheduledAt: true,
+        scheduledDurationMinutes: true,
+        ringExpiresAt: true,
         participants: {
           where: { userId: authorization.userId },
-          select: { user: { select: { name: true } } },
+          select: {
+            role: true,
+            invitationStatus: true,
+            user: { select: { name: true } },
+          },
           take: 1,
         },
       },
@@ -53,13 +66,9 @@ export class MeetingLiveKitService {
         status: 404,
       });
     }
-    if (meeting.status !== MeetingStatus.LIVE) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
-        message: '只有进行中的会议可以加入音视频房间',
-        status: 409,
-      });
-    }
+    const now = new Date();
+    const participant = meeting.participants[0];
+    const tokenTtlSeconds = this.assertEntryAllowed(meeting, participant, now);
 
     const configuration = this.readConfiguration();
     const roomName = `${LIVEKIT_ROOM_PREFIX}:${meetingId}`;
@@ -72,7 +81,7 @@ export class MeetingLiveKitService {
       {
         identity: `${LIVEKIT_PARTICIPANT_PREFIX}:${authorization.userId}`,
         name: participantName,
-        ttl: configuration.ttlSeconds,
+        ttl: Math.min(configuration.ttlSeconds, tokenTtlSeconds),
       },
     );
     accessToken.addGrant({
@@ -87,6 +96,70 @@ export class MeetingLiveKitService {
       serverUrl: configuration.serverUrl,
       participantToken: await accessToken.toJwt(),
     };
+  }
+
+  /** 校验快速通话响应和预约会议提前三十分钟开放窗口。 */
+  private assertEntryAllowed(
+    meeting: {
+      status: MeetingStatus;
+      kind: MeetingKind;
+      scheduledAt: Date | null;
+      scheduledDurationMinutes: number | null;
+      ringExpiresAt: Date | null;
+    },
+    participant: {
+      role: MeetingParticipantRole;
+      invitationStatus: MeetingInvitationStatus | null;
+    },
+    now: Date,
+  ): number {
+    if (meeting.kind === MeetingKind.QUICK_CALL) {
+      const isHost = participant.role === MeetingParticipantRole.HOST;
+      const accepted =
+        participant.invitationStatus === MeetingInvitationStatus.ACCEPTED;
+      if (meeting.status !== MeetingStatus.LIVE || (!isHost && !accepted)) {
+        throw new BusinessException({
+          code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
+          message: '请先接听仍在振铃的快速通话',
+          status: 409,
+        });
+      }
+      return this.configService.get<number>('LIVEKIT_TOKEN_TTL_SECONDS', 600);
+    }
+
+    if (meeting.status === MeetingStatus.LIVE) {
+      return this.configService.get<number>('LIVEKIT_TOKEN_TTL_SECONDS', 600);
+    }
+    if (
+      meeting.status !== MeetingStatus.SCHEDULED ||
+      !meeting.scheduledAt ||
+      !meeting.scheduledDurationMinutes
+    ) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
+        message: '当前预约会议不能加入音视频房间',
+        status: 409,
+      });
+    }
+    const opensAt = new Date(meeting.scheduledAt.getTime() - 30 * 60_000);
+    const closesAt = new Date(
+      meeting.scheduledAt.getTime() + meeting.scheduledDurationMinutes * 60_000,
+    );
+    if (now < opensAt) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.MEETING_ENTRY_NOT_OPEN,
+        message: '预约会议将在计划时间前 30 分钟开放',
+        status: 409,
+      });
+    }
+    if (now >= closesAt) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.MEETING_CALL_EXPIRED,
+        message: '预约会议的最晚入场时间已过',
+        status: 409,
+      });
+    }
+    return Math.max(1, Math.floor((closesAt.getTime() - now.getTime()) / 1000));
   }
 
   /** 主持人结束业务会议时删除对应 LiveKit 房间并断开全部在线参与者。 */

@@ -59,6 +59,12 @@ export class CreateMeetingDto implements CreateMeetingRequestPayload {
   @Max(480)
   scheduledDurationMinutes?: number;
 
+  /** 会议默认媒体模式；旧项目入口未传时使用视频。 */
+  @ApiPropertyOptional({ enum: ['AUDIO', 'VIDEO'], default: 'VIDEO' })
+  @IsOptional()
+  @IsString()
+  mediaMode?: CreateMeetingRequestPayload['mediaMode'];
+
   /** 同一项目内需要关联的决策主键，普通会议允许为空数组。 */
   @ApiProperty({ type: [Number], example: [11, 12] })
   @IsArray()

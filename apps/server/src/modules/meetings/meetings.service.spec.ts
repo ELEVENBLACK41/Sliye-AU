@@ -245,8 +245,14 @@ describe('MeetingsService', () => {
           participants: {
             createMany: {
               data: [
-                { userId: 7, role: MeetingParticipantRole.HOST },
-                { userId: 8, role: MeetingParticipantRole.ATTENDEE },
+                expect.objectContaining({
+                  userId: 7,
+                  role: MeetingParticipantRole.HOST,
+                }),
+                expect.objectContaining({
+                  userId: 8,
+                  role: MeetingParticipantRole.ATTENDEE,
+                }),
               ],
             },
           },

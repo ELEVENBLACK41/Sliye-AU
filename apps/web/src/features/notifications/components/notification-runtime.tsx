@@ -12,6 +12,7 @@ import { getNotificationSocketTicket } from '../services/notifications-client.se
 import { presentNotification } from '../services/present-notification';
 import { useNotificationStore } from '../store/notification-store';
 import { ApiClientError } from '@/services/request';
+import { IncomingCallRuntime } from './incoming-call-runtime';
 
 /** 服务端向浏览器发送的强类型通知事件映射。 */
 type NotificationServerEvents = {
@@ -132,5 +133,5 @@ export function NotificationRuntime() {
     };
   }, []);
 
-  return null;
+  return <IncomingCallRuntime />;
 }

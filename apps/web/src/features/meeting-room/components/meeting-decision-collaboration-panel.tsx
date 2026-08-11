@@ -34,7 +34,10 @@ export function MeetingDecisionCollaborationPanel() {
       </header>
 
       <Tabs defaultValue="discussion" className="min-h-0 flex-1 gap-0">
-        <TabsList variant="line" className="grid h-auto w-full grid-cols-4 gap-0 border-b border-meeting-line px-3 py-2">
+        <TabsList
+          variant="line"
+          className="grid h-auto w-full grid-cols-4 gap-0 border-b border-meeting-line px-3 py-2"
+        >
           {decisionStages.map((stage) => {
             const Icon = stage.icon;
 

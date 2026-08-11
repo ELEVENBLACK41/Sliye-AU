@@ -229,7 +229,9 @@ function RoomSummary({ label, value }: { label: string; value: string }) {
 
 /** 格式化会议状态。 */
 function formatMeetingStatus(status: MeetingDetail['status']): string {
-  return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消' }[status];
+  return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消', EXPIRED: '已过期' }[
+    status
+  ];
 }
 
 /** 格式化时间。 */

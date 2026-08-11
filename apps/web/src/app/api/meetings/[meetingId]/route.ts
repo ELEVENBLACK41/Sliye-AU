@@ -20,3 +20,15 @@ export async function GET(request: Request, context: MeetingRouteContext) {
     fallbackMessage: '会议详情加载失败，请稍后重试',
   });
 }
+
+/** 转发主持人修改预约会议请求。 */
+export async function PATCH(request: Request, context: MeetingRouteContext) {
+  const { meetingId } = await context.params;
+
+  return proxyAuthenticatedNestRequest({
+    request,
+    method: 'PATCH',
+    nestPath: `/meetings/${meetingId}`,
+    fallbackMessage: '预约会议修改失败，请稍后重试',
+  });
+}

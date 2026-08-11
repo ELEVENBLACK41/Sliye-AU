@@ -15,7 +15,7 @@ const SHANGHAI_OFFSET_MILLISECONDS = 8 * 60 * 60 * 1000;
 /** 页面接受的角色集合。 */
 const MEETING_ROLES: MeetingParticipantRole[] = ['HOST', 'CO_HOST', 'ATTENDEE'];
 /** 页面接受的历史状态集合。 */
-const RECORD_STATUSES: MeetingCenterRecordStatus[] = ['ENDED', 'CANCELLED'];
+const RECORD_STATUSES: MeetingCenterRecordStatus[] = ['ENDED', 'CANCELLED', 'EXPIRED'];
 
 /** Next.js 页面传入的原始 searchParams。 */
 export type MeetingCenterSearchParams = Record<string, string | string[] | undefined>;

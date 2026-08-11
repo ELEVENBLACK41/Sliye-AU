@@ -5,10 +5,7 @@
 
 import { BellRing } from 'lucide-react';
 
-import {
-  DEFAULT_NOTIFICATION_TOAST_DURATION_MS,
-  presentNotification,
-} from '../services/present-notification';
+import { DEFAULT_NOTIFICATION_TOAST_DURATION_MS, presentNotification } from '../services/present-notification';
 import { Button } from '@workspace/ui/components/button';
 
 /** 通过真实通知 Store 与展示服务触发一条不会被去重的测试通知。 */

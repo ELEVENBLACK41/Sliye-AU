@@ -10,11 +10,20 @@ import { MeetingLiveKitWebhookService } from './meeting-livekit-webhook.service'
 /** 创建 Webhook 服务测试所需的依赖替身。 */
 function createHarness() {
   const prisma = {
+    meetingPresenceEvent: {
+      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
     meetingParticipant: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
-    $transaction: jest.fn().mockResolvedValue([]),
+    meetingSession: {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    $transaction: jest.fn(),
   };
+  prisma.$transaction.mockImplementation(
+    (callback: (client: typeof prisma) => Promise<unknown>) => callback(prisma),
+  );
   const lifecycleService = {
     endIfEmpty: jest.fn().mockResolvedValue(true),
   };
@@ -58,8 +67,11 @@ describe('MeetingLiveKitWebhookService', () => {
         // Jest 非对称匹配器会退化为 any，仅用于校验数据库筛选条件。
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         where: expect.objectContaining({ meetingId: 90, userId: 7 }),
-        data: { joinedAt: new Date('2023-11-14T22:13:20.000Z'), leftAt: null },
+        data: { joinedAt: new Date('2023-11-14T22:13:20.000Z') },
       }),
+    );
+    expect(prisma.meetingPresenceEvent.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skipDuplicates: true }),
     );
   });
 
@@ -84,5 +96,30 @@ describe('MeetingLiveKitWebhookService', () => {
       }),
     );
     expect(lifecycleService.endIfEmpty).toHaveBeenCalledWith(90, leftAt);
+  });
+
+  it('连接中止时只保存失败历史，不结束会议', async () => {
+    const { prisma, lifecycleService, service } = createHarness();
+    jest.spyOn(WebhookReceiver.prototype, 'receive').mockResolvedValue({
+      id: 'event-aborted-1',
+      event: 'participant_connection_aborted',
+      createdAt: 1_700_000_000n,
+      room: { name: 'meeting:90' },
+      participant: { identity: 'user:7' },
+    } as WebhookEvent);
+
+    await service.handle('{}', 'signed-token');
+
+    expect(prisma.meetingPresenceEvent.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          meetingId: 90,
+          userId: 7,
+          providerEventId: 'event-aborted-1',
+        }),
+      ],
+      skipDuplicates: true,
+    });
+    expect(lifecycleService.endIfEmpty).not.toHaveBeenCalled();
   });
 });

@@ -50,7 +50,7 @@ export function MeetingRecords({
           <h2 id="meeting-records-title" className="text-xl font-semibold">
             会议记录
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">共 {data.total} 场已结束或已取消会议</p>
+          <p className="mt-1 text-sm text-muted-foreground">共 {data.total} 场已结束、取消或过期会议</p>
         </div>
         <div className="flex flex-col gap-2 xl:flex-row">
           {searchSlot}
@@ -66,6 +66,7 @@ export function MeetingRecords({
               <SelectItem value="all">全部状态</SelectItem>
               <SelectItem value="ENDED">已结束</SelectItem>
               <SelectItem value="CANCELLED">已取消</SelectItem>
+              <SelectItem value="EXPIRED">已过期</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -99,10 +100,13 @@ export function MeetingRecords({
               <span className="min-w-0">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="truncate font-medium">{meeting.title}</span>
-                  <Badge variant="outline">{meeting.status === 'ENDED' ? '已结束' : '已取消'}</Badge>
+                  <Badge variant="outline">
+                    {meeting.status === 'ENDED' ? '已结束' : meeting.status === 'CANCELLED' ? '已取消' : '已过期'}
+                  </Badge>
                 </span>
                 <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                  {meeting.projectTitle} · {meeting.areaName} · {formatRecordTime(meeting)}
+                  {meeting.projectTitle ?? '独立会议'} · {meeting.areaName ?? '仅受邀人可见'} ·{' '}
+                  {formatRecordTime(meeting)}
                 </span>
               </span>
               <span className="col-start-2 text-xs font-normal text-muted-foreground sm:col-start-auto">

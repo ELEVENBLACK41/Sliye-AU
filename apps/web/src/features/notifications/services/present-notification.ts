@@ -22,18 +22,17 @@ interface PresentNotificationOptions {
 
 /** 根据通知类型返回对应的 Sonner 展示时长。 */
 function resolveNotificationToastDuration(type: RealtimeNotification['type']): number {
-  return type === 'MEETING_INVITED'
-    ? MEETING_INVITATION_TOAST_DURATION_MS
-    : DEFAULT_NOTIFICATION_TOAST_DURATION_MS;
+  return type === 'MEETING_INVITED' ? MEETING_INVITATION_TOAST_DURATION_MS : DEFAULT_NOTIFICATION_TOAST_DURATION_MS;
 }
 
 /** 幂等写入全局 Store，并在首次收到时展示顶部 Sonner。 */
-export function presentNotification(
-  notification: RealtimeNotification,
-  options?: PresentNotificationOptions,
-): void {
+export function presentNotification(notification: RealtimeNotification, options?: PresentNotificationOptions): void {
   const received = useNotificationStore.getState().receive(notification);
   if (!received) {
+    return;
+  }
+
+  if (notification.type === 'MEETING_INCOMING_CALL') {
     return;
   }
 

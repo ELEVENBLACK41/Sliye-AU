@@ -1,7 +1,7 @@
 /**
  * 本文件是项目分区会议房间入口，支持普通会议与多决策会议目标切换。
  */
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 import type {
   DecisionDetail,
@@ -54,6 +54,9 @@ export default async function MeetingRoomRoutePage({ params, searchParams }: Mee
 
   try {
     meeting = await getMeetingDetail(meetingId);
+    if (meeting.projectId === null || meeting.areaId === null) {
+      redirect(`/meetings/${meeting.id}/room`);
+    }
     const [projectResult, areas, chatPage] = await Promise.all([
       getProject(meeting.projectId),
       getProjectAreas(meeting.projectId),

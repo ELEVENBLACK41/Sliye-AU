@@ -169,12 +169,15 @@ function getStateTitle(status: MeetingDetail['status']): string {
     LIVE: '会议进行中',
     ENDED: '会议已结束',
     CANCELLED: '会议已取消',
+    EXPIRED: '会议已过期',
   }[status];
 }
 
 /** 格式化会议状态。 */
 function formatMeetingStatus(status: MeetingDetail['status']): string {
-  return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消' }[status];
+  return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消', EXPIRED: '已过期' }[
+    status
+  ];
 }
 
 /** 格式化决策状态。 */

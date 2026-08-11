@@ -20,6 +20,7 @@ const meetingStatusText: Record<MeetingSummary['status'], string> = {
   LIVE: '进行中',
   ENDED: '已结束',
   CANCELLED: '已取消',
+  EXPIRED: '已过期',
 };
 
 /** 渲染真实会议列表和无数据空状态。 */

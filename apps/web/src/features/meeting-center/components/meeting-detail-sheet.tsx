@@ -4,11 +4,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CalendarClock, CalendarRange, LoaderCircle, RotateCw, UsersRound, X } from 'lucide-react';
+import { CalendarClock, CalendarRange, LoaderCircle, Pencil, RotateCw, UsersRound, Video, X } from 'lucide-react';
 import type { MeetingCenterListItem, MeetingDetail } from '@workspace/contracts/meetings';
 
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
+import { Input } from '@workspace/ui/components/input';
+import { toast } from '@workspace/ui/components/sonner';
 import {
   Sheet,
   SheetClose,
@@ -18,7 +20,11 @@ import {
   SheetTitle,
 } from '@workspace/ui/components/sheet';
 
-import { getMeetingCenterDetail } from '../services/meeting-center-client.service';
+import {
+  cancelAppointment,
+  getMeetingCenterDetail,
+  updateAppointment,
+} from '../services/meeting-center-client.service';
 
 /** 详情抽屉属性。 */
 type MeetingDetailSheetProps = {
@@ -54,7 +60,11 @@ export function MeetingDetailSheet({ meeting, open, onOpenChange, onShowInSchedu
           <p className="text-xs font-medium text-meeting-accent-foreground">会议详情</p>
           <SheetTitle className="mt-1 text-xl font-semibold tracking-tight">{meeting?.title ?? '会议详情'}</SheetTitle>
           <SheetDescription className="mt-1">
-            {meeting ? `${meeting.projectTitle} · ${meeting.areaName}` : '加载会议详情'}
+            {meeting
+              ? meeting.projectTitle
+                ? `${meeting.projectTitle} · ${meeting.areaName}`
+                : '独立会议 · 仅受邀人可见'
+              : '加载会议详情'}
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 pb-8">
@@ -128,9 +138,24 @@ function MeetingDetailContent({ meeting }: { meeting: MeetingCenterListItem }) {
     );
   if (!state.detail) return null;
   const detail = state.detail;
+  const canJoin = isMeetingJoinable(detail);
 
   return (
     <div className="grid gap-5">
+      {canJoin ? (
+        <Button
+          type="button"
+          onClick={() => window.location.assign(`/meetings/${detail.id}/room`)}
+          className="h-11 rounded-xl bg-meeting-accent text-meeting-accent-foreground hover:bg-meeting-accent/85"
+        >
+          <Video aria-hidden />
+          进入会议
+        </Button>
+      ) : detail.status === 'SCHEDULED' ? (
+        <p className="rounded-xl bg-muted/60 px-4 py-3 text-center text-sm text-muted-foreground">
+          会议将在计划时间前 30 分钟开放
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <Badge>{statusLabel(detail.status)}</Badge>
         <Badge variant="outline">{roleLabel(meeting.currentUserRole)}</Badge>
@@ -189,7 +214,105 @@ function MeetingDetailContent({ meeting }: { meeting: MeetingCenterListItem }) {
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{detail.description}</p>
         </section>
       ) : null}
+      {detail.kind === 'APPOINTMENT' && detail.status === 'SCHEDULED' && meeting.currentUserRole !== 'ATTENDEE' ? (
+        <AppointmentManagement
+          detail={detail}
+          onUpdated={(updated) => setState({ detail: updated, error: null, loading: false })}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/** 渲染主持人可用的预约修改和取消操作。 */
+function AppointmentManagement({
+  detail,
+  onUpdated,
+}: {
+  detail: MeetingDetail;
+  onUpdated: (detail: MeetingDetail) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(detail.title);
+  const [scheduledAt, setScheduledAt] = useState(toDateTimeLocal(detail.scheduledAt));
+  const [duration, setDuration] = useState(String(detail.scheduledDurationMinutes ?? 60));
+  const [submitting, setSubmitting] = useState(false);
+
+  /** 保存预约标题、时间和时长。 */
+  async function handleSave(): Promise<void> {
+    setSubmitting(true);
+    try {
+      const updated = await updateAppointment(detail.id, {
+        title: title.trim(),
+        scheduledAt: new Date(scheduledAt).toISOString(),
+        scheduledDurationMinutes: Number(duration),
+      });
+      onUpdated(updated);
+      setEditing(false);
+      toast.success('预约会议已更新');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '预约会议修改失败');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /** 二次确认后取消预约会议。 */
+  async function handleCancel(): Promise<void> {
+    if (!window.confirm('确定取消这场预约会议吗？')) return;
+    setSubmitting(true);
+    try {
+      const updated = await cancelAppointment(detail.id);
+      onUpdated(updated);
+      toast.success('预约会议已取消');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '预约会议取消失败');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-meeting-line bg-background/55 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-medium">预约管理</h3>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setEditing((value) => !value)}>
+          <Pencil aria-hidden />
+          {editing ? '收起' : '修改'}
+        </Button>
+      </div>
+      {editing ? (
+        <div className="mt-3 grid gap-3">
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} aria-label="会议标题" />
+          <Input
+            type="datetime-local"
+            value={scheduledAt}
+            onChange={(event) => setScheduledAt(event.target.value)}
+            aria-label="计划开始时间"
+          />
+          <Input
+            type="number"
+            min={15}
+            max={480}
+            value={duration}
+            onChange={(event) => setDuration(event.target.value)}
+            aria-label="计划时长分钟数"
+          />
+          <Button type="button" disabled={submitting} onClick={() => void handleSave()} className="rounded-xl">
+            {submitting ? <LoaderCircle aria-hidden className="animate-spin" /> : null}保存修改
+          </Button>
+        </div>
+      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={submitting}
+        onClick={() => void handleCancel()}
+        className="mt-3 w-full rounded-xl text-destructive"
+      >
+        取消预约会议
+      </Button>
+    </section>
   );
 }
 
@@ -219,7 +342,24 @@ function formatDateTime(value: string | null): string {
 
 /** 转换会议状态文案。 */
 function statusLabel(status: MeetingDetail['status']): string {
-  return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消' }[status];
+  return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消', EXPIRED: '已过期' }[status];
+}
+
+/** 判断当前会议是否处于可签发 LiveKit 令牌的入场窗口。 */
+function isMeetingJoinable(detail: MeetingDetail): boolean {
+  if (detail.status === 'LIVE') return true;
+  if (detail.status !== 'SCHEDULED' || !detail.scheduledAt || !detail.scheduledDurationMinutes) return false;
+  const now = Date.now();
+  const scheduled = new Date(detail.scheduledAt).getTime();
+  return now >= scheduled - 30 * 60_000 && now < scheduled + detail.scheduledDurationMinutes * 60_000;
+}
+
+/** 把 ISO 时间转换为 datetime-local 控件值。 */
+function toDateTimeLocal(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 /** 转换参与角色文案。 */

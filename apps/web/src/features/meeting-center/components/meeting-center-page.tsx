@@ -12,7 +12,6 @@ import type {
   MeetingCenterRecordsResponse,
 } from '@workspace/contracts/meetings';
 
-import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
@@ -28,6 +27,7 @@ import { MeetingOverview } from './meeting-overview';
 import { MeetingRecords } from './meeting-records';
 import { MeetingSchedule } from './meeting-schedule';
 import { QuickCallPanel } from './quick-call-panel';
+import { AppointmentMeetingPanel } from './appointment-meeting-panel';
 
 /** 会议中心组合页属性。 */
 type MeetingCenterPageProps = {
@@ -69,12 +69,8 @@ export function MeetingCenterPage({ query, projects, overview, records }: Meetin
     >
       <header className="flex justify-end">
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <QuickCallPanel />
-          <Button variant="outline" size="lg" disabled className="h-11 rounded-xl px-4">
-            <CalendarDays aria-hidden />
-            预约会议
-            <span className="sr-only">预约会议功能待接入</span>
-          </Button>
+          <QuickCallPanel projects={projects} />
+          <AppointmentMeetingPanel projects={projects} />
         </div>
       </header>
 

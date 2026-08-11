@@ -7,7 +7,11 @@ import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { WebhookReceiver, type WebhookEvent } from 'livekit-server-sdk';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
-import { MeetingStatus } from '../../../generated/prisma';
+import {
+  MeetingInvitationStatus,
+  MeetingPresenceEventType,
+  MeetingStatus,
+} from '../../../generated/prisma';
 import { MeetingLifecycleService } from './meeting-lifecycle.service';
 
 const ROOM_ID_PATTERN = /^meeting:(\d+)$/;
@@ -26,14 +30,27 @@ export class MeetingLiveKitWebhookService {
   async handle(rawBody: string, authorization?: string): Promise<void> {
     const event = await this.receiveEvent(rawBody, authorization);
 
+    // room_started 用于确认 LiveKit 已真正建立房间，并保存可排障的服务商房间标识。
+    if (event.event === 'room_started') {
+      await this.handleRoomStarted(event);
+      return;
+    }
+    // participant_joined 是参会时间和预约会议首次开场的服务端可信来源。
     if (event.event === 'participant_joined') {
       await this.handleParticipantJoined(event);
       return;
     }
+    // participant_left 记录每次退出，并在最后一人离开后协调业务会议结束。
     if (event.event === 'participant_left') {
       await this.handleParticipantLeft(event);
       return;
     }
+    // participant_connection_aborted 只记录失败尝试，不把网络/权限错误误判为主动拒绝。
+    if (event.event === 'participant_connection_aborted') {
+      await this.handleParticipantConnectionAborted(event);
+      return;
+    }
+    // room_finished 是 LiveKit 房间终止后的最终对账信号；重复事件由状态条件安全忽略。
     if (event.event === 'room_finished') {
       const meetingId = this.parseMeetingId(event.room?.name);
       if (meetingId) {
@@ -42,7 +59,23 @@ export class MeetingLiveKitWebhookService {
           this.readOccurredAt(event),
         );
       }
+      return;
     }
+
+    // 轨道、录制、转写、Ingress/Egress 事件不属于本轮业务范围，验签后明确忽略。
+  }
+
+  /** 确认 LiveKit 房间启动并回写外部服务商标识。 */
+  private async handleRoomStarted(event: WebhookEvent): Promise<void> {
+    const meetingId = this.parseMeetingId(event.room?.name);
+    if (!meetingId) return;
+    await this.prisma.meetingSession.updateMany({
+      where: { id: meetingId },
+      data: {
+        provider: 'LIVEKIT',
+        providerRoomId: event.room?.sid || event.room?.name,
+      },
+    });
   }
 
   /** 记录参与者首次进入时间，并把最近退出时间清空为当前在线状态。 */
@@ -54,26 +87,49 @@ export class MeetingLiveKitWebhookService {
     }
 
     const joinedAt = this.readOccurredAt(event);
-    await this.prisma.$transaction([
-      this.prisma.meetingParticipant.updateMany({
+    await this.prisma.$transaction(async (tx) => {
+      await tx.meetingPresenceEvent.createMany({
+        data: [
+          {
+            meetingId,
+            userId,
+            type: MeetingPresenceEventType.JOINED,
+            providerEventId: this.readProviderEventId(event),
+            occurredAt: joinedAt,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      await tx.meetingParticipant.updateMany({
         where: {
           meetingId,
           userId,
           joinedAt: null,
-          meeting: { status: MeetingStatus.LIVE },
+          meeting: {
+            status: { in: [MeetingStatus.SCHEDULED, MeetingStatus.LIVE] },
+          },
         },
-        data: { joinedAt, leftAt: null },
-      }),
-      this.prisma.meetingParticipant.updateMany({
+        data: { joinedAt },
+      });
+      await tx.meetingParticipant.updateMany({
         where: {
           meetingId,
           userId,
-          joinedAt: { not: null },
-          meeting: { status: MeetingStatus.LIVE },
+          meeting: {
+            status: { in: [MeetingStatus.SCHEDULED, MeetingStatus.LIVE] },
+          },
         },
-        data: { leftAt: null },
-      }),
-    ]);
+        data: {
+          leftAt: null,
+          invitationStatus: MeetingInvitationStatus.ACCEPTED,
+          respondedAt: joinedAt,
+        },
+      });
+      await tx.meetingSession.updateMany({
+        where: { id: meetingId, status: MeetingStatus.SCHEDULED },
+        data: { status: MeetingStatus.LIVE, startedAt: joinedAt },
+      });
+    });
   }
 
   /** 记录参与者最近退出时间，并在已无在线参与者时自动结束业务会议。 */
@@ -85,15 +141,50 @@ export class MeetingLiveKitWebhookService {
     }
 
     const leftAt = this.readOccurredAt(event);
-    await this.prisma.meetingParticipant.updateMany({
-      where: {
-        meetingId,
-        userId,
-        meeting: { status: MeetingStatus.LIVE },
-      },
-      data: { leftAt },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.meetingPresenceEvent.createMany({
+        data: [
+          {
+            meetingId,
+            userId,
+            type: MeetingPresenceEventType.LEFT,
+            providerEventId: this.readProviderEventId(event),
+            occurredAt: leftAt,
+          },
+        ],
+        skipDuplicates: true,
+      });
+      await tx.meetingParticipant.updateMany({
+        where: {
+          meetingId,
+          userId,
+          meeting: { status: MeetingStatus.LIVE },
+        },
+        data: { leftAt },
+      });
     });
     await this.lifecycleService.endIfEmpty(meetingId, leftAt);
+  }
+
+  /** 保存参与人尚未成功连入媒体房间时的连接中止事件。 */
+  private async handleParticipantConnectionAborted(
+    event: WebhookEvent,
+  ): Promise<void> {
+    const meetingId = this.parseMeetingId(event.room?.name);
+    const userId = this.parseParticipantId(event.participant?.identity);
+    if (!meetingId) return;
+    await this.prisma.meetingPresenceEvent.createMany({
+      data: [
+        {
+          meetingId,
+          userId,
+          type: MeetingPresenceEventType.CONNECTION_ABORTED,
+          providerEventId: this.readProviderEventId(event),
+          occurredAt: this.readOccurredAt(event),
+        },
+      ],
+      skipDuplicates: true,
+    });
   }
 
   /** 使用项目 API Key 和 Secret 验证 Webhook 请求体及 Authorization 签名。 */
@@ -144,5 +235,18 @@ export class MeetingLiveKitWebhookService {
   /** 将 LiveKit 秒级事件时间转换为数据库 Date。 */
   private readOccurredAt(event: WebhookEvent): Date {
     return new Date(Number(event.createdAt) * 1000);
+  }
+
+  /** 读取 LiveKit 唯一事件 ID；旧版本缺失时使用稳定字段组合保证重复投递幂等。 */
+  private readProviderEventId(event: WebhookEvent): string {
+    return (
+      event.id ||
+      [
+        event.event,
+        event.room?.sid ?? event.room?.name ?? 'room',
+        event.participant?.sid ?? event.participant?.identity ?? 'participant',
+        String(event.createdAt),
+      ].join(':')
+    );
   }
 }

@@ -5,7 +5,12 @@ import type { ConfigService } from '@nestjs/config';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { RoomServiceClient, TokenVerifier } from 'livekit-server-sdk';
 import type { PrismaService } from '../../../database/prisma.service';
-import { MeetingStatus } from '../../../generated/prisma';
+import {
+  MeetingInvitationStatus,
+  MeetingKind,
+  MeetingParticipantRole,
+  MeetingStatus,
+} from '../../../generated/prisma';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 import { MeetingLiveKitService } from './meeting-livekit.service';
 
@@ -127,6 +132,50 @@ describe('MeetingLiveKitService', () => {
     const { service } = createHarness({
       status: MeetingStatus.SCHEDULED,
       participants: [{ user: { name: '测试用户' } }],
+    });
+
+    await expect(
+      service.issueCredentials(createAuthorization(), 90),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
+    });
+  });
+
+  it('预约会议开放前三十分钟内应允许任一受邀人进入', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-11T02:00:00.000Z'));
+    const { service } = createHarness({
+      status: MeetingStatus.SCHEDULED,
+      kind: MeetingKind.APPOINTMENT,
+      scheduledAt: new Date('2026-08-11T02:20:00.000Z'),
+      scheduledDurationMinutes: 60,
+      participants: [
+        {
+          role: MeetingParticipantRole.ATTENDEE,
+          invitationStatus: MeetingInvitationStatus.INVITED,
+          user: { name: '受邀用户' },
+        },
+      ],
+    });
+
+    await expect(
+      service.issueCredentials(createAuthorization(), 90),
+    ).resolves.toMatchObject({
+      serverUrl: 'wss://nextnest-test.livekit.cloud',
+    });
+    jest.useRealTimers();
+  });
+
+  it('快速通话受邀人未接听时不能直接获取令牌', async () => {
+    const { service } = createHarness({
+      status: MeetingStatus.LIVE,
+      kind: MeetingKind.QUICK_CALL,
+      participants: [
+        {
+          role: MeetingParticipantRole.ATTENDEE,
+          invitationStatus: MeetingInvitationStatus.INVITED,
+          user: { name: '受邀用户' },
+        },
+      ],
     });
 
     await expect(

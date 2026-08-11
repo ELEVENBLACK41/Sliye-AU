@@ -38,17 +38,19 @@ export class MeetingLifecycleService {
     meetingId: number,
   ): Promise<MeetingDetail> {
     const meeting = await this.findAccessibleMeeting(authorization, meetingId);
-    const area = await this.projectAccessService.findArea(
-      authorization,
-      meeting.area.projectId,
-      meeting.area.id,
-    );
+    const area = meeting.area
+      ? await this.projectAccessService.findArea(
+          authorization,
+          meeting.area.projectId,
+          meeting.area.id,
+        )
+      : null;
     this.assertMeetingHost(
       authorization,
       meeting,
       '只有会议主持人可以开始会议',
     );
-    this.projectAccessService.assertAreaWritable(area);
+    if (area) this.projectAccessService.assertAreaWritable(area);
     if (meeting.status !== MeetingStatus.SCHEDULED) {
       this.throwInvalidTransition('当前会议状态不能开始会议');
     }
@@ -197,7 +199,7 @@ export class MeetingLifecycleService {
     return toMeetingDetail(updated);
   }
 
-  /** 查询当前用户通过所在分区可访问的会议。 */
+  /** 查询当前用户受邀且仍满足可选项目分区可见性的会议。 */
   private async findAccessibleMeeting(
     authorization: AuthorizationContext,
     meetingId: number,
@@ -205,9 +207,15 @@ export class MeetingLifecycleService {
     const meeting = await this.prisma.meetingSession.findFirst({
       where: {
         id: meetingId,
-        area: this.projectAccessService.buildVisibleAreaWhere(
-          authorization.userId,
-        ),
+        participants: { some: { userId: authorization.userId } },
+        OR: [
+          { areaId: null },
+          {
+            area: this.projectAccessService.buildVisibleAreaWhere(
+              authorization.userId,
+            ),
+          },
+        ],
       },
       include: meetingDetailInclude,
     });

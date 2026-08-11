@@ -179,7 +179,7 @@ export function MeetingSchedule({ date, items, onDateChange, onSelect }: Meeting
                 <span className="block text-xs text-muted-foreground">{formatMeetingTime(item)}</span>
                 <span className="mt-1 block font-medium">{item.title}</span>
                 <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                  {item.projectTitle} · {item.areaName}
+                  {item.projectTitle ?? '独立会议'} · {item.areaName ?? '仅受邀人可见'}
                 </span>
                 <span className="mt-2 block text-[11px] font-medium text-muted-foreground">
                   {meetingStatusLabel(item.status)}
@@ -305,12 +305,13 @@ function getMeetingScheduleDate(item: MeetingCenterListItem): Date {
 /** 返回会议状态样式。 */
 function meetingStatusClassName(status: MeetingCenterListItem['status']): string {
   if (status === 'CANCELLED') return 'border-destructive/30 bg-destructive/10 text-destructive';
+  if (status === 'EXPIRED') return 'border-muted-foreground/20 bg-muted/70 text-muted-foreground';
   if (status === 'ENDED') return 'border-border bg-muted text-muted-foreground';
   return 'border-meeting-accent/30 bg-meeting-accent-soft text-meeting-accent-foreground';
 }
 /** 返回会议状态文案。 */
 function meetingStatusLabel(status: MeetingCenterListItem['status']): string {
-  return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消' }[status];
+  return { SCHEDULED: '待开始', LIVE: '进行中', ENDED: '已结束', CANCELLED: '已取消', EXPIRED: '已过期' }[status];
 }
 /** 格式化移动端会议时间。 */
 function formatMeetingTime(item: MeetingCenterListItem): string {

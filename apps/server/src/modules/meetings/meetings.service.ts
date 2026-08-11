@@ -11,6 +11,8 @@ import { BusinessException } from '../../common/exceptions/business.exception';
 import { PrismaService } from '../../database/prisma.service';
 import {
   DiscussionAreaType,
+  MeetingInvitationStatus,
+  MeetingKind,
   MeetingParticipantRole,
 } from '../../generated/prisma';
 import type { AuthorizationContext } from '../auth/types/auth.types';
@@ -63,6 +65,8 @@ export class MeetingsService {
         createdById: authorization.userId,
         title: dto.title,
         description: dto.description,
+        kind: MeetingKind.APPOINTMENT,
+        mediaMode: dto.mediaMode ?? 'VIDEO',
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
         scheduledDurationMinutes: dto.scheduledDurationMinutes ?? 60,
         participants: {
@@ -73,6 +77,11 @@ export class MeetingsService {
                 userId === authorization.userId
                   ? MeetingParticipantRole.HOST
                   : MeetingParticipantRole.ATTENDEE,
+              invitationStatus:
+                userId === authorization.userId
+                  ? MeetingInvitationStatus.ACCEPTED
+                  : MeetingInvitationStatus.INVITED,
+              respondedAt: userId === authorization.userId ? new Date() : null,
             })),
           },
         },
@@ -133,9 +142,15 @@ export class MeetingsService {
     const meeting = await this.prisma.meetingSession.findFirst({
       where: {
         id: meetingId,
-        area: this.projectAccessService.buildVisibleAreaWhere(
-          authorization.userId,
-        ),
+        participants: { some: { userId: authorization.userId } },
+        OR: [
+          { areaId: null },
+          {
+            area: this.projectAccessService.buildVisibleAreaWhere(
+              authorization.userId,
+            ),
+          },
+        ],
       },
       include: meetingDetailInclude,
     });

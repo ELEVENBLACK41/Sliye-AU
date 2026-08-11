@@ -21,7 +21,10 @@ export function MeetingVideoStage() {
             key={tile.key}
             className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-3xl border border-meeting-room-foreground/10 bg-meeting-room-video shadow-2xl"
           >
-            <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_center,var(--meeting-room-foreground)_0.5px,transparent_0.5px)] [background-size:18px_18px]" aria-hidden />
+            <div
+              className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_center,var(--meeting-room-foreground)_0.5px,transparent_0.5px)] [background-size:18px_18px]"
+              aria-hidden
+            />
             <div className="relative text-center">
               <span className="mx-auto flex size-20 items-center justify-center rounded-full bg-meeting-room-control text-meeting-room-foreground/60">
                 <Icon aria-hidden className="size-9" />

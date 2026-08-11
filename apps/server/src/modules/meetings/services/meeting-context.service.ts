@@ -69,7 +69,7 @@ export class MeetingContextService {
       });
     }
 
-    if (meeting.area.type === DiscussionAreaType.PRIVATE) {
+    if (meeting.area?.type === DiscussionAreaType.PRIVATE) {
       await this.assertPrivateMeetingComplete(
         decisionId,
         meeting.area.members.map((member) => member.userId),

@@ -5,7 +5,17 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ListChecks, Mic, MicOff, MonitorUp, MoreHorizontal, PhoneOff, UsersRound, Video, VideoOff } from 'lucide-react';
+import {
+  ListChecks,
+  Mic,
+  MicOff,
+  MonitorUp,
+  MoreHorizontal,
+  PhoneOff,
+  UsersRound,
+  Video,
+  VideoOff,
+} from 'lucide-react';
 
 import { Button } from '@workspace/ui/components/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@workspace/ui/components/sheet';

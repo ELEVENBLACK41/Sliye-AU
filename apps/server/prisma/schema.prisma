@@ -199,6 +199,19 @@ enum MeetingStatus {
   LIVE
   ENDED
   CANCELLED
+  EXPIRED
+}
+
+/// 会议创建入口和生命周期类型；快速通话创建后立即振铃，预约会议按开放时间窗加入。
+enum MeetingKind {
+  QUICK_CALL
+  APPOINTMENT
+}
+
+/// 会议初始媒体模式；参与人进入房间后仍可自行关闭麦克风或摄像头。
+enum MeetingMediaMode {
+  AUDIO
+  VIDEO
 }
 
 /// 用户在单次会议中的实际参会角色。
@@ -206,6 +219,21 @@ enum MeetingParticipantRole {
   HOST
   CO_HOST
   ATTENDEE
+}
+
+/// 受邀人在当前会议中的响应状态；历史数据允许为空以避免伪造响应结果。
+enum MeetingInvitationStatus {
+  INVITED
+  ACCEPTED
+  DECLINED
+  MISSED
+}
+
+/// 由 LiveKit Webhook 确认的参与人连接事件类型。
+enum MeetingPresenceEventType {
+  JOINED
+  LEFT
+  CONNECTION_ABORTED
 }
 
 /// 会议录像从准备到可播放的处理状态。
@@ -296,6 +324,7 @@ model User {
   discussionMessagesPinned   DiscussionMessage[]    @relation("DiscussionMessagePinner")
   meetingsCreated            MeetingSession[]       @relation("MeetingSessionCreator")
   meetingParticipants        MeetingParticipant[]
+  meetingPresenceEvents      MeetingPresenceEvent[]
 
   @@index([deptId])
   @@index([status])
@@ -730,7 +759,7 @@ model ProjectMember {
   @@index([role])
 }
 
-/// 项目内的公开或私有讨论边界；消息和会议均必须归属于一个分区。
+/// 项目内的公开或私有讨论边界；项目会议属于分区，独立会议不建立该关系。
 model DiscussionArea {
   id Int @id @default(autoincrement())
 
@@ -1183,12 +1212,14 @@ model DecisionTask {
 model MeetingSession {
   id Int @id @default(autoincrement())
 
-  areaId      Int
+  areaId      Int?
   createdById Int
 
   title       String
   description String?
-  status      MeetingStatus @default(SCHEDULED)
+  status      MeetingStatus    @default(SCHEDULED)
+  kind        MeetingKind      @default(APPOINTMENT)
+  mediaMode   MeetingMediaMode @default(VIDEO)
 
   /// 项目内部稳定且不可重复的房间代码，不保存临时加入令牌。
   roomKey        String  @unique @default(cuid())
@@ -1199,23 +1230,25 @@ model MeetingSession {
 
   scheduledAt              DateTime?
   scheduledDurationMinutes Int?
+  ringExpiresAt            DateTime?
   startedAt                DateTime?
   endedAt                  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @default(now()) @updatedAt
 
-  area      DiscussionArea @relation(fields: [areaId], references: [id], onDelete: Restrict)
-  createdBy User           @relation("MeetingSessionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  area      DiscussionArea? @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  createdBy User            @relation("MeetingSessionCreator", fields: [createdById], references: [id], onDelete: Restrict)
 
-  participants  MeetingParticipant[]
-  decisionLinks MeetingDecision[]
-  messages      DiscussionMessage[]
-  proposals     DecisionProposal[]
-  voteRounds    DecisionVoteRound[]
-  recordings    MeetingRecording[]
-  resolutions   DecisionResolution[]
-  events        DecisionEvent[]
-  auditLogs     CollaborationAuditLog[]
+  participants   MeetingParticipant[]
+  presenceEvents MeetingPresenceEvent[]
+  decisionLinks  MeetingDecision[]
+  messages       DiscussionMessage[]
+  proposals      DecisionProposal[]
+  voteRounds     DecisionVoteRound[]
+  recordings     MeetingRecording[]
+  resolutions    DecisionResolution[]
+  events         DecisionEvent[]
+  auditLogs      CollaborationAuditLog[]
 
   @@unique([provider, providerRoomId])
   @@index([areaId])
@@ -1242,9 +1275,11 @@ model MeetingDecision {
 model MeetingParticipant {
   id Int @id @default(autoincrement())
 
-  meetingId Int
-  userId    Int
-  role      MeetingParticipantRole @default(ATTENDEE)
+  meetingId        Int
+  userId           Int
+  role             MeetingParticipantRole   @default(ATTENDEE)
+  invitationStatus MeetingInvitationStatus?
+  respondedAt      DateTime?
 
   joinedAt  DateTime?
   leftAt    DateTime?
@@ -1256,6 +1291,26 @@ model MeetingParticipant {
   @@unique([meetingId, userId])
   @@index([userId])
   @@index([role])
+  @@index([invitationStatus])
+}
+
+/// LiveKit 对参与人连接状态的可信事件历史；providerEventId 用于抵御 Webhook 重试。
+model MeetingPresenceEvent {
+  id Int @id @default(autoincrement())
+
+  meetingId       Int
+  userId          Int?
+  type            MeetingPresenceEventType
+  providerEventId String                   @unique
+  occurredAt      DateTime
+  createdAt       DateTime                 @default(now())
+
+  meeting MeetingSession @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([meetingId, occurredAt])
+  @@index([userId, occurredAt])
+  @@index([type])
 }
 
 /// 一场会议的一段录像及其外部资产、存储和处理状态。

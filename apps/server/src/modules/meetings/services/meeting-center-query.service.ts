@@ -135,7 +135,11 @@ export class MeetingCenterQueryService {
     const where: Prisma.MeetingSessionWhereInput = {
       ...baseWhere,
       status: query.status ?? {
-        in: [MeetingStatus.ENDED, MeetingStatus.CANCELLED],
+        in: [
+          MeetingStatus.ENDED,
+          MeetingStatus.CANCELLED,
+          MeetingStatus.EXPIRED,
+        ],
       },
       ...(filters.length === 0 ? {} : { AND: filters }),
     };
@@ -165,13 +169,26 @@ export class MeetingCenterQueryService {
     role?: ListMeetingCenterOverviewDto['role'],
   ): Prisma.MeetingSessionWhereInput {
     return {
-      area: this.projectAccessService.buildVisibleAreaWhere(
-        authorization.userId,
-        projectId,
-      ),
       participants: {
         some: { userId: authorization.userId, ...(role ? { role } : {}) },
       },
+      ...(projectId
+        ? {
+            area: this.projectAccessService.buildVisibleAreaWhere(
+              authorization.userId,
+              projectId,
+            ),
+          }
+        : {
+            OR: [
+              { areaId: null },
+              {
+                area: this.projectAccessService.buildVisibleAreaWhere(
+                  authorization.userId,
+                ),
+              },
+            ],
+          }),
     };
   }
 }

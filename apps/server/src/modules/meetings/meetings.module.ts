@@ -11,6 +11,8 @@ import { MeetingsService } from './meetings.service';
 import { MeetingLifecycleService } from './services/meeting-lifecycle.service';
 import { MeetingContextService } from './services/meeting-context.service';
 import { MeetingCenterQueryService } from './services/meeting-center-query.service';
+import { MeetingCallService } from './services/meeting-call.service';
+import { MeetingExpirationService } from './services/meeting-expiration.service';
 import { MeetingLiveKitService } from './services/meeting-livekit.service';
 import { MeetingLiveKitWebhookService } from './services/meeting-livekit-webhook.service';
 
@@ -20,6 +22,8 @@ import { MeetingLiveKitWebhookService } from './services/meeting-livekit-webhook
   providers: [
     MeetingsService,
     MeetingCenterQueryService,
+    MeetingCallService,
+    MeetingExpirationService,
     MeetingContextService,
     MeetingLifecycleService,
     MeetingLiveKitService,
