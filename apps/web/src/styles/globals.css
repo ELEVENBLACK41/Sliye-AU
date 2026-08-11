@@ -54,6 +54,20 @@
   --decision-proposal: oklch(0.72 0.14 38);
   --decision-vote: oklch(0.74 0.15 82);
   --decision-resolution: oklch(0.66 0.12 155);
+  --meeting-accent: oklch(0.86 0.18 91);
+  --meeting-accent-foreground: oklch(0.22 0.015 93);
+  --meeting-accent-soft: oklch(0.97 0.06 92);
+  --meeting-surface: oklch(0.985 0.006 92);
+  --meeting-panel: oklch(0.23 0.008 95);
+  --meeting-panel-foreground: oklch(0.985 0.004 95);
+  --meeting-line: oklch(0.9 0.012 91);
+  --meeting-room-background: oklch(0.12 0.006 95);
+  --meeting-room-foreground: oklch(0.985 0.004 95);
+  --meeting-room-control: oklch(0.2 0.007 95);
+  --meeting-room-video: oklch(0.17 0.006 95);
+  --meeting-room-sidebar: oklch(0.985 0.006 92);
+  --meeting-room-success: oklch(0.72 0.18 145);
+  --meeting-room-danger: oklch(0.63 0.22 28);
 }
 
 .dark {
@@ -106,6 +120,20 @@
   --decision-proposal: oklch(0.76 0.12 38);
   --decision-vote: oklch(0.8 0.14 82);
   --decision-resolution: oklch(0.72 0.11 155);
+  --meeting-accent: oklch(0.83 0.17 89);
+  --meeting-accent-foreground: oklch(0.2 0.013 93);
+  --meeting-accent-soft: oklch(0.32 0.05 89);
+  --meeting-surface: oklch(0.18 0.008 92);
+  --meeting-panel: oklch(0.12 0.006 95);
+  --meeting-panel-foreground: oklch(0.985 0.004 95);
+  --meeting-line: oklch(0.33 0.016 91);
+  --meeting-room-background: oklch(0.1 0.005 95);
+  --meeting-room-foreground: oklch(0.985 0.004 95);
+  --meeting-room-control: oklch(0.18 0.006 95);
+  --meeting-room-video: oklch(0.14 0.005 95);
+  --meeting-room-sidebar: oklch(0.18 0.008 92);
+  --meeting-room-success: oklch(0.72 0.18 145);
+  --meeting-room-danger: oklch(0.63 0.22 28);
 }
 
 @theme inline {
@@ -155,6 +183,20 @@
   --color-decision-proposal: var(--decision-proposal);
   --color-decision-vote: var(--decision-vote);
   --color-decision-resolution: var(--decision-resolution);
+  --color-meeting-accent: var(--meeting-accent);
+  --color-meeting-accent-foreground: var(--meeting-accent-foreground);
+  --color-meeting-accent-soft: var(--meeting-accent-soft);
+  --color-meeting-surface: var(--meeting-surface);
+  --color-meeting-panel: var(--meeting-panel);
+  --color-meeting-panel-foreground: var(--meeting-panel-foreground);
+  --color-meeting-line: var(--meeting-line);
+  --color-meeting-room-background: var(--meeting-room-background);
+  --color-meeting-room-foreground: var(--meeting-room-foreground);
+  --color-meeting-room-control: var(--meeting-room-control);
+  --color-meeting-room-video: var(--meeting-room-video);
+  --color-meeting-room-sidebar: var(--meeting-room-sidebar);
+  --color-meeting-room-success: var(--meeting-room-success);
+  --color-meeting-room-danger: var(--meeting-room-danger);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
