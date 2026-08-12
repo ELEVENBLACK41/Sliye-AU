@@ -18,7 +18,7 @@ const navigationItems = [
   { key: 'projects', label: '项目空间', href: '/projects' },
   { key: 'decisions', label: '决策中心', href: '/decisions' },
   { key: 'meetings', label: '会议中心', href: '/meetings' },
-  { key: 'decision', label: '决策图谱', href: undefined },
+  { key: 'decision', label: '关系图谱', href: undefined },
   { key: 'members', label: '成员管理', href: undefined },
 ] as const;
 
