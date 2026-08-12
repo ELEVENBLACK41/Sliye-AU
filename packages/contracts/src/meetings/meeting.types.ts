@@ -47,7 +47,7 @@ export type MeetingParticipant = {
   meetingId: number;
   /** 参与者在当前会议中的角色。 */
   role: MeetingParticipantRole;
-  /** 受邀人当前响应；历史会议未记录时为 `null`。 */
+  /** 受邀人对响铃的当前响应；`DECLINED` 仅拒绝本次响铃，不撤销主动入会资格。 */
   invitationStatus: MeetingInvitationStatus | null;
   /** 最近一次明确接听或拒绝的时间。 */
   respondedAt: string | null;

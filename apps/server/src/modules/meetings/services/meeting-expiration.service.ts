@@ -74,8 +74,13 @@ export class MeetingExpirationService implements OnModuleInit, OnModuleDestroy {
         ringExpiresAt: { lte: now },
         participants: {
           none: {
-            role: MeetingParticipantRole.ATTENDEE,
-            invitationStatus: MeetingInvitationStatus.ACCEPTED,
+            OR: [
+              {
+                role: MeetingParticipantRole.ATTENDEE,
+                invitationStatus: MeetingInvitationStatus.ACCEPTED,
+              },
+              { joinedAt: { not: null } },
+            ],
           },
         },
       },
@@ -91,8 +96,13 @@ export class MeetingExpirationService implements OnModuleInit, OnModuleDestroy {
             ringExpiresAt: { lte: now },
             participants: {
               none: {
-                role: MeetingParticipantRole.ATTENDEE,
-                invitationStatus: MeetingInvitationStatus.ACCEPTED,
+                OR: [
+                  {
+                    role: MeetingParticipantRole.ATTENDEE,
+                    invitationStatus: MeetingInvitationStatus.ACCEPTED,
+                  },
+                  { joinedAt: { not: null } },
+                ],
               },
             },
           },

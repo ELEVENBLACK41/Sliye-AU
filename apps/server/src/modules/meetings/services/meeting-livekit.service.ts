@@ -115,9 +115,14 @@ export class MeetingLiveKitService {
   ): number {
     if (meeting.kind === MeetingKind.QUICK_CALL) {
       const isHost = participant.role === MeetingParticipantRole.HOST;
-      const accepted =
+      const hasResponded =
         participant.invitationStatus === MeetingInvitationStatus.ACCEPTED;
-      if (meeting.status !== MeetingStatus.LIVE || (!isHost && !accepted)) {
+      const declinedRinging =
+        participant.invitationStatus === MeetingInvitationStatus.DECLINED;
+      if (
+        meeting.status !== MeetingStatus.LIVE ||
+        (!isHost && !hasResponded && !declinedRinging)
+      ) {
         throw new BusinessException({
           code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
           message: '请先接听仍在振铃的快速通话',

@@ -8,6 +8,7 @@ import { BusinessException } from '../../../common/exceptions/business.exception
 import { PrismaService } from '../../../database/prisma.service';
 import {
   DecisionEventType,
+  MeetingInvitationStatus,
   MeetingKind,
   MeetingParticipantRole,
   MeetingStatus,
@@ -132,9 +133,12 @@ export class MeetingLifecycleService {
       return false;
     }
     this.notificationService.notifyMeetingEnded({
-      recipientIds: endedMeeting.participants.map(
-        (participant) => participant.userId,
-      ),
+      recipientIds: endedMeeting.participants
+        .filter(
+          (participant) =>
+            participant.invitationStatus !== MeetingInvitationStatus.DECLINED,
+        )
+        .map((participant) => participant.userId),
       meetingId: endedMeeting.id,
       meetingTitle: endedMeeting.title,
       occurredAt: endedAt,
@@ -229,6 +233,10 @@ export class MeetingLifecycleService {
     if (transition.transitioned) {
       this.notificationService.notifyMeetingEnded({
         recipientIds: meeting.participants
+          .filter(
+            (participant) =>
+              participant.invitationStatus !== MeetingInvitationStatus.DECLINED,
+          )
           .map((participant) => participant.userId)
           .filter((userId) => userId !== authorization.userId),
         meetingId: meeting.id,

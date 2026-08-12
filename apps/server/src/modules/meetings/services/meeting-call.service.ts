@@ -279,6 +279,10 @@ export class MeetingCallService {
     });
     this.notificationService.notifyMeetingUpdated({
       recipientIds: updated.participants
+        .filter(
+          (participant) =>
+            participant.invitationStatus !== MeetingInvitationStatus.DECLINED,
+        )
         .map((participant) => participant.userId)
         .filter((userId) => userId !== authorization.userId),
       meetingId: updated.id,
@@ -309,6 +313,10 @@ export class MeetingCallService {
     });
     this.notificationService.notifyMeetingCancelled({
       recipientIds: updated.participants
+        .filter(
+          (participant) =>
+            participant.invitationStatus !== MeetingInvitationStatus.DECLINED,
+        )
         .map((participant) => participant.userId)
         .filter((userId) => userId !== authorization.userId),
       meetingId: updated.id,

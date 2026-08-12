@@ -187,7 +187,7 @@ describe('MeetingLiveKitService', () => {
     jest.useRealTimers();
   });
 
-  it('快速通话受邀人未接听时不能直接获取令牌', async () => {
+  it('快速通话仍在响铃且尚未响应时不能绕过接听直接获取令牌', async () => {
     const { service } = createHarness({
       status: MeetingStatus.LIVE,
       kind: MeetingKind.QUICK_CALL,
@@ -204,6 +204,26 @@ describe('MeetingLiveKitService', () => {
       service.issueCredentials(createAuthorization(), 90),
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
+    });
+  });
+
+  it('快速通话受邀人拒绝响铃后仍可主动加入会议', async () => {
+    const { service } = createHarness({
+      status: MeetingStatus.LIVE,
+      kind: MeetingKind.QUICK_CALL,
+      participants: [
+        {
+          role: MeetingParticipantRole.ATTENDEE,
+          invitationStatus: MeetingInvitationStatus.DECLINED,
+          user: { name: '受邀用户' },
+        },
+      ],
+    });
+
+    await expect(
+      service.issueCredentials(createAuthorization(), 90),
+    ).resolves.toMatchObject({
+      serverUrl: 'wss://nextnest-test.livekit.cloud',
     });
   });
 
