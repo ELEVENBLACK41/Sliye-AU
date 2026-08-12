@@ -44,6 +44,8 @@ export type OpenMeetingSessionInput = {
   meeting: MeetingDetail;
   /** 当前登录用户主键。 */
   currentUserId: number;
+  /** 首次打开时使用的展示模式；刷新恢复小窗时保持 `MINI`。 */
+  presentationMode?: MeetingPresentationMode;
 };
 
 /** 全局会议运行时发送给界面的轻量反馈事件。 */

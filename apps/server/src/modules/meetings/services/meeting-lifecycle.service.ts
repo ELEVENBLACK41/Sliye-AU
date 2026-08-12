@@ -153,6 +153,12 @@ export class MeetingLifecycleService {
       meeting,
       '只有会议主持人可以结束会议',
     );
+    // 主持人先主动断开本地 LiveKit 连接后，最后一人离场 webhook 可能抢先结束会议。
+    // 此时重复结束按幂等成功处理，并继续确认媒体房间已经关闭。
+    if (meeting.status === MeetingStatus.ENDED) {
+      await this.liveKitService.closeRoom(meeting.id);
+      return toMeetingDetail(meeting);
+    }
     const needsLiveKitReconciliation =
       meeting.kind === MeetingKind.APPOINTMENT &&
       meeting.status === MeetingStatus.SCHEDULED;
@@ -170,7 +176,7 @@ export class MeetingLifecycleService {
     }
 
     const endedAt = new Date();
-    const updated = await this.prisma.$transaction(async (tx) => {
+    const transition = await this.prisma.$transaction(async (tx) => {
       // webhook 延迟时，仅在主持人确实在线的前提下补偿 SCHEDULED -> LIVE；并发 webhook 会让本更新安全跳过。
       const reconciledStart = needsLiveKitReconciliation
         ? await tx.meetingSession.updateMany({
@@ -183,6 +189,10 @@ export class MeetingLifecycleService {
         data: { status: MeetingStatus.ENDED, endedAt },
       });
       if (result.count !== 1) {
+        const current = await this.findMeetingInTransaction(tx, meeting.id);
+        if (current.status === MeetingStatus.ENDED) {
+          return { meeting: current, transitioned: false };
+        }
         this.throwInvalidTransition('会议状态已经变化，请刷新后重试');
       }
 
@@ -209,27 +219,32 @@ export class MeetingLifecycleService {
         MeetingStatus.ENDED,
         endedAt,
       );
-      return this.findMeetingInTransaction(tx, meeting.id);
+      return {
+        meeting: await this.findMeetingInTransaction(tx, meeting.id),
+        transitioned: true,
+      };
     });
 
     await this.liveKitService.closeRoom(meeting.id);
-    this.notificationService.notifyMeetingEnded({
-      recipientIds: meeting.participants
-        .map((participant) => participant.userId)
-        .filter((userId) => userId !== authorization.userId),
-      meetingId: meeting.id,
-      meetingTitle: meeting.title,
-      actor: {
-        id: authorization.userId,
-        name:
-          meeting.participants.find(
-            (participant) => participant.userId === authorization.userId,
-          )?.user.name ?? '会议主持人',
-      },
-      occurredAt: endedAt,
-    });
+    if (transition.transitioned) {
+      this.notificationService.notifyMeetingEnded({
+        recipientIds: meeting.participants
+          .map((participant) => participant.userId)
+          .filter((userId) => userId !== authorization.userId),
+        meetingId: meeting.id,
+        meetingTitle: meeting.title,
+        actor: {
+          id: authorization.userId,
+          name:
+            meeting.participants.find(
+              (participant) => participant.userId === authorization.userId,
+            )?.user.name ?? '会议主持人',
+        },
+        occurredAt: endedAt,
+      });
+    }
 
-    return toMeetingDetail(updated);
+    return toMeetingDetail(transition.meeting);
   }
 
   /** 查询当前用户受邀且仍满足可选项目分区可见性的会议。 */

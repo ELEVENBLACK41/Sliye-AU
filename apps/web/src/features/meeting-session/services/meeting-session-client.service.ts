@@ -5,6 +5,14 @@ import type { MeetingDetail, MeetingLiveKitCredentials } from '@workspace/contra
 
 import { requestData } from '@/services/request';
 
+/** 查询当前用户可访问的会议详情，用于整页刷新后恢复会议会话。 */
+export function getMeetingSessionDetail(meetingId: number): Promise<MeetingDetail> {
+  return requestData(`/api/meetings/${meetingId}`, {
+    method: 'GET',
+    errorMessage: '会议状态恢复失败',
+  });
+}
+
 /** 获取当前参与人加入新版 LiveKit 房间的短期凭证。 */
 export function getMeetingSessionCredentials(meetingId: number): Promise<MeetingLiveKitCredentials> {
   return requestData(`/api/meetings/${meetingId}/livekit-token`, {

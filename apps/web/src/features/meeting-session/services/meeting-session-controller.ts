@@ -20,7 +20,11 @@ import type {
   OpenMeetingSessionInput,
   SerializableMeetingSession,
 } from '../types/meeting-session.types';
-import { endMeetingSession, getMeetingSessionCredentials } from './meeting-session-client.service';
+import {
+  endMeetingSession,
+  getMeetingSessionCredentials,
+  getMeetingSessionDetail,
+} from './meeting-session-client.service';
 import { meetingTabCoordinator } from './meeting-tab-coordinator';
 
 /** 全局会议运行时反馈监听器。 */
@@ -28,6 +32,20 @@ type MeetingSessionFeedbackListener = (feedback: MeetingSessionFeedback) => void
 
 const TAKEOVER_RETRY_COUNT = 10;
 const TAKEOVER_RETRY_DELAY_MS = 300;
+const SESSION_STORAGE_VERSION = 'v1';
+const SESSION_STORAGE_KEY = `nextnest:meeting-session-snapshot:${SESSION_STORAGE_VERSION}`;
+
+/** 整页刷新时保存在当前标签页中的安全会议快照；不包含令牌和媒体对象。 */
+type PersistedMeetingSession = {
+  /** 保存快照时的登录用户，防止账号切换后恢复旧会议。 */
+  currentUserId: number;
+  /** 待重新校验和连接的会议主键。 */
+  meetingId: number;
+  /** 刷新前使用全屏还是悬浮小窗。 */
+  presentationMode: 'FULL' | 'MINI';
+  /** 刷新前悬浮小窗是否处于收起状态。 */
+  miniCollapsed: boolean;
+};
 
 /** 等待指定时长，供跨标签释放媒体锁后重试使用。 */
 function delay(duration: number): Promise<void> {
@@ -63,6 +81,7 @@ export class MeetingSessionController {
   private intentionalDisconnect = false;
   private feedbackListeners = new Set<MeetingSessionFeedbackListener>();
   private authListenerBound = false;
+  private restoringUserId: number | null = null;
 
   /** 为根级运行时配置当前账号的跨标签通道和认证清理监听。 */
   configureUser(currentUserId: number | null): void {
@@ -76,6 +95,7 @@ export class MeetingSessionController {
         currentUserId,
         currentTabId: meetingTabCoordinator.getCurrentTabId(),
       });
+      void this.restorePersistedSession(currentUserId);
     }
     if (!this.authListenerBound) {
       window.addEventListener(AUTH_SESSION_CHANGED_EVENT, this.handleAuthSessionChanged);
@@ -84,7 +104,7 @@ export class MeetingSessionController {
   }
 
   /** 打开或恢复一场新版会议，重复调用同一会议不会创建第二个 Room。 */
-  async open({ meeting, currentUserId }: OpenMeetingSessionInput): Promise<void> {
+  async open({ meeting, currentUserId, presentationMode = 'FULL' }: OpenMeetingSessionInput): Promise<void> {
     this.configureUser(currentUserId);
     const state = useMeetingSessionStore.getState();
     if (meeting.status !== 'LIVE') {
@@ -99,7 +119,12 @@ export class MeetingSessionController {
       });
       return;
     }
-    if (state.meetingId !== null && state.meetingId !== meeting.id && state.status !== 'IDLE' && state.status !== 'ENDED') {
+    if (
+      state.meetingId !== null &&
+      state.meetingId !== meeting.id &&
+      state.status !== 'IDLE' &&
+      state.status !== 'ENDED'
+    ) {
       const message = '当前已有一场会议正在进行，请先离开后再加入其他会议';
       this.emit({ type: 'error', message });
       throw new Error(message);
@@ -114,8 +139,8 @@ export class MeetingSessionController {
       currentUserId,
       currentTabId: meetingTabCoordinator.getCurrentTabId(),
       canEndMeeting: currentRole === 'HOST' || currentRole === 'CO_HOST',
-      presentationMode: 'FULL',
-      miniCollapsed: false,
+      presentationMode,
+      miniCollapsed: presentationMode === 'FULL' ? false : state.miniCollapsed,
     });
 
     if (this.room && state.meetingId === meeting.id && this.room.state !== ConnectionState.Disconnected) return;
@@ -232,7 +257,7 @@ export class MeetingSessionController {
   async leave(): Promise<void> {
     await this.disconnectRoom();
     await meetingTabCoordinator.release();
-    useMeetingSessionStore.getState().reset();
+    this.resetSession();
   }
 
   /** 主持人结束业务会议并通知所有标签退出。 */
@@ -242,16 +267,18 @@ export class MeetingSessionController {
     this.intentionalDisconnect = true;
     this.patch({ status: 'ENDING', connectionError: null });
     try {
+      // 主持人先主动关闭本地 PeerConnection，再由服务端删除房间，避免 LiveKit
+      // 把服务端强制关闭 DataChannel 记录成 User-Initiated Abort。
+      await this.disconnectRoom();
       await endMeetingSession(state.meetingId);
       meetingTabCoordinator.publishMeetingEnded(state.meetingId);
-      await this.disconnectRoom();
       await meetingTabCoordinator.release();
-      useMeetingSessionStore.getState().reset();
+      this.resetSession();
       this.emit({ type: 'ended', message: '会议已结束' });
     } catch (error) {
       this.intentionalDisconnect = false;
       const message = error instanceof Error ? error.message : '结束会议失败';
-      this.patch({ status: 'CONNECTED', connectionError: null });
+      this.patch({ status: 'ERROR', connectionError: message });
       this.emit({ type: 'error', message });
     }
   }
@@ -276,7 +303,7 @@ export class MeetingSessionController {
     }
     await this.disconnectRoom();
     await meetingTabCoordinator.dispose();
-    useMeetingSessionStore.getState().reset();
+    this.resetSession();
   }
 
   /** 获取媒体所有权后创建唯一 Room。 */
@@ -435,17 +462,20 @@ export class MeetingSessionController {
   private applyRemoteState(remote: SerializableMeetingSession): void {
     if (meetingTabCoordinator.isOwner()) return;
     const state = useMeetingSessionStore.getState();
-    this.patch({
-      meetingId: remote.meetingId,
-      title: remote.title ?? state.title,
-      areaName: remote.areaName ?? state.areaName,
-      mediaMode: remote.mediaMode ?? state.mediaMode,
-      status: 'OWNED_BY_OTHER_TAB',
-      participantCount: remote.participantCount || state.participantCount,
-      canEndMeeting: remote.canEndMeeting || state.canEndMeeting,
-      ownerTabId: remote.ownerTabId,
-      presentationMode: state.meetingId === null ? 'MINI' : state.presentationMode,
-    }, false);
+    this.patch(
+      {
+        meetingId: remote.meetingId,
+        title: remote.title ?? state.title,
+        areaName: remote.areaName ?? state.areaName,
+        mediaMode: remote.mediaMode ?? state.mediaMode,
+        status: 'OWNED_BY_OTHER_TAB',
+        participantCount: remote.participantCount || state.participantCount,
+        canEndMeeting: remote.canEndMeeting || state.canEndMeeting,
+        ownerTabId: remote.ownerTabId,
+        presentationMode: state.meetingId === null ? 'MINI' : state.presentationMode,
+      },
+      false,
+    );
   }
 
   /** 处理其他标签广播的会议结束事件。 */
@@ -458,7 +488,7 @@ export class MeetingSessionController {
   private async finishRemoteMeeting(message: string): Promise<void> {
     await this.disconnectRoom();
     await meetingTabCoordinator.release();
-    useMeetingSessionStore.getState().reset();
+    this.resetSession();
     this.emit({ type: 'ended', message });
   }
 
@@ -495,9 +525,105 @@ export class MeetingSessionController {
   }
 
   /** 合并状态并在当前标签拥有媒体时广播最新快照。 */
-  private patch(patch: Parameters<ReturnType<typeof useMeetingSessionStore.getState>['patch']>[0], publish = true): void {
+  private patch(
+    patch: Parameters<ReturnType<typeof useMeetingSessionStore.getState>['patch']>[0],
+    publish = true,
+  ): void {
     useMeetingSessionStore.getState().patch(patch);
+    this.persistSession();
     if (publish) this.publishState();
+  }
+
+  /** 将可恢复的最小会议快照保存到当前标签页，整页刷新后重新向服务端校验。 */
+  private persistSession(): void {
+    const state = useMeetingSessionStore.getState();
+    if (
+      state.meetingId === null ||
+      state.currentUserId === null ||
+      state.status === 'IDLE' ||
+      state.status === 'ENDED'
+    ) {
+      this.removePersistedSession();
+      return;
+    }
+    const snapshot: PersistedMeetingSession = {
+      currentUserId: state.currentUserId,
+      meetingId: state.meetingId,
+      presentationMode: state.presentationMode,
+      miniCollapsed: state.miniCollapsed,
+    };
+    try {
+      window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Storage 被禁用时仍保留当前页面生命周期内的会议，不阻断音视频连接。
+    }
+  }
+
+  /** 根运行时重新挂载后读取快照，并以服务端真实状态决定是否重新连接。 */
+  private async restorePersistedSession(currentUserId: number): Promise<void> {
+    if (this.restoringUserId === currentUserId || useMeetingSessionStore.getState().meetingId !== null) return;
+    const snapshot = this.readPersistedSession();
+    if (!snapshot || snapshot.currentUserId !== currentUserId) {
+      if (snapshot) this.removePersistedSession();
+      return;
+    }
+    this.restoringUserId = currentUserId;
+    useMeetingSessionStore.getState().patch({
+      meetingId: snapshot.meetingId,
+      currentUserId,
+      currentTabId: meetingTabCoordinator.getCurrentTabId(),
+      presentationMode: snapshot.presentationMode,
+      miniCollapsed: snapshot.miniCollapsed,
+      status: 'CONNECTING',
+    });
+    try {
+      const meeting = await getMeetingSessionDetail(snapshot.meetingId);
+      if (meeting.status !== 'LIVE') {
+        this.resetSession();
+        return;
+      }
+      await this.open({ meeting, currentUserId, presentationMode: snapshot.presentationMode });
+      this.patch({ miniCollapsed: snapshot.miniCollapsed });
+    } catch {
+      this.resetSession();
+    } finally {
+      this.restoringUserId = null;
+    }
+  }
+
+  /** 安全解析当前标签页保存的会议快照，损坏数据按无快照处理。 */
+  private readPersistedSession(): PersistedMeetingSession | null {
+    try {
+      const value = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (!value) return null;
+      const parsed = JSON.parse(value) as Partial<PersistedMeetingSession>;
+      if (
+        Number.isInteger(parsed.currentUserId) &&
+        Number.isInteger(parsed.meetingId) &&
+        (parsed.presentationMode === 'FULL' || parsed.presentationMode === 'MINI') &&
+        typeof parsed.miniCollapsed === 'boolean'
+      ) {
+        return parsed as PersistedMeetingSession;
+      }
+    } catch {
+      // 损坏或不可访问的 Storage 不应阻塞根布局渲染。
+    }
+    return null;
+  }
+
+  /** 清除当前标签页的会议恢复快照。 */
+  private removePersistedSession(): void {
+    try {
+      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch {
+      // Storage 不可用时无需额外处理。
+    }
+  }
+
+  /** 同步清理内存会话与刷新恢复快照。 */
+  private resetSession(): void {
+    useMeetingSessionStore.getState().reset();
+    this.removePersistedSession();
   }
 
   /** 发布当前 Store 的安全跨标签快照。 */

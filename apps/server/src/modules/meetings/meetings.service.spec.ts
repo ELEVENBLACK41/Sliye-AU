@@ -402,6 +402,20 @@ describe('MeetingsService', () => {
     );
   });
 
+  it('最后一人离场 webhook 已抢先结束时应幂等返回并确认关闭房间', async () => {
+    const { lifecycleService, prisma, liveKitService, notificationService } =
+      createHarness();
+    const ended = createMeetingRecord({ status: MeetingStatus.ENDED });
+    prisma.meetingSession.findFirst.mockResolvedValue(ended);
+
+    await expect(
+      lifecycleService.end(createAuthorization(), 30),
+    ).resolves.toMatchObject({ status: MeetingStatus.ENDED });
+
+    expect(liveKitService.closeRoom).toHaveBeenCalledWith(30);
+    expect(notificationService.notifyMeetingEnded).not.toHaveBeenCalled();
+  });
+
   it('预约会议 webhook 延迟时应确认主持人在线后补偿开场并结束', async () => {
     const { lifecycleService, prisma, transaction, liveKitService } =
       createHarness();
