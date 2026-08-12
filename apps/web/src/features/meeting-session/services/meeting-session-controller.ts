@@ -554,7 +554,13 @@ export class MeetingSessionController {
   /** 清理被远端结束的会议并通知根运行时处理页面反馈。 */
   private async finishRemoteMeeting(message: string): Promise<void> {
     const meetingId = useMeetingSessionStore.getState().meetingId;
+    const ownedMedia = meetingTabCoordinator.isOwner();
     this.meetingEnding = true;
+    // LiveKit 结束信号只会到达持有媒体 Room 的标签；先转发给同账号其他标签，
+    // 再释放媒体锁。非所有者标签收到广播后不会再次转发，避免消息回环。
+    if (ownedMedia && meetingId !== null) {
+      meetingTabCoordinator.publishMeetingEnded(meetingId);
+    }
     await this.disconnectRoom();
     await meetingTabCoordinator.release();
     this.resetSession();
