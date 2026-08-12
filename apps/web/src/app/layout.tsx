@@ -63,7 +63,7 @@ export default async function RootLayout({
           {children}
           {/* 常驻的会议 */}
           <MeetingRuntime currentUserId={currentUser?.id ?? null} />
-          <NotificationRuntime />
+          <NotificationRuntime currentUserId={currentUser?.id ?? null} />
           {/* <NotificationTestButton /> */}
           <Toaster position="top-center" duration={3_000} closeButton richColors />
         </ThemeProvider>

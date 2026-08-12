@@ -21,6 +21,12 @@ type NotificationServerEvents = {
 
 const MAX_RECONNECT_DELAY_MS = 30_000;
 
+/** 全站通知运行时属性。 */
+type NotificationRuntimeProps = {
+  /** 当前登录用户主键，用于隔离同浏览器内不同账号的跨标签来电响应。 */
+  currentUserId: number | null;
+};
+
 /** 读取构建时配置的 NestJS Socket.IO 服务地址。 */
 function getRealtimeBaseUrl(): string | null {
   const value = process.env.NEXT_PUBLIC_REALTIME_URL?.trim();
@@ -28,7 +34,7 @@ function getRealtimeBaseUrl(): string | null {
 }
 
 /** 建立全站唯一的当前用户通知连接；未登录时安静等待后续重试。 */
-export function NotificationRuntime() {
+export function NotificationRuntime({ currentUserId }: NotificationRuntimeProps) {
   useEffect(() => {
     const realtimeBaseUrl = getRealtimeBaseUrl();
     if (!realtimeBaseUrl) {
@@ -133,5 +139,5 @@ export function NotificationRuntime() {
     };
   }, []);
 
-  return <IncomingCallRuntime />;
+  return <IncomingCallRuntime currentUserId={currentUserId} />;
 }

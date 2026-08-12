@@ -3,7 +3,7 @@
  */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LoaderCircle, Phone, PhoneOff, Video } from 'lucide-react';
 import type {
@@ -17,7 +17,20 @@ import { Button } from '@workspace/ui/components/button';
 import { toast } from '@workspace/ui/components/sonner';
 import { useMeetingSessionStore } from '@/features/meeting-session/store/meeting-session-store';
 import { requestData } from '@/services/request';
+import { MEETING_CALL_RESPONSE_CHANNEL } from '../constants';
 import { useNotificationStore } from '../store/notification-store';
+
+/** 同账号标签之间同步的一次快速来电响应。 */
+type MeetingCallResponseMessage = {
+  /** 已经在任一标签中完成响应的会议主键。 */
+  meetingId: number;
+};
+
+/** 全局快速来电运行时属性。 */
+type IncomingCallRuntimeProps = {
+  /** 当前登录用户主键，用于隔离不同账号的跨标签响应频道。 */
+  currentUserId: number | null;
+};
 
 /** 查询当前用户仍可响应的全部来电。 */
 function loadIncomingCalls(): Promise<IncomingMeetingCallsResponse> {
@@ -39,7 +52,7 @@ function respondToCall(
 }
 
 /** 渲染位于应用右上角的实时来电卡片。 */
-export function IncomingCallRuntime() {
+export function IncomingCallRuntime({ currentUserId }: IncomingCallRuntimeProps) {
   const router = useRouter();
   const notifications = useNotificationStore((state) => state.notifications);
   const connectionStatus = useNotificationStore((state) => state.connectionStatus);
@@ -49,6 +62,7 @@ export function IncomingCallRuntime() {
   const [dismissedIds, setDismissedIds] = useState<number[]>([]);
   const [now, setNow] = useState(0);
   const [responding, setResponding] = useState(false);
+  const responseChannelRef = useRef<BroadcastChannel | null>(null);
 
   const incomingEventKey = notifications
     .filter((item) => item.type === 'MEETING_INCOMING_CALL')
@@ -72,6 +86,27 @@ export function IncomingCallRuntime() {
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined' || currentUserId === null) return;
+    const channel = new BroadcastChannel(`${MEETING_CALL_RESPONSE_CHANNEL}:${currentUserId}`);
+
+    /** 其他标签完成响应后立即移除当前标签中的同一来电。 */
+    function handleMessage(event: MessageEvent<MeetingCallResponseMessage>): void {
+      const meetingId = event.data?.meetingId;
+      if (!Number.isInteger(meetingId) || meetingId < 1) return;
+      setDismissedIds((current) => (current.includes(meetingId) ? current : [...current, meetingId]));
+      setCalls((current) => current.filter((call) => call.id !== meetingId));
+    }
+
+    channel.addEventListener('message', handleMessage);
+    responseChannelRef.current = channel;
+    return () => {
+      channel.removeEventListener('message', handleMessage);
+      channel.close();
+      if (responseChannelRef.current === channel) responseChannelRef.current = null;
+    };
+  }, [currentUserId]);
 
   const activeCall = useMemo(
     () =>
@@ -102,6 +137,8 @@ export function IncomingCallRuntime() {
     try {
       await respondToCall(activeCall.id, response);
       setDismissedIds((current) => [...current, activeCall.id]);
+      setCalls((current) => current.filter((call) => call.id !== activeCall.id));
+      responseChannelRef.current?.postMessage({ meetingId: activeCall.id } satisfies MeetingCallResponseMessage);
       if (response === 'ACCEPT') {
         router.push(`/meetings/${activeCall.id}/room`);
       }
