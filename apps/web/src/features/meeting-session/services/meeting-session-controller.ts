@@ -32,6 +32,10 @@ type MeetingSessionFeedbackListener = (feedback: MeetingSessionFeedback) => void
 
 const TAKEOVER_RETRY_COUNT = 10;
 const TAKEOVER_RETRY_DELAY_MS = 300;
+const MEETING_ENDING_TOPIC = 'nextnest.meeting.lifecycle';
+const MEETING_ENDING_MAX_WAIT_MS = 3_000;
+const MEETING_ENDING_POLL_MS = 100;
+const PARTICIPANT_LEAVE_NOTICE_DELAY_MS = 800;
 const SESSION_STORAGE_VERSION = 'v1';
 const SESSION_STORAGE_KEY = `nextnest:meeting-session-snapshot:${SESSION_STORAGE_VERSION}`;
 
@@ -47,9 +51,25 @@ type PersistedMeetingSession = {
   miniCollapsed: boolean;
 };
 
+/** 通过 LiveKit 可靠数据通道广播的会议生命周期消息。 */
+type MeetingLifecycleSignal = {
+  /** 当前只支持主持人发起的结束预告。 */
+  type: 'MEETING_ENDING';
+  /** 用于拒绝其他会议或损坏数据包的会议主键。 */
+  meetingId: number;
+};
+
 /** 等待指定时长，供跨标签释放媒体锁后重试使用。 */
 function delay(duration: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, duration));
+}
+
+/** 等待远端参与者收到结束预告并主动离开，超时后交给服务端删房兜底。 */
+async function waitForRemoteParticipantsToLeave(room: Room): Promise<void> {
+  const deadline = Date.now() + MEETING_ENDING_MAX_WAIT_MS;
+  while (room.remoteParticipants.size > 0 && Date.now() < deadline) {
+    await delay(MEETING_ENDING_POLL_MS);
+  }
 }
 
 /** 把浏览器媒体设备异常转换成用户可执行的中文提示。 */
@@ -82,6 +102,8 @@ export class MeetingSessionController {
   private feedbackListeners = new Set<MeetingSessionFeedbackListener>();
   private authListenerBound = false;
   private restoringUserId: number | null = null;
+  private meetingEnding = false;
+  private meetingEnderIdentities = new Set<string>();
 
   /** 为根级运行时配置当前账号的跨标签通道和认证清理监听。 */
   configureUser(currentUserId: number | null): void {
@@ -131,6 +153,11 @@ export class MeetingSessionController {
     }
 
     const currentRole = meeting.participants.find((item) => item.user.id === currentUserId)?.role;
+    this.meetingEnderIdentities = new Set(
+      meeting.participants
+        .filter((item) => item.role === 'HOST' || item.role === 'CO_HOST')
+        .map((item) => `user:${item.user.id}`),
+    );
     this.patch({
       meetingId: meeting.id,
       title: meeting.title,
@@ -264,18 +291,35 @@ export class MeetingSessionController {
   async end(): Promise<void> {
     const state = useMeetingSessionStore.getState();
     if (state.meetingId === null || !state.canEndMeeting) return;
+    const room = this.room;
+    const meetingId = state.meetingId;
+    this.meetingEnding = true;
     this.intentionalDisconnect = true;
     this.patch({ status: 'ENDING', connectionError: null });
     try {
-      // 主持人先主动关闭本地 PeerConnection，再由服务端删除房间，避免 LiveKit
-      // 把服务端强制关闭 DataChannel 记录成 User-Initiated Abort。
+      // 先通过可靠数据通道通知其他参与者主动断开，再由服务端删除房间兜底。
+      // 这样所有浏览器都能完整关闭 PeerConnection，避免被 deleteRoom 强制中止 DataChannel。
+      if (room?.state === ConnectionState.Connected) {
+        try {
+          await room.localParticipant.publishData(
+            new TextEncoder().encode(
+              JSON.stringify({ type: 'MEETING_ENDING', meetingId } satisfies MeetingLifecycleSignal),
+            ),
+            { reliable: true, topic: MEETING_ENDING_TOPIC },
+          );
+          await waitForRemoteParticipantsToLeave(room);
+        } catch {
+          // 连接已经异常时跳过预告，继续执行本地断开和服务端结束流程。
+        }
+      }
       await this.disconnectRoom();
-      await endMeetingSession(state.meetingId);
-      meetingTabCoordinator.publishMeetingEnded(state.meetingId);
+      await endMeetingSession(meetingId);
+      meetingTabCoordinator.publishMeetingEnded(meetingId);
       await meetingTabCoordinator.release();
       this.resetSession();
-      this.emit({ type: 'ended', message: '会议已结束' });
+      this.emit({ type: 'ended', message: '当前会议已结束', meetingId });
     } catch (error) {
+      this.meetingEnding = false;
       this.intentionalDisconnect = false;
       const message = error instanceof Error ? error.message : '结束会议失败';
       this.patch({ status: 'ERROR', connectionError: message });
@@ -368,8 +412,30 @@ export class MeetingSessionController {
     };
     /** 刷新参与人并显示离开提示。 */
     const handleParticipantDisconnected = (participant: RemoteParticipant): void => {
-      this.emit({ type: 'notice', message: `${participant.name || '一位成员'}已离开会议` });
+      const meetingId = useMeetingSessionStore.getState().meetingId;
+      window.setTimeout(() => {
+        const state = useMeetingSessionStore.getState();
+        if (state.meetingId !== meetingId || this.meetingEnding || state.status === 'ENDING') return;
+        this.emit({ type: 'notice', message: `${participant.name || '一位成员'}已离开会议` });
+      }, PARTICIPANT_LEAVE_NOTICE_DELAY_MS);
       this.refreshRoomState();
+    };
+    /** 收到可信主持人的结束预告后，先主动断开以避免服务端强制关闭 DataChannel。 */
+    const handleDataReceived = (
+      payload: Uint8Array,
+      participant?: RemoteParticipant,
+      _kind?: unknown,
+      topic?: string,
+    ): void => {
+      if (topic !== MEETING_ENDING_TOPIC || !participant || !this.meetingEnderIdentities.has(participant.identity)) {
+        return;
+      }
+      const signal = this.parseLifecycleSignal(payload);
+      const meetingId = useMeetingSessionStore.getState().meetingId;
+      if (!signal || signal.type !== 'MEETING_ENDING' || signal.meetingId !== meetingId) return;
+      this.meetingEnding = true;
+      this.patch({ status: 'ENDING', connectionError: null });
+      void this.finishRemoteMeeting('当前会议已结束');
     };
     /** 映射 LiveKit 连接状态。 */
     const handleConnectionStateChanged = (connectionState: ConnectionState): void => {
@@ -388,6 +454,7 @@ export class MeetingSessionController {
 
     room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
     room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
+    room.on(RoomEvent.DataReceived, handleDataReceived);
     room.on(RoomEvent.TrackSubscribed, () => this.refreshRoomState());
     room.on(RoomEvent.TrackUnsubscribed, () => this.refreshRoomState());
     room.on(RoomEvent.LocalTrackPublished, () => this.refreshRoomState());
@@ -486,10 +553,12 @@ export class MeetingSessionController {
 
   /** 清理被远端结束的会议并通知根运行时处理页面反馈。 */
   private async finishRemoteMeeting(message: string): Promise<void> {
+    const meetingId = useMeetingSessionStore.getState().meetingId;
+    this.meetingEnding = true;
     await this.disconnectRoom();
     await meetingTabCoordinator.release();
     this.resetSession();
-    this.emit({ type: 'ended', message });
+    this.emit({ type: 'ended', message, meetingId: meetingId ?? undefined });
   }
 
   /** LiveKit 自动重连彻底失败后释放失效 Room 和媒体锁，使用户可以主动重试。 */
@@ -623,7 +692,21 @@ export class MeetingSessionController {
   /** 同步清理内存会话与刷新恢复快照。 */
   private resetSession(): void {
     useMeetingSessionStore.getState().reset();
+    this.meetingEnding = false;
+    this.meetingEnderIdentities.clear();
     this.removePersistedSession();
+  }
+
+  /** 解析受限的会议生命周期数据包，任何损坏或无关数据都直接忽略。 */
+  private parseLifecycleSignal(payload: Uint8Array): MeetingLifecycleSignal | null {
+    try {
+      const value = JSON.parse(new TextDecoder().decode(payload)) as Partial<MeetingLifecycleSignal>;
+      return value.type === 'MEETING_ENDING' && Number.isInteger(value.meetingId)
+        ? (value as MeetingLifecycleSignal)
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   /** 发布当前 Store 的安全跨标签快照。 */

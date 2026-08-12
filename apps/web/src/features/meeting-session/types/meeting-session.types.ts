@@ -54,4 +54,6 @@ export type MeetingSessionFeedback = {
   type: 'notice' | 'error' | 'ended';
   /** 面向用户的中文反馈。 */
   message: string;
+  /** 会议结束反馈携带主键，用于与实时通知共用同一个提示。 */
+  meetingId?: number;
 };

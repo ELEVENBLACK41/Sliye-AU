@@ -29,7 +29,10 @@ export function MeetingRuntime({ currentUserId }: MeetingRuntimeProps) {
     () =>
       meetingSessionController.subscribeFeedback((feedback) => {
         if (feedback.type === 'error') toast.error(feedback.message);
-        else toast(feedback.message);
+        else
+          toast(feedback.message, {
+            id: feedback.type === 'ended' ? `meeting-ended:${feedback.meetingId ?? 'current'}` : undefined,
+          });
         if (feedback.type === 'ended' && /^\/meetings\/\d+\/room$/.test(pathname)) router.replace('/meetings');
       }),
     [pathname, router],

@@ -42,7 +42,11 @@ export function presentNotification(notification: RealtimeNotification, options?
     notification.meeting &&
     window.location.pathname === `/meetings/${notification.meeting.id}/room`
   ) {
-    toast(notification.title, { description: notification.message, position: 'top-center' });
+    toast(notification.title, {
+      id: notification.id,
+      description: notification.message,
+      position: 'top-center',
+    });
     window.location.replace('/meetings');
     return;
   }
@@ -52,19 +56,17 @@ export function presentNotification(notification: RealtimeNotification, options?
     description: notification.message,
     duration: options?.duration ?? resolveNotificationToastDuration(notification.type),
     position: 'top-center',
-    // 接听/拒绝只是房内状态反馈，主持人已在会议上下文中，不再重复提供“查看会议”。
-    action:
-      notification.meeting && notification.type !== 'MEETING_CALL_RESPONSE'
-        ? {
-            label: notification.type === 'MEETING_ENDED' ? '查看会议详情' : '查看会议',
-            onClick: () => {
-              window.location.assign(
-                notification.type === 'MEETING_ENDED'
-                  ? `/meetings?view=records&meetingId=${notification.meeting!.id}`
-                  : `/meetings/${notification.meeting!.id}`,
-              );
-            },
-          }
-        : undefined,
+    action: notification.meeting
+      ? {
+          label: notification.type === 'MEETING_ENDED' ? '查看会议详情' : '查看会议',
+          onClick: () => {
+            window.location.assign(
+              notification.type === 'MEETING_ENDED'
+                ? `/meetings?view=records&meetingId=${notification.meeting!.id}`
+                : `/meetings/${notification.meeting!.id}`,
+            );
+          },
+        }
+      : undefined,
   });
 }

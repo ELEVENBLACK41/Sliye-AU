@@ -390,24 +390,6 @@ export class MeetingCallService {
       where: { id: meetingId },
       include: meetingDetailInclude,
     });
-    const currentParticipant = updated.participants.find(
-      (participant) => participant.userId === authorization.userId,
-    );
-    this.notificationService.notifyMeetingCallResponse({
-      recipientIds: updated.participants
-        .filter(
-          (participant) => participant.role === MeetingParticipantRole.HOST,
-        )
-        .map((participant) => participant.userId),
-      meetingId: updated.id,
-      meetingTitle: updated.title,
-      actor: {
-        id: authorization.userId,
-        name: currentParticipant?.user.name ?? '受邀成员',
-      },
-      occurredAt: now,
-      accepted: dto.response === 'ACCEPT',
-    });
     return toMeetingDetail(updated);
   }
 

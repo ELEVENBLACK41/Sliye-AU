@@ -78,23 +78,6 @@ export class NotificationService {
     }
   }
 
-  /** 把受邀人的接听或拒绝结果推送给会议主持人。 */
-  notifyMeetingCallResponse(
-    input: MeetingNotificationInput & { accepted: boolean },
-  ): void {
-    for (const recipientId of new Set(input.recipientIds)) {
-      this.gateway.broadcastToUser(recipientId, {
-        id: `meeting-call-response:${input.meetingId}:${input.actor?.id ?? 0}:${input.occurredAt.getTime()}`,
-        type: 'MEETING_CALL_RESPONSE',
-        title: input.accepted ? '成员已接听' : '成员已拒绝',
-        message: `${input.actor?.name ?? '受邀成员'}${input.accepted ? '已接听通话' : '拒绝了通话'}`,
-        occurredAt: input.occurredAt.toISOString(),
-        meeting: { id: input.meetingId, title: input.meetingTitle },
-        actor: input.actor,
-      });
-    }
-  }
-
   /** 通知受邀成员预约会议资料已经更新。 */
   notifyMeetingUpdated(input: MeetingNotificationInput): void {
     this.broadcastMeetingNotification(
