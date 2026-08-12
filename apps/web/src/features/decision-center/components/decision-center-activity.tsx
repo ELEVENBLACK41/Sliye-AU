@@ -28,11 +28,11 @@ type DecisionCenterActivityProps = {
 const eventMeta: Partial<Record<DecisionEventType, { icon: typeof UsersRound; color: string; label: string }>> = {
   MEETING_STARTED: { icon: UsersRound, color: 'text-decision-meeting', label: '会议' },
   PROPOSAL_CREATED: { icon: Lightbulb, color: 'text-decision-proposal', label: '提案' },
-  VOTE_ROUND_OPENED: { icon: Vote, color: 'text-decision-vote', label: '投票' },
+  VOTE_CAST: { icon: Vote, color: 'text-decision-vote', label: '投票' },
   RESOLUTION_CREATED: { icon: FileCheck2, color: 'text-decision-resolution', label: '决议' },
 };
 
-/** 渲染作为页面视觉签名的真实活动热力图。 */
+/** 渲染当前用户的真实活动热力图。 */
 export function DecisionCenterActivity({ activity }: DecisionCenterActivityProps) {
   const [selectedDay, setSelectedDay] = useState(activity.initialDay);
   const [loadingDate, setLoadingDate] = useState<string | null>(null);
@@ -67,15 +67,15 @@ export function DecisionCenterActivity({ activity }: DecisionCenterActivityProps
             <div>
               <div className="flex items-center gap-2">
                 <Activity className="size-4 text-decision-accent" aria-hidden />
-                <CardTitle id="decision-activity-title" className="text-base text-decision-ink">决策活动热力图</CardTitle>
+                <CardTitle id="decision-activity-title" className="text-base text-decision-ink">活动热力图</CardTitle>
               </div>
               <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
-                过去一年会议、提案、投票与正式决议的发生密度；选择一天可在本页查看过程档案。
+                过去一年你发起会议、提交提案、参与投票与确认正式决议的活动密度；选择一天可在本页查看个人活动档案。
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>活跃 <strong className="text-decision-ink">{activeDayCount}</strong> 天</span>
-              <span>关键记录 <strong className="text-decision-ink">{totalEvents}</strong> 条</span>
+              <span>个人活动 <strong className="text-decision-ink">{totalEvents}</strong> 条</span>
               <Badge variant="outline" className="rounded-full bg-background/40">过去一年</Badge>
             </div>
           </div>
@@ -93,8 +93,8 @@ export function DecisionCenterActivity({ activity }: DecisionCenterActivityProps
       <Card className="rounded-[1.5rem] border-border/70 bg-background/55 py-0 shadow-none backdrop-blur-sm">
         <CardHeader className="flex-row items-center justify-between px-5 pt-5 pb-3 sm:px-6">
           <div>
-            <CardTitle className="text-sm">{formatDate(selectedDay.summary.date)} · 当日过程</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">按发生时间倒序，仅呈现四类关键过程记录。</p>
+            <CardTitle className="text-sm">{formatDate(selectedDay.summary.date)} · 当日活动</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">按发生时间倒序，仅呈现你的会议、提案、投票与决议活动。</p>
           </div>
           {errorDate ? (
             <Button size="sm" variant="outline" className="rounded-full" onClick={() => handleDateSelect(errorDate)}>
@@ -106,14 +106,14 @@ export function DecisionCenterActivity({ activity }: DecisionCenterActivityProps
           {loadingDate ? <ActivityEventsSkeleton /> : errorDate ? (
             <p className="rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">当日档案暂时无法加载，请重试。</p>
           ) : selectedDay.events.length === 0 ? (
-            <p className="rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">这一天没有会议、提案、投票或决议记录。</p>
+            <p className="rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">这一天没有你的会议、提案、投票或决议活动。</p>
           ) : (
             <ol className="grid gap-2">
               {selectedDay.events.map((event) => {
                 const meta = eventMeta[event.type] ?? eventMeta.PROPOSAL_CREATED!;
                 const Icon = meta.icon;
                 return (
-                  <li key={event.id} className="grid gap-3 rounded-2xl border bg-background/45 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+                  <li key={`${event.type}-${event.id}`} className="grid gap-3 rounded-2xl border bg-background/45 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
                     <span className={`grid size-8 place-items-center rounded-full bg-muted ${meta.color}`}><Icon className="size-4" aria-hidden /></span>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{event.title}</p>

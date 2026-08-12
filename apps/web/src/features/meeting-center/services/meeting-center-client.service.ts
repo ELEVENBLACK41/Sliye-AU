@@ -98,3 +98,11 @@ export function cancelAppointment(meetingId: number): Promise<MeetingDetail> {
     errorMessage: '预约会议取消失败',
   });
 }
+
+/** 由主持人在计划时间前 30 分钟起确认开始预约会议。 */
+export function startMeeting(meetingId: number): Promise<MeetingDetail> {
+  return requestData(`/api/meetings/${meetingId}/start`, {
+    method: 'POST',
+    errorMessage: '会议开始失败，请稍后重试',
+  });
+}

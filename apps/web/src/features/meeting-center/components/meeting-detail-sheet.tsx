@@ -23,6 +23,7 @@ import {
 import {
   cancelAppointment,
   getMeetingCenterDetail,
+  startMeeting,
   updateAppointment,
 } from '../services/meeting-center-client.service';
 
@@ -84,6 +85,8 @@ export function MeetingDetailSheet({ meeting, open, onOpenChange, onShowInSchedu
 /** 负责单场会议详情的异步加载与重试状态。 */
 function MeetingDetailContent({ meeting }: { meeting: MeetingCenterListItem }) {
   const [requestVersion, setRequestVersion] = useState(0);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const [isStarting, setIsStarting] = useState(false);
   const [state, setState] = useState<{ detail: MeetingDetail | null; error: string | null; loading: boolean }>({
     detail: null,
     error: null,
@@ -109,6 +112,11 @@ function MeetingDetailContent({ meeting }: { meeting: MeetingCenterListItem }) {
       cancelled = true;
     };
   }, [meeting.id, requestVersion]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   if (state.loading)
     return (
@@ -139,9 +147,44 @@ function MeetingDetailContent({ meeting }: { meeting: MeetingCenterListItem }) {
   if (!state.detail) return null;
   const detail = state.detail;
   const canJoin = isMeetingJoinable(detail);
+  const canConfirmStart = isMeetingStartConfirmable(
+    detail,
+    meeting.currentUserRole,
+    currentTime,
+  );
+  const scheduledNotice = getScheduledMeetingNotice(
+    detail,
+    meeting.currentUserRole,
+    currentTime,
+  );
+
+  /** 由主持人在计划时间前 30 分钟开放后确认开始预约会议。 */
+  async function handleStart(): Promise<void> {
+    setIsStarting(true);
+    try {
+      const updated = await startMeeting(detail.id);
+      setState({ detail: updated, error: null, loading: false });
+      toast.success('会议已开始');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '会议开始失败');
+    } finally {
+      setIsStarting(false);
+    }
+  }
 
   return (
     <div className="grid gap-5">
+      {canConfirmStart ? (
+        <Button
+          type="button"
+          onClick={() => void handleStart()}
+          disabled={isStarting}
+          className="h-11 rounded-xl"
+        >
+          {isStarting ? <LoaderCircle aria-hidden className="animate-spin" /> : <Video aria-hidden />}
+          {isStarting ? '正在开始…' : '确认开始会议'}
+        </Button>
+      ) : null}
       {canJoin ? (
         <Button
           type="button"
@@ -151,9 +194,9 @@ function MeetingDetailContent({ meeting }: { meeting: MeetingCenterListItem }) {
           <Video aria-hidden />
           进入会议
         </Button>
-      ) : detail.status === 'SCHEDULED' ? (
+      ) : scheduledNotice ? (
         <p className="rounded-xl bg-muted/60 px-4 py-3 text-center text-sm text-muted-foreground">
-          会议将在计划时间前 30 分钟开放
+          {scheduledNotice}
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -347,11 +390,38 @@ function statusLabel(status: MeetingDetail['status']): string {
 
 /** 判断当前会议是否处于可签发 LiveKit 令牌的入场窗口。 */
 function isMeetingJoinable(detail: MeetingDetail): boolean {
-  if (detail.status === 'LIVE') return true;
-  if (detail.status !== 'SCHEDULED' || !detail.scheduledAt || !detail.scheduledDurationMinutes) return false;
-  const now = Date.now();
-  const scheduled = new Date(detail.scheduledAt).getTime();
-  return now >= scheduled - 30 * 60_000 && now < scheduled + detail.scheduledDurationMinutes * 60_000;
+  return detail.status === 'LIVE';
+}
+
+/** 判断主持人是否可以在计划时间前 30 分钟内确认开始预约会议。 */
+function isMeetingStartConfirmable(
+  detail: MeetingDetail,
+  currentUserRole: MeetingCenterListItem['currentUserRole'],
+  currentTime: number,
+): boolean {
+  return (
+    detail.kind === 'APPOINTMENT' &&
+    detail.status === 'SCHEDULED' &&
+    (currentUserRole === 'HOST' || currentUserRole === 'CO_HOST') &&
+    detail.scheduledAt !== null &&
+    new Date(detail.scheduledAt).getTime() - 30 * 60_000 <= currentTime
+  );
+}
+
+/** 返回预约会议等待阶段的明确说明，避免把“可开始”和“可直接入场”混为一谈。 */
+function getScheduledMeetingNotice(
+  detail: MeetingDetail,
+  currentUserRole: MeetingCenterListItem['currentUserRole'],
+  currentTime: number,
+): string | null {
+  if (detail.status !== 'SCHEDULED' || !detail.scheduledAt) return null;
+  const opensAt = new Date(detail.scheduledAt).getTime() - 30 * 60_000;
+  if (currentTime < opensAt) {
+    return `主持人可于 ${formatDateTime(new Date(opensAt).toISOString())} 起确认开始`;
+  }
+  return currentUserRole === 'ATTENDEE'
+    ? '已进入开放时间，等待主持人确认开始会议'
+    : null;
 }
 
 /** 把 ISO 时间转换为 datetime-local 控件值。 */

@@ -3,27 +3,27 @@
  */
 import type { DecisionEventType, DecisionScope, DecisionStatus, DecisionUserSummary } from './decision.types.ts';
 
-/** 决策中心热力图的一天聚合结果。 */
+/** 当前用户在决策中心热力图中的一天活动聚合结果。 */
 export type DecisionCenterActivityDay = {
   /** 业务时区中的日期键，格式为 YYYY-MM-DD。 */
   date: string;
   /** 当天涉及的去重决策数量。 */
   decisionCount: number;
-  /** 当天四类关键过程事件的总数。 */
+  /** 当天四类个人活动的总数。 */
   eventCount: number;
-  /** 当天开始的去重会议数量。 */
+  /** 当天由当前用户发起的去重会议数量。 */
   meetingCount: number;
-  /** 当天创建的去重提案数量。 */
+  /** 当天由当前用户提交的去重提案数量。 */
   proposalCount: number;
-  /** 当天开启的去重投票轮次数量。 */
+  /** 当天由当前用户实际提交的去重投票轮次数量。 */
   voteCount: number;
-  /** 当天形成的去重正式决议数量。 */
+  /** 当天由当前用户确认的去重正式决议数量。 */
   resolutionCount: number;
 };
 
-/** 当日过程档案中的一条关键事件。 */
+/** 当前用户当日活动档案中的一条关键事件。 */
 export type DecisionCenterActivityEvent = {
-  /** 决策事件主键。 */
+  /** 对应会议事件、提案事件、选票或决议的主键。 */
   id: number;
   /** 事件的稳定业务类型。 */
   type: DecisionEventType;
@@ -44,7 +44,7 @@ export type DecisionCenterActivityEvent = {
   };
 };
 
-/** 选中日期的过程档案。 */
+/** 选中日期的个人活动档案。 */
 export type DecisionCenterActivityDayDetail = {
   /** 选中日期的聚合统计。 */
   summary: DecisionCenterActivityDay;
@@ -52,7 +52,7 @@ export type DecisionCenterActivityDayDetail = {
   events: DecisionCenterActivityEvent[];
 };
 
-/** 决策中心活动区首屏响应。 */
+/** 决策中心个人活动区首屏响应。 */
 export type DecisionCenterActivityResponse = {
   /** 过去 365 个连续日期的活动数据。 */
   days: DecisionCenterActivityDay[];

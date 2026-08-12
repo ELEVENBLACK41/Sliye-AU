@@ -68,7 +68,7 @@ export function DecisionActivityHeatmap({ days, selectedDate, onDateSelect }: De
           height={166}
           viewBox={`0 0 ${layout.width + 34} 166`}
           role="img"
-          aria-label="过去一年决策活动日历热力图"
+          aria-label="过去一年个人活动日历热力图"
         >
           {layout.months.map((month) => (
             <text key={month.key} x={month.x + 28} y={10} className="fill-muted-foreground text-[9px]">

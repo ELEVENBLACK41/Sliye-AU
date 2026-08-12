@@ -45,9 +45,6 @@ export class MeetingLiveKitService {
       select: {
         status: true,
         kind: true,
-        scheduledAt: true,
-        scheduledDurationMinutes: true,
-        ringExpiresAt: true,
         participants: {
           where: { userId: authorization.userId },
           select: {
@@ -66,9 +63,8 @@ export class MeetingLiveKitService {
         status: 404,
       });
     }
-    const now = new Date();
     const participant = meeting.participants[0];
-    const tokenTtlSeconds = this.assertEntryAllowed(meeting, participant, now);
+    const tokenTtlSeconds = this.assertEntryAllowed(meeting, participant);
 
     const configuration = this.readConfiguration();
     const roomName = `${LIVEKIT_ROOM_PREFIX}:${meetingId}`;
@@ -98,20 +94,16 @@ export class MeetingLiveKitService {
     };
   }
 
-  /** 校验快速通话响应和预约会议提前三十分钟开放窗口。 */
+  /** 校验快速通话响应，并要求预约会议已经由主持人确认开始。 */
   private assertEntryAllowed(
     meeting: {
       status: MeetingStatus;
       kind: MeetingKind;
-      scheduledAt: Date | null;
-      scheduledDurationMinutes: number | null;
-      ringExpiresAt: Date | null;
     },
     participant: {
       role: MeetingParticipantRole;
       invitationStatus: MeetingInvitationStatus | null;
     },
-    now: Date,
   ): number {
     if (meeting.kind === MeetingKind.QUICK_CALL) {
       const isHost = participant.role === MeetingParticipantRole.HOST;
@@ -132,39 +124,14 @@ export class MeetingLiveKitService {
       return this.configService.get<number>('LIVEKIT_TOKEN_TTL_SECONDS', 600);
     }
 
-    if (meeting.status === MeetingStatus.LIVE) {
-      return this.configService.get<number>('LIVEKIT_TOKEN_TTL_SECONDS', 600);
-    }
-    if (
-      meeting.status !== MeetingStatus.SCHEDULED ||
-      !meeting.scheduledAt ||
-      !meeting.scheduledDurationMinutes
-    ) {
+    if (meeting.status !== MeetingStatus.LIVE) {
       throw new BusinessException({
         code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
-        message: '当前预约会议不能加入音视频房间',
+        message: '请等待主持人确认开始会议',
         status: 409,
       });
     }
-    const opensAt = new Date(meeting.scheduledAt.getTime() - 30 * 60_000);
-    const closesAt = new Date(
-      meeting.scheduledAt.getTime() + meeting.scheduledDurationMinutes * 60_000,
-    );
-    if (now < opensAt) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.MEETING_ENTRY_NOT_OPEN,
-        message: '预约会议将在计划时间前 30 分钟开放',
-        status: 409,
-      });
-    }
-    if (now >= closesAt) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.MEETING_CALL_EXPIRED,
-        message: '预约会议的最晚入场时间已过',
-        status: 409,
-      });
-    }
-    return Math.max(1, Math.floor((closesAt.getTime() - now.getTime()) / 1000));
+    return this.configService.get<number>('LIVEKIT_TOKEN_TTL_SECONDS', 600);
   }
 
   /** 主持人结束业务会议时删除对应 LiveKit 房间并断开全部在线参与者。 */

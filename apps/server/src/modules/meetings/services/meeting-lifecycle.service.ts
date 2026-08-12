@@ -24,6 +24,9 @@ import {
 } from '../meetings.mapper';
 import { MeetingLiveKitService } from './meeting-livekit.service';
 
+/** 预约会议允许主持人提前确认开始的毫秒数。 */
+const APPOINTMENT_EARLY_START_MILLISECONDS = 30 * 60 * 1000;
+
 @Injectable()
 export class MeetingLifecycleService {
   /** 注入数据库、项目分区授权、LiveKit 房间管理和全站通知服务。 */
@@ -34,7 +37,7 @@ export class MeetingLifecycleService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  /** 开始一场计划会议，并为每项关联决策分别写入开始事件。 */
+  /** 开始一场已进入提前开放窗口的预约会议，并为每项关联决策分别写入开始事件。 */
   async start(
     authorization: AuthorizationContext,
     meetingId: number,
@@ -58,6 +61,15 @@ export class MeetingLifecycleService {
     }
 
     const startedAt = new Date();
+    if (
+      meeting.kind !== MeetingKind.APPOINTMENT ||
+      !meeting.scheduledAt ||
+      startedAt.getTime() <
+        meeting.scheduledAt.getTime() - APPOINTMENT_EARLY_START_MILLISECONDS
+    ) {
+      this.throwInvalidTransition('预约会议将在计划时间前 30 分钟开放确认开始');
+    }
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.meetingSession.updateMany({
         where: { id: meeting.id, status: MeetingStatus.SCHEDULED },

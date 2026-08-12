@@ -163,8 +163,7 @@ describe('MeetingLiveKitService', () => {
     });
   });
 
-  it('预约会议开放前三十分钟内应允许任一受邀人进入', async () => {
-    jest.useFakeTimers().setSystemTime(new Date('2026-08-11T02:00:00.000Z'));
+  it('预约会议仍待开始时应等待主持人确认，不直接签发入场凭证', async () => {
     const { service } = createHarness({
       status: MeetingStatus.SCHEDULED,
       kind: MeetingKind.APPOINTMENT,
@@ -181,10 +180,9 @@ describe('MeetingLiveKitService', () => {
 
     await expect(
       service.issueCredentials(createAuthorization(), 90),
-    ).resolves.toMatchObject({
-      serverUrl: 'wss://nextnest-test.livekit.cloud',
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
     });
-    jest.useRealTimers();
   });
 
   it('快速通话仍在响铃且尚未响应时不能绕过接听直接获取令牌', async () => {

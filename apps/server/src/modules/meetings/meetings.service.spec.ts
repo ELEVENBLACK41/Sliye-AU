@@ -328,6 +328,48 @@ describe('MeetingsService', () => {
     });
   });
 
+  it('预约会议在提前开放窗口前不能由主持人开始', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-24T01:59:00.000Z'));
+    const { lifecycleService, prisma } = createHarness();
+    prisma.meetingSession.findFirst.mockResolvedValue(
+      createMeetingRecord({
+        scheduledAt: new Date('2026-07-24T02:30:00.000Z'),
+      }),
+    );
+
+    await expect(
+      lifecycleService.start(createAuthorization(), 30),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.MEETING_INVALID_STATUS_TRANSITION,
+      status: 409,
+    });
+
+    jest.useRealTimers();
+  });
+
+  it('预约会议在计划时间前三十分钟可以由主持人确认开始', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-24T02:00:00.000Z'));
+    const { lifecycleService, prisma, transaction } = createHarness();
+    prisma.meetingSession.findFirst.mockResolvedValue(
+      createMeetingRecord({
+        scheduledAt: new Date('2026-07-24T02:30:00.000Z'),
+      }),
+    );
+    transaction.meetingSession.findUnique.mockResolvedValue(
+      createMeetingRecord({
+        status: MeetingStatus.LIVE,
+        scheduledAt: new Date('2026-07-24T02:30:00.000Z'),
+        startedAt: new Date('2026-07-24T02:00:00.000Z'),
+      }),
+    );
+
+    await expect(
+      lifecycleService.start(createAuthorization(), 30),
+    ).resolves.toMatchObject({ status: MeetingStatus.LIVE });
+
+    jest.useRealTimers();
+  });
+
   it('普通项目会议不应写入决策时间线', async () => {
     const { lifecycleService, prisma, transaction } = createHarness();
     const scheduled = createMeetingRecord({ decisionLinks: [] });

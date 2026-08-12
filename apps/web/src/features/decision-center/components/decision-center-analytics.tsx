@@ -47,11 +47,11 @@ export function DecisionCenterAnalytics({ analytics }: DecisionCenterAnalyticsPr
         <div>
           <p className="text-[0.65rem] font-medium tracking-[0.18em] text-muted-foreground">PROCESS LENS</p>
           <h2 id="decision-analytics-title" className="mt-1 text-lg font-medium tracking-tight">
-            过程透镜
+            团队过程透镜
           </h2>
         </div>
         <p className="max-w-md text-right text-xs leading-5 text-muted-foreground">
-          这些指标描述决策如何发生，不替你判断决定是否正确。
+          这些指标基于你有权访问的决策范围汇总，描述团队决策如何发生，并非个人活动统计，也不替你判断决定是否正确。
         </p>
       </div>
 

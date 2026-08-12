@@ -1,5 +1,5 @@
 /**
- * 本文件展示当前项目的真实会议摘要，并衔接已有会议房间与记录。
+ * 本文件展示当前项目的真实会议摘要，并衔接新版会议中心详情与独立会议房间。
  */
 import Link from 'next/link';
 import { CalendarDays, Radio, UsersRound, Video } from 'lucide-react';
@@ -74,7 +74,9 @@ export function ProjectMeetingWorkspace({ meetings }: ProjectMeetingWorkspacePro
                 </span>
               </div>
               <Button asChild variant="ghost" size="sm" className="mt-3 h-8 rounded-full px-3 text-xs">
-                <Link href={`/meetings/${meeting.id}`}>进入会议记录</Link>
+                <Link href={getMeetingDestination(meeting)}>
+                  {meeting.status === 'LIVE' ? '进入会议' : '查看会议详情'}
+                </Link>
               </Button>
             </article>
           </li>
@@ -88,4 +90,23 @@ export function ProjectMeetingWorkspace({ meetings }: ProjectMeetingWorkspacePro
 function formatMeetingTime(meeting: MeetingSummary): string {
   const value = meeting.startedAt || meeting.scheduledAt || meeting.createdAt;
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+}
+
+/** 根据会议状态衔接新版会议详情或独立全屏房间，避免回退到旧会议记录页。 */
+function getMeetingDestination(meeting: MeetingSummary): string {
+  if (meeting.status === 'LIVE') return `/meetings/${meeting.id}/room`;
+  const date = toShanghaiDateKey(
+    meeting.scheduledAt ?? meeting.startedAt ?? meeting.createdAt,
+  );
+  return `/meetings?date=${date}&meetingId=${meeting.id}`;
+}
+
+/** 把会议时间转换为会议中心使用的 UTC+8 日期键。 */
+function toShanghaiDateKey(value: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
 }

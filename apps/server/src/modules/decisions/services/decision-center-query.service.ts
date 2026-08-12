@@ -29,14 +29,6 @@ const ACTIVITY_DAY_COUNT = 365;
 const STALLED_THRESHOLD_DAYS = 14;
 /** 一天包含的毫秒数。 */
 const DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
-/** 热力图只统计能够描述决策形成过程的四类事件。 */
-const ACTIVITY_EVENT_TYPES = [
-  DecisionEventType.MEETING_STARTED,
-  DecisionEventType.PROPOSAL_CREATED,
-  DecisionEventType.VOTE_ROUND_OPENED,
-  DecisionEventType.RESOLUTION_CREATED,
-] as const;
-
 /** 活动事件查询返回的最小记录。 */
 type ActivityEventRecord = {
   /** 事件主键。 */
@@ -69,7 +61,7 @@ export class DecisionCenterQueryService {
     private readonly authorizationService: AuthorizationService,
   ) {}
 
-  /** 查询过去 365 天的热力图，并附带最近活跃日的首屏档案。 */
+  /** 查询当前用户过去 365 天的活动热力图，并附带最近活跃日的首屏档案。 */
   async getActivity(
     authorization: AuthorizationContext,
   ): Promise<DecisionCenterActivityResponse> {
@@ -81,6 +73,7 @@ export class DecisionCenterQueryService {
     const startDateKey = offsetDateKey(endDateKey, -(ACTIVITY_DAY_COUNT - 1));
     const events = await this.findActivityEvents(
       decisionWhere,
+      authorization.userId,
       startDateKey,
       endDateKey,
     );
@@ -95,7 +88,7 @@ export class DecisionCenterQueryService {
     };
   }
 
-  /** 查询热力图中某一天的关键过程档案。 */
+  /** 查询当前用户在热力图中某一天的关键活动档案。 */
   async getActivityDay(
     authorization: AuthorizationContext,
     date: string,
@@ -105,7 +98,12 @@ export class DecisionCenterQueryService {
       authorization,
       'decision:read',
     );
-    const events = await this.findActivityEvents(decisionWhere, date, date);
+    const events = await this.findActivityEvents(
+      decisionWhere,
+      authorization.userId,
+      date,
+      date,
+    );
     const summary = buildActivityDays(date, events, 1)[0];
 
     return buildActivityDayDetail(summary, events);
@@ -274,41 +272,138 @@ export class DecisionCenterQueryService {
     };
   }
 
-  /** 在已授权决策范围内查询指定日期区间的四类关键事件。 */
+  /**
+   * 在已授权决策范围内查询当前用户的四类实际动作。
+   *
+   * 投票从选票表读取而非事件日志读取，确保匿名投票也能正确计入投票人自己的活动。
+   */
   private async findActivityEvents(
     decisionWhere: Prisma.DecisionWhereInput,
+    userId: number,
     startDateKey: string,
     endDateKey: string,
   ): Promise<ActivityEventRecord[]> {
-    return this.prisma.decisionEvent.findMany({
-      where: {
-        type: { in: [...ACTIVITY_EVENT_TYPES] },
-        occurredAt: {
-          gte: businessDateStart(startDateKey),
-          lt: businessDateStart(offsetDateKey(endDateKey, 1)),
-        },
-        decision: decisionWhere,
-      },
+    const occurredAt = {
+      gte: businessDateStart(startDateKey),
+      lt: businessDateStart(offsetDateKey(endDateKey, 1)),
+    };
+    const decision = {
       select: {
         id: true,
-        type: true,
         title: true,
-        occurredAt: true,
-        meetingId: true,
-        proposalId: true,
-        voteRoundId: true,
-        resolutionId: true,
-        actor: { select: { id: true, name: true, avatarUrl: true } },
-        decision: {
+        project: { select: { title: true } },
+      },
+    };
+    const [meetingEvents, proposalEvents, ballots, resolutions] =
+      await Promise.all([
+        this.prisma.decisionEvent.findMany({
+          where: {
+            type: DecisionEventType.MEETING_STARTED,
+            actorId: userId,
+            occurredAt,
+            decision: decisionWhere,
+          },
           select: {
             id: true,
             title: true,
-            project: { select: { title: true } },
+            occurredAt: true,
+            meetingId: true,
+            actor: { select: { id: true, name: true, avatarUrl: true } },
+            decision,
           },
-        },
-      },
-      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
-    });
+        }),
+        this.prisma.decisionEvent.findMany({
+          where: {
+            type: DecisionEventType.PROPOSAL_CREATED,
+            actorId: userId,
+            occurredAt,
+            decision: decisionWhere,
+          },
+          select: {
+            id: true,
+            title: true,
+            occurredAt: true,
+            proposalId: true,
+            actor: { select: { id: true, name: true, avatarUrl: true } },
+            decision,
+          },
+        }),
+        this.prisma.decisionBallot.findMany({
+          where: {
+            voterId: userId,
+            submittedAt: occurredAt,
+            round: { decision: decisionWhere },
+          },
+          select: {
+            id: true,
+            submittedAt: true,
+            round: { select: { id: true, title: true, decision } },
+          },
+        }),
+        this.prisma.decisionResolution.findMany({
+          where: {
+            decidedById: userId,
+            decidedAt: occurredAt,
+            decision: decisionWhere,
+          },
+          select: { id: true, title: true, decidedAt: true, decision },
+        }),
+      ]);
+
+    return [
+      ...meetingEvents.map((event) => ({
+        id: event.id,
+        type: DecisionEventType.MEETING_STARTED,
+        title: event.title,
+        occurredAt: event.occurredAt,
+        meetingId: event.meetingId,
+        proposalId: null,
+        voteRoundId: null,
+        resolutionId: null,
+        actor: event.actor,
+        decision: event.decision,
+      })),
+      ...proposalEvents.map((event) => ({
+        id: event.id,
+        type: DecisionEventType.PROPOSAL_CREATED,
+        title: event.title,
+        occurredAt: event.occurredAt,
+        meetingId: null,
+        proposalId: event.proposalId,
+        voteRoundId: null,
+        resolutionId: null,
+        actor: event.actor,
+        decision: event.decision,
+      })),
+      ...ballots.map((ballot) => ({
+        id: ballot.id,
+        type: DecisionEventType.VOTE_CAST,
+        title: `参与投票：${ballot.round.title}`,
+        occurredAt: ballot.submittedAt,
+        meetingId: null,
+        proposalId: null,
+        voteRoundId: ballot.round.id,
+        resolutionId: null,
+        actor: null,
+        decision: ballot.round.decision,
+      })),
+      ...resolutions.map((resolution) => ({
+        id: resolution.id,
+        type: DecisionEventType.RESOLUTION_CREATED,
+        title: `确认决议：${resolution.title}`,
+        occurredAt: resolution.decidedAt,
+        meetingId: null,
+        proposalId: null,
+        voteRoundId: null,
+        resolutionId: resolution.id,
+        actor: null,
+        decision: resolution.decision,
+      })),
+    ].sort(
+      (left, right) =>
+        right.occurredAt.getTime() - left.occurredAt.getTime() ||
+        right.id - left.id,
+    );
   }
 }
 

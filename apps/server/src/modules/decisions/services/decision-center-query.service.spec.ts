@@ -8,6 +8,8 @@ import { DecisionCenterQueryService } from './decision-center-query.service';
 function createContext() {
   const prisma = {
     decisionEvent: { findMany: jest.fn() },
+    decisionBallot: { findMany: jest.fn() },
+    decisionResolution: { findMany: jest.fn() },
     decision: { count: jest.fn(), findMany: jest.fn() },
     decisionProposal: { findMany: jest.fn() },
     decisionVoteRound: { findMany: jest.fn() },
@@ -31,7 +33,7 @@ describe('DecisionCenterQueryService', () => {
       title: '定价策略',
       project: { title: '商业化' },
     };
-    prisma.decisionEvent.findMany.mockResolvedValue([
+    prisma.decisionEvent.findMany.mockResolvedValueOnce([
       {
         id: 1,
         type: DecisionEventType.MEETING_STARTED,
@@ -56,40 +58,29 @@ describe('DecisionCenterQueryService', () => {
         actor: null,
         decision,
       },
+    ]);
+    prisma.decisionEvent.findMany.mockResolvedValueOnce([
       {
         id: 3,
-        type: DecisionEventType.PROPOSAL_CREATED,
         title: '创建提案',
         occurredAt: new Date('2026-08-10T04:00:00.000Z'),
-        meetingId: null,
         proposalId: 8,
-        voteRoundId: null,
-        resolutionId: null,
         actor: null,
         decision,
       },
+    ]);
+    prisma.decisionBallot.findMany.mockResolvedValue([
       {
         id: 4,
-        type: DecisionEventType.VOTE_ROUND_OPENED,
-        title: '开启投票',
-        occurredAt: new Date('2026-08-10T05:00:00.000Z'),
-        meetingId: null,
-        proposalId: null,
-        voteRoundId: 9,
-        resolutionId: null,
-        actor: null,
-        decision,
+        submittedAt: new Date('2026-08-10T05:00:00.000Z'),
+        round: { id: 9, title: '方案表决', decision },
       },
+    ]);
+    prisma.decisionResolution.findMany.mockResolvedValue([
       {
         id: 5,
-        type: DecisionEventType.RESOLUTION_CREATED,
         title: '形成决议',
-        occurredAt: new Date('2026-08-10T06:00:00.000Z'),
-        meetingId: null,
-        proposalId: null,
-        voteRoundId: null,
-        resolutionId: 10,
-        actor: null,
+        decidedAt: new Date('2026-08-10T06:00:00.000Z'),
         decision,
       },
     ]);
