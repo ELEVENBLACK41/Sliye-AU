@@ -5,11 +5,21 @@
 
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { gsap } from 'gsap';
-import { Bell } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { Button } from '@workspace/ui/components/button';
+import { Separator } from '@workspace/ui/components/separator';
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@workspace/ui/components/sheet';
 import { DashboardAccountMenuPlaceholder } from './dashboard-account-menu-placeholder';
 
 /** 工作台主导航的文字与稳定标识。 */
@@ -18,7 +28,7 @@ const navigationItems = [
   { key: 'projects', label: '项目空间', href: '/projects' },
   { key: 'decisions', label: '决策中心', href: '/decisions' },
   { key: 'meetings', label: '会议中心', href: '/meetings' },
-  { key: 'decision', label: '关系图谱', href: undefined },
+  { key: 'graph', label: '关系图谱', href: '/graph' },
   { key: 'members', label: '成员管理', href: undefined },
 ] as const;
 
@@ -34,13 +44,15 @@ export function DashboardTopbarPlaceholder() {
   const pathname = usePathname();
   const router = useRouter();
   const navigationContainerRef = useRef<HTMLElement | null>(null);
-  const activeNavigation: MainNavigationKey = pathname.startsWith('/meetings')
-    ? 'meetings'
-    : pathname.startsWith('/decisions')
-      ? 'decisions'
-      : pathname.startsWith('/projects')
-        ? 'projects'
-        : 'dashboard';
+  const activeNavigation: MainNavigationKey = pathname.startsWith('/graph')
+    ? 'graph'
+    : pathname.startsWith('/meetings')
+      ? 'meetings'
+      : pathname.startsWith('/decisions')
+        ? 'decisions'
+        : pathname.startsWith('/projects')
+          ? 'projects'
+          : 'dashboard';
   const activeNavigationRef = useRef<MainNavigationKey>(activeNavigation);
   const hasPositionedIndicatorRef = useRef(false);
 
@@ -158,7 +170,9 @@ export function DashboardTopbarPlaceholder() {
                 type="button"
                 variant="ghost"
                 aria-current={activeNavigation === item.key ? 'page' : undefined}
+                aria-disabled={!item.href || undefined}
                 data-navigation-key={item.key}
+                disabled={!item.href}
                 className={`relative z-10 ${navigationItemLayoutClass} text-[#31322f] hover:bg-transparent hover:text-[#31322f] active:translate-y-0`}
               >
                 {item.label}
@@ -212,13 +226,55 @@ export function DashboardTopbarPlaceholder() {
 
         <DashboardAccountMenuPlaceholder />
 
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-12 rounded-full bg-white/60 px-5 text-sm font-medium text-[#31322f] hover:bg-white/60 lg:hidden"
-        >
-          菜单
-        </Button>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-12 rounded-full px-5 text-sm font-medium lg:hidden"
+              aria-label="打开主导航菜单"
+            >
+              <Menu className="size-4" aria-hidden />
+              菜单
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[min(22rem,88vw)] bg-background sm:max-w-sm">
+            <SheetHeader>
+              <SheetTitle>主导航</SheetTitle>
+              <SheetDescription>前往 Decision Hub 的一级业务空间。</SheetDescription>
+            </SheetHeader>
+            <Separator />
+            <nav className="flex flex-col gap-2 px-4" aria-label="移动端主导航">
+              {navigationItems.map((item) =>
+                item.href ? (
+                  <SheetClose key={item.key} asChild>
+                    <Button
+                      asChild
+                      variant={activeNavigation === item.key ? 'secondary' : 'ghost'}
+                      className="h-11 w-full justify-start rounded-xl px-4"
+                    >
+                      <Link href={item.href} aria-current={activeNavigation === item.key ? 'page' : undefined}>
+                        {item.label}
+                      </Link>
+                    </Button>
+                  </SheetClose>
+                ) : (
+                  <Button
+                    key={item.key}
+                    type="button"
+                    variant="ghost"
+                    className="h-11 w-full justify-start rounded-xl px-4"
+                    disabled
+                    aria-disabled="true"
+                  >
+                    {item.label}
+                    <span className="ml-auto text-xs text-muted-foreground">暂未开放</span>
+                  </Button>
+                ),
+              )}
+            </nav>
+          </SheetContent>
+        </Sheet>
       </div>
     </header>
   );

@@ -51,6 +51,10 @@ export function ProjectDecisionsWorkspace({
   const searchParams = useSearchParams();
   const [isProcessReplayVisible, setIsProcessReplayVisible] = useState(false);
   const queryDecisionId = parsePositiveInteger(searchParams.get('decisionId'));
+  const focusedProcessNode = parseFocusedProcessNode(
+    searchParams.get('focusType'),
+    searchParams.get('focusId'),
+  );
   const scopedDecisions = useMemo(
     () => initialDecisions.filter((decision) =>
       currentArea.type === 'PUBLIC'
@@ -147,6 +151,7 @@ export function ProjectDecisionsWorkspace({
             currentUser={currentUser}
             canUpdate={canUpdate}
             onChanged={workspace.refresh}
+            focusedProcessNode={focusedProcessNode}
           />
         </div>
       ) : (
@@ -154,6 +159,17 @@ export function ProjectDecisionsWorkspace({
       )}
     </div>
   );
+}
+
+/** 解析关系图谱传入的具体过程节点定位参数，拒绝未知类型和非法主键。 */
+function parseFocusedProcessNode(
+  type: string | null,
+  id: string | null,
+): { type: 'proposal' | 'vote_round' | 'resolution'; id: number } | null {
+  const parsedId = parsePositiveInteger(id);
+  if (!parsedId) return null;
+  if (type !== 'proposal' && type !== 'vote_round' && type !== 'resolution') return null;
+  return { type, id: parsedId };
 }
 
 /** 项目级回放视图属性。 */

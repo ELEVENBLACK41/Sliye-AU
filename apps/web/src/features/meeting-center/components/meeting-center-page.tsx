@@ -39,15 +39,24 @@ type MeetingCenterPageProps = {
   overview?: MeetingCenterOverviewResponse;
   /** 记录视图数据。 */
   records?: MeetingCenterRecordsResponse;
+  /** 通过 URL 主键独立读取的目标会议，避免受周范围或记录分页限制。 */
+  selectedMeeting?: MeetingCenterListItem;
 };
 
 /** 渲染 URL 驱动的新版会议中心首页。 */
-export function MeetingCenterPage({ query, projects, overview, records }: MeetingCenterPageProps) {
+export function MeetingCenterPage({
+  query,
+  projects,
+  overview,
+  records,
+  selectedMeeting: initialSelectedMeeting,
+}: MeetingCenterPageProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingCenterListItem | null>(() => {
     if (!query.meetingId) return null;
     return (
+      initialSelectedMeeting ??
       records?.items.find((meeting) => meeting.id === query.meetingId) ??
       overview?.calendarItems.find((meeting) => meeting.id === query.meetingId) ??
       overview?.activeMeetings.find((meeting) => meeting.id === query.meetingId) ??

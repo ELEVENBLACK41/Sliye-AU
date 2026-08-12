@@ -23,6 +23,7 @@ import { MeetingsModule } from './modules/meetings/meetings.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
+import { RelationshipGraphModule } from './modules/relationship-graph/relationship-graph.module';
 // import { AppController } from './app.controller';
 // import { AppService } from './app.service';
 
@@ -41,6 +42,7 @@ import { RequestContextMiddleware } from './common/middleware/request-context.mi
     DecisionsModule,
     MeetingsModule,
     NotificationsModule,
+    RelationshipGraphModule,
   ],
   providers: [
     {

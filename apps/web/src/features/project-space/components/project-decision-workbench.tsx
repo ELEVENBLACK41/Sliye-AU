@@ -3,7 +3,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, MessageCircleMore, UsersRound } from 'lucide-react';
 import type { ProjectUserSummary } from '@workspace/contracts/projects';
 
@@ -23,16 +23,40 @@ type ProjectDecisionWorkbenchProps = {
   currentUser: ProjectUserSummary;
   canUpdate: boolean;
   onChanged: () => void;
+  /** 从关系图谱进入时需要定位的具体过程实体。 */
+  focusedProcessNode: {
+    type: 'proposal' | 'vote_round' | 'resolution';
+    id: number;
+  } | null;
 };
 
 /** 渲染一项决策从草稿到正式决议的完整推进界面。 */
-export function ProjectDecisionWorkbench({ data, currentUser, canUpdate, onChanged }: ProjectDecisionWorkbenchProps) {
+export function ProjectDecisionWorkbench({
+  data,
+  currentUser,
+  canUpdate,
+  onChanged,
+  focusedProcessNode,
+}: ProjectDecisionWorkbenchProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const workbenchRef = useRef<HTMLDivElement | null>(null);
   const decision = data.decision;
   const isOwner = decision.owner?.id === currentUser.id;
   const canStartDiscussion = canUpdate && isOwner && decision.status === 'DRAFT';
   const visibleParticipants = decision.participants.slice(0, 8);
+
+  /** 首次从关系图谱进入或目标变化时，将具体过程卡片滚动到工作台可视区域。 */
+  useEffect(() => {
+    if (!focusedProcessNode) return;
+    const target = workbenchRef.current?.querySelector<HTMLElement>(
+      `[data-process-node="${focusedProcessNode.type}:${focusedProcessNode.id}"]`,
+    );
+    if (!target) return;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
+    target.focus({ preventScroll: true });
+  }, [focusedProcessNode]);
 
   /** 将负责人管理的草稿决策推进到讨论阶段。 */
   async function handleStartDiscussion(): Promise<void> {
@@ -49,7 +73,7 @@ export function ProjectDecisionWorkbench({ data, currentUser, canUpdate, onChang
   }
 
   return (
-    <div className="grid gap-4 p-4 sm:p-5">
+    <div ref={workbenchRef} className="grid gap-4 p-4 sm:p-5">
       <section className="rounded-2xl border border-project-accent/35 bg-project-accent-soft/20 p-4" aria-labelledby="focused-decision-title">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -91,10 +115,28 @@ export function ProjectDecisionWorkbench({ data, currentUser, canUpdate, onChang
       ) : null}
 
       <div className="grid items-start gap-4 xl:grid-cols-2">
-        <ProjectDecisionProposalPanel data={data} currentUserId={currentUser.id} canUpdate={canUpdate} onChanged={onChanged} />
-        <ProjectDecisionVotePanel data={data} currentUserId={currentUser.id} canUpdate={canUpdate} onChanged={onChanged} />
+        <ProjectDecisionProposalPanel
+          data={data}
+          currentUserId={currentUser.id}
+          canUpdate={canUpdate}
+          onChanged={onChanged}
+          focusedProposalId={focusedProcessNode?.type === 'proposal' ? focusedProcessNode.id : null}
+        />
+        <ProjectDecisionVotePanel
+          data={data}
+          currentUserId={currentUser.id}
+          canUpdate={canUpdate}
+          onChanged={onChanged}
+          focusedVoteRoundId={focusedProcessNode?.type === 'vote_round' ? focusedProcessNode.id : null}
+        />
       </div>
-      <ProjectDecisionResolutionPanel data={data} currentUserId={currentUser.id} canUpdate={canUpdate} onChanged={onChanged} />
+      <ProjectDecisionResolutionPanel
+        data={data}
+        currentUserId={currentUser.id}
+        canUpdate={canUpdate}
+        onChanged={onChanged}
+        focusedResolutionId={focusedProcessNode?.type === 'resolution' ? focusedProcessNode.id : null}
+      />
     </div>
   );
 }

@@ -48,6 +48,8 @@ type ProjectDecisionProposalPanelProps = {
   canUpdate: boolean;
   /** 写操作成功后刷新工作台。 */
   onChanged: () => void;
+  /** 从关系图谱进入时需要聚焦的提案主键。 */
+  focusedProposalId: number | null;
 };
 
 /** 渲染提案创建入口与按状态排列的真实提案。 */
@@ -56,6 +58,7 @@ export function ProjectDecisionProposalPanel({
   currentUserId,
   canUpdate,
   onChanged,
+  focusedProposalId,
 }: ProjectDecisionProposalPanelProps) {
   const participantRole = data.decision.participants.find((item) => item.user.id === currentUserId)?.role;
   const canCreate =
@@ -77,7 +80,12 @@ export function ProjectDecisionProposalPanel({
       {data.proposals.length ? (
         <ul className="divide-y">
           {data.proposals.map((proposal) => (
-            <li key={proposal.id} className="grid gap-3 px-4 py-3">
+            <li
+              key={proposal.id}
+              data-process-node={`proposal:${proposal.id}`}
+              tabIndex={proposal.id === focusedProposalId ? -1 : undefined}
+              className="grid gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">

@@ -9,3 +9,4 @@ export type * from './decisions/index.ts';
 export type * from './projects/index.ts';
 export type * from './meetings/index.ts';
 export type * from './notifications/index.ts';
+export type * from './relationship-graph/index.ts';

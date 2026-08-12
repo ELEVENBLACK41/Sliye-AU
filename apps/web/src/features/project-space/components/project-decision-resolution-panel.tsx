@@ -30,6 +30,8 @@ type ProjectDecisionResolutionPanelProps = {
   currentUserId: number;
   canUpdate: boolean;
   onChanged: () => void;
+  /** 从关系图谱进入时需要聚焦的正式决议主键。 */
+  focusedResolutionId: number | null;
 };
 
 /** 展示最终结论，并只向负责人开放收口操作。 */
@@ -38,6 +40,7 @@ export function ProjectDecisionResolutionPanel({
   currentUserId,
   canUpdate,
   onChanged,
+  focusedResolutionId,
 }: ProjectDecisionResolutionPanelProps) {
   const canResolve =
     canUpdate && data.decision.status === 'DISCUSSING' && data.decision.owner?.id === currentUserId;
@@ -54,7 +57,12 @@ export function ProjectDecisionResolutionPanel({
       {data.resolutions.length ? (
         <div className="grid gap-3 p-3">
           {data.resolutions.map((resolution) => (
-            <article key={resolution.id} className="rounded-xl border bg-primary p-4 text-primary-foreground">
+            <article
+              key={resolution.id}
+              data-process-node={`resolution:${resolution.id}`}
+              tabIndex={resolution.id === focusedResolutionId ? -1 : undefined}
+              className="rounded-xl border bg-primary p-4 text-primary-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <BadgeCheck className="size-4" aria-hidden />
                 <h4 className="font-semibold">{resolution.title}</h4>

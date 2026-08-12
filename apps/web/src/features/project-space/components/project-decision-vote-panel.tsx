@@ -36,10 +36,18 @@ type ProjectDecisionVotePanelProps = {
   currentUserId: number;
   canUpdate: boolean;
   onChanged: () => void;
+  /** 从关系图谱进入时需要聚焦的投票轮次主键。 */
+  focusedVoteRoundId: number | null;
 };
 
 /** 渲染真实投票轮次，并按参与身份开放对应操作。 */
-export function ProjectDecisionVotePanel({ data, currentUserId, canUpdate, onChanged }: ProjectDecisionVotePanelProps) {
+export function ProjectDecisionVotePanel({
+  data,
+  currentUserId,
+  canUpdate,
+  onChanged,
+  focusedVoteRoundId,
+}: ProjectDecisionVotePanelProps) {
   const participantRole = data.decision.participants.find((item) => item.user.id === currentUserId)?.role;
   const isOwner = data.decision.owner?.id === currentUserId;
   const canManage = canUpdate && data.decision.status === 'DISCUSSING' && isOwner;
@@ -72,6 +80,7 @@ export function ProjectDecisionVotePanel({ data, currentUserId, canUpdate, onCha
               canVote={canVote}
               canClose={canManage && round.status === 'OPEN'}
               onChanged={onChanged}
+              isFocused={round.id === focusedVoteRoundId}
             />
           ))}
         </div>
@@ -93,10 +102,11 @@ type VoteRoundCardProps = {
   canVote: boolean;
   canClose: boolean;
   onChanged: () => void;
+  isFocused: boolean;
 };
 
 /** 渲染开放选票或关闭后的稳定统计。 */
-function VoteRoundCard({ decisionId, round, canVote, canClose, onChanged }: VoteRoundCardProps) {
+function VoteRoundCard({ decisionId, round, canVote, canClose, onChanged, isFocused }: VoteRoundCardProps) {
   const [optionId, setOptionId] = useState('');
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState(false);
@@ -122,7 +132,11 @@ function VoteRoundCard({ decisionId, round, canVote, canClose, onChanged }: Vote
   }
 
   return (
-    <article className="rounded-xl border bg-background p-3">
+    <article
+      data-process-node={`vote_round:${round.id}`}
+      tabIndex={isFocused ? -1 : undefined}
+      className="rounded-xl border bg-background p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-sm font-medium">{round.title}</p>
