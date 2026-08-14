@@ -2,7 +2,7 @@
  * 本文件定义关系图谱 Canvas 的运行时节点、主题颜色与外部控制接口。
  */
 
-import type { SimulationNodeDatum, ZoomTransform } from 'd3';
+import type { SimulationNodeDatum } from 'd3';
 import type {
   RelationshipGraphEdge,
   RelationshipGraphNode,
@@ -34,16 +34,6 @@ export type RelationshipGraphCanvasTheme = {
   focusColor: string;
   /** 画布背景颜色。 */
   backgroundColor: string;
-};
-
-/** 画布当前尺寸和缩放状态。 */
-export type RelationshipGraphViewport = {
-  /** CSS 像素宽度。 */
-  width: number;
-  /** CSS 像素高度。 */
-  height: number;
-  /** 当前 D3 缩放变换。 */
-  transform: ZoomTransform;
 };
 
 /** 页面工具栏可以调用的画布命令。 */
