@@ -229,6 +229,33 @@ function drawRelationshipGraphArrow(
   context.fill();
 }
 
+/** 把前景关系线裁到两个端点的圆周之外，避免提升层级后覆盖节点本身。 */
+function drawRelationshipGraphClippedLine(
+  context: CanvasRenderingContext2D,
+  source: RelationshipGraphSimulationNode,
+  target: RelationshipGraphSimulationNode,
+  sourceRadius: number,
+  targetRadius: number,
+): void {
+  const sourceX = source.x ?? 0;
+  const sourceY = source.y ?? 0;
+  const targetX = target.x ?? 0;
+  const targetY = target.y ?? 0;
+  const deltaX = targetX - sourceX;
+  const deltaY = targetY - sourceY;
+  const distance = Math.hypot(deltaX, deltaY);
+  const sourceInset = sourceRadius + 2;
+  const targetInset = targetRadius + 2;
+  if (distance <= sourceInset + targetInset) return;
+
+  const unitX = deltaX / distance;
+  const unitY = deltaY / distance;
+  context.beginPath();
+  context.moveTo(sourceX + unitX * sourceInset, sourceY + unitY * sourceInset);
+  context.lineTo(targetX - unitX * targetInset, targetY - unitY * targetInset);
+  context.stroke();
+}
+
 /** 封装关系图谱的完整 D3 Canvas 生命周期。 */
 export function useRelationshipGraphCanvas({
   canvasRef,
@@ -303,7 +330,8 @@ export function useRelationshipGraphCanvas({
         settings: currentSettings,
       } = visualStateRef.current;
       const hoveredNodeId = hoveredNodeIdRef.current;
-      const activeNodeId = draggedNodeIdRef.current ?? currentSelectedId;
+      const draggedNodeId = draggedNodeIdRef.current;
+      const activeNodeId = draggedNodeId ?? currentSelectedId;
       const hoverProgressByNodeId = hoverProgressByNodeIdRef.current;
       let hoverProgress = 0;
       for (const progress of hoverProgressByNodeId.values()) {
@@ -318,6 +346,9 @@ export function useRelationshipGraphCanvas({
         const source = getEndpointNode(edge.source, nodeByIdRef.current);
         const target = getEndpointNode(edge.target, nodeByIdRef.current);
         if (!source || !target) continue;
+        if (draggedNodeId && (source.id === draggedNodeId || target.id === draggedNodeId)) {
+          continue;
+        }
 
         const touchesActive =
           !activeNodeId || source.id === activeNodeId || target.id === activeNodeId;
@@ -458,6 +489,72 @@ export function useRelationshipGraphCanvas({
           y + radius + 5,
           170,
         );
+      }
+
+      if (draggedNodeId) {
+        for (const edge of edgesRef.current) {
+          const source = getEndpointNode(edge.source, nodeByIdRef.current);
+          const target = getEndpointNode(edge.target, nodeByIdRef.current);
+          if (
+            !source ||
+            !target ||
+            (source.id !== draggedNodeId && target.id !== draggedNodeId)
+          ) {
+            continue;
+          }
+
+          const sourceHighlightProgress = Math.max(
+            source.id === currentSelectedId ? selectionProgress : 0,
+            hoverProgressByNodeId.get(source.id) ?? 0,
+          );
+          const targetHighlightProgress = Math.max(
+            target.id === currentSelectedId ? selectionProgress : 0,
+            hoverProgressByNodeId.get(target.id) ?? 0,
+          );
+          const sourceRadius =
+            getRelationshipGraphNodeRadius(
+              source,
+              degreeByIdRef.current.get(source.id) ?? 0,
+              currentSettings.appearance.nodeSizeScale,
+            ) * (1 + sourceHighlightProgress * 0.12);
+          const targetRadius =
+            getRelationshipGraphNodeRadius(
+              target,
+              degreeByIdRef.current.get(target.id) ?? 0,
+              currentSettings.appearance.nodeSizeScale,
+            ) * (1 + targetHighlightProgress * 0.12);
+          const touchesSearch =
+            !searchIsActive ||
+            currentSearchMatchIds.has(source.id) ||
+            currentSearchMatchIds.has(target.id);
+          const lineWidth =
+            (0.55 + Math.min(edge.weight, 5) * 0.28) *
+            currentSettings.appearance.linkWidthScale;
+          const edgeHighlightProgress = Math.max(
+            sourceHighlightProgress,
+            targetHighlightProgress,
+          );
+          const linkColor = d3.interpolateRgb(
+            currentTheme.linkColor,
+            currentTheme.linkHighlightColor,
+          )(edgeHighlightProgress);
+
+          context.globalAlpha = 0.62 * (touchesSearch ? 1 : 0.22);
+          context.strokeStyle = linkColor;
+          context.fillStyle = linkColor;
+          context.lineWidth = lineWidth;
+          drawRelationshipGraphClippedLine(
+            context,
+            source,
+            target,
+            sourceRadius,
+            targetRadius,
+          );
+
+          if (currentSettings.appearance.showArrows && edge.directed) {
+            drawRelationshipGraphArrow(context, source, target, targetRadius, lineWidth);
+          }
+        }
       }
 
       context.restore();
