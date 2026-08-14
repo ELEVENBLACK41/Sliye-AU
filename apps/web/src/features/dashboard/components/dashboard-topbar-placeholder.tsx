@@ -24,7 +24,7 @@ import { DashboardAccountMenuPlaceholder } from './dashboard-account-menu-placeh
 
 /** 工作台主导航的文字与稳定标识。 */
 const navigationItems = [
-  { key: 'dashboard', label: '工作台', href: '/dashboardnew' },
+  { key: 'dashboard', label: '工作台', href: '/dashboard' },
   { key: 'projects', label: '项目空间', href: '/projects' },
   { key: 'decisions', label: '决策中心', href: '/decisions' },
   { key: 'meetings', label: '会议中心', href: '/meetings' },

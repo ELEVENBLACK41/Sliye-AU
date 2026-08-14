@@ -11,8 +11,9 @@
  */
 'use client';
 
-import { LogOut, Settings, UserRound } from 'lucide-react';
+import { Loader2, LogOut, Settings, UserRound } from 'lucide-react';
 
+import { useLogout } from '@/features/auth/hooks/use-logout';
 import { Button } from '@workspace/ui/components/button';
 import {
   DropdownMenu,
@@ -24,8 +25,10 @@ import {
   DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 
-/** 渲染暂不执行路由跳转和退出操作的用户下拉菜单。 */
+/** 渲染用户下拉菜单，并提供右上角退出登录入口。 */
 export function DashboardAccountMenuPlaceholder() {
+  const { isPending, logout } = useLogout();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -72,9 +75,11 @@ export function DashboardAccountMenuPlaceholder() {
         <DropdownMenuItem
           variant="destructive"
           className="rounded-xl px-3 py-2.5 focus:bg-red-50"
+          disabled={isPending}
+          onSelect={() => void logout()}
         >
-          <LogOut aria-hidden />
-          退出登录
+          {isPending ? <Loader2 className="animate-spin" aria-hidden /> : <LogOut aria-hidden />}
+          {isPending ? '正在退出...' : '退出登录'}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

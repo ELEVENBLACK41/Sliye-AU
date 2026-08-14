@@ -19,6 +19,7 @@ import type {
   GrantableDataScope,
 } from '@workspace/contracts/access';
 
+import { DateTimePicker } from '@/components/date-time-picker';
 import { Avatar, AvatarFallback, AvatarImage } from '@workspace/ui/components/avatar';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -259,7 +260,7 @@ function MemberAuthorizationSheet({ user, open, onOpenChange, departments, roles
   const [permissionId, setPermissionId] = useState('');
   const [effect, setEffect] = useState<AccessPermissionEffect>('ALLOW');
   const [scope, setScope] = useState<GrantableDataScope>('ALL');
-  const [expiresAt, setExpiresAt] = useState('');
+  const [expiresAt, setExpiresAt] = useState<Date>();
   const { pendingAction, message, runMutation } = useOrganizationMutation();
   const flattenedDepartments = flattenOrganizationDepartments(departments);
   const selectedPermission = permissions.find((item) => String(item.id) === permissionId);
@@ -297,7 +298,7 @@ function MemberAuthorizationSheet({ user, open, onOpenChange, departments, roles
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+      <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-3xl">
         <SheetHeader className="border-b px-5 py-5">
           <SheetTitle className="text-xl">{user?.name || '成员授权'}</SheetTitle>
           <SheetDescription>{user?.email} · 查看并维护组织归属与最终权限</SheetDescription>
@@ -335,7 +336,7 @@ function MemberAuthorizationSheet({ user, open, onOpenChange, departments, roles
               <section className="grid gap-3" aria-labelledby="direct-permissions-title">
                 <div><h3 id="direct-permissions-title" className="font-semibold">直接授权</h3><p className="mt-1 text-xs text-muted-foreground">直接拒绝会覆盖同一权限码的所有角色授权，且范围只能为“全部数据”。</p></div>
                 <div className="grid gap-2">{detail.user.directPermissions.length ? detail.user.directPermissions.map((grant) => <div key={grant.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3"><div><p className="font-mono text-xs">{grant.permission.code}</p><p className="mt-1 text-xs text-muted-foreground">{grant.effect === 'ALLOW' ? '直接允许' : '直接拒绝'} · {scopeLabels[grant.scopeType]}{grant.expiresAt ? ` · ${formatDateTime(grant.expiresAt)} 到期` : ' · 长期有效'}</p></div>{capabilities.canAssignUserPermission ? <Button variant="ghost" size="sm" disabled={Boolean(pendingAction)} onClick={() => void mutateAndReload(`remove-permission-${grant.id}`, '直接授权已移除', () => removeOrganizationDirectPermission(detail.user.id, grant.id))}>移除</Button> : null}</div>) : <p className="text-sm text-muted-foreground">没有直接授权记录</p>}</div>
-                {capabilities.canAssignUserPermission ? <div className="grid gap-2 rounded-2xl border bg-muted/30 p-4 sm:grid-cols-2"><div className="grid gap-1.5 sm:col-span-2"><Label>权限码</Label><Select value={permissionId} onValueChange={handlePermissionChange}><SelectTrigger><SelectValue placeholder="选择权限码" /></SelectTrigger><SelectContent>{permissions.map((permission) => <SelectItem key={permission.id} value={String(permission.id)}>{permission.code}</SelectItem>)}</SelectContent></Select></div><div className="grid gap-1.5"><Label>效果</Label><Select value={effect} onValueChange={(value) => { const next = value as AccessPermissionEffect; setEffect(next); if (next === 'DENY') setScope('ALL'); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALLOW">直接允许</SelectItem><SelectItem value="DENY">直接拒绝</SelectItem></SelectContent></Select></div><div className="grid gap-1.5"><Label>数据范围</Label><Select value={scope} onValueChange={(value) => setScope(value as GrantableDataScope)} disabled={effect === 'DENY'}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(effect === 'DENY' ? (['ALL'] as GrantableDataScope[]) : selectedPermission?.allowedScopes ?? []).map((item) => <SelectItem key={item} value={item}>{scopeLabels[item]}</SelectItem>)}</SelectContent></Select></div><div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="direct-permission-expiration">到期时间（可选）</Label><Input id="direct-permission-expiration" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></div><Button className="sm:col-span-2" disabled={!permissionId || Boolean(pendingAction)} onClick={() => void mutateAndReload('assign-permission', '直接授权已添加', () => assignOrganizationDirectPermission(detail.user.id, { permissionId: Number(permissionId), effect, scopeType: effect === 'DENY' ? 'ALL' : scope, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null }))}>添加直接授权</Button></div> : null}
+                {capabilities.canAssignUserPermission ? <div className="grid gap-2 rounded-2xl border bg-muted/30 p-4 sm:grid-cols-2"><div className="grid gap-1.5 sm:col-span-2"><Label>权限码</Label><Select value={permissionId} onValueChange={handlePermissionChange}><SelectTrigger><SelectValue placeholder="选择权限码" /></SelectTrigger><SelectContent>{permissions.map((permission) => <SelectItem key={permission.id} value={String(permission.id)}>{permission.code}</SelectItem>)}</SelectContent></Select></div><div className="grid gap-1.5"><Label>效果</Label><Select value={effect} onValueChange={(value) => { const next = value as AccessPermissionEffect; setEffect(next); if (next === 'DENY') setScope('ALL'); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALLOW">直接允许</SelectItem><SelectItem value="DENY">直接拒绝</SelectItem></SelectContent></Select></div><div className="grid gap-1.5"><Label>数据范围</Label><Select value={scope} onValueChange={(value) => setScope(value as GrantableDataScope)} disabled={effect === 'DENY'}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(effect === 'DENY' ? (['ALL'] as GrantableDataScope[]) : selectedPermission?.allowedScopes ?? []).map((item) => <SelectItem key={item} value={item}>{scopeLabels[item]}</SelectItem>)}</SelectContent></Select></div><div className="sm:col-span-2"><DateTimePicker id="direct-permission-expiration" label="到期时间（可选）" value={expiresAt} disablePast onChange={setExpiresAt} /></div><Button className="sm:col-span-2" disabled={!permissionId || Boolean(pendingAction)} onClick={() => void mutateAndReload('assign-permission', '直接授权已添加', () => assignOrganizationDirectPermission(detail.user.id, { permissionId: Number(permissionId), effect, scopeType: effect === 'DENY' ? 'ALL' : scope, expiresAt: expiresAt?.toISOString() ?? null }))}>添加直接授权</Button></div> : null}
               </section>
             </>
           ) : null}

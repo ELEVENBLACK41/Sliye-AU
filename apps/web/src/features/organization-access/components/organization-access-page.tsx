@@ -78,7 +78,10 @@ export function OrganizationAccessPage({ query, data, capabilities }: Organizati
       </header> */}
 
       <Tabs value={query.section} onValueChange={handleSectionChange} className="min-h-0 flex-1 gap-5 lg:overflow-hidden">
-        <TabsList variant="line" className="h-auto max-w-full justify-start gap-1 overflow-x-auto p-0">
+        <TabsList
+          variant="line"
+          className="h-auto max-w-full justify-start gap-1 overflow-x-auto overflow-y-hidden p-0"
+        >
           {visibleSections.map((section) => {
             const Icon = section.icon;
             return <TabsTrigger key={section.value} value={section.value} className="h-10 flex-none rounded-xl border px-4 data-[state=active]:border-organization-accent data-[state=active]:bg-organization-accent-soft"><Icon aria-hidden />{section.label}</TabsTrigger>;
