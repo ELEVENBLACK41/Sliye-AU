@@ -77,10 +77,7 @@ function getEndpointNode(
 
 /** 从主题变量读取 Canvas 可直接使用的计算颜色。 */
 function readCssColor(styles: CSSStyleDeclaration, name: string, fallback: string): string {
-  return resolveRelationshipGraphCanvasColor(
-    styles.getPropertyValue(name).trim() || fallback,
-    fallback,
-  );
+  return resolveRelationshipGraphCanvasColor(styles.getPropertyValue(name).trim() || fallback, fallback);
 }
 
 /** 从鼠标或单指触控原生事件中读取客户端坐标，多指手势交由 D3 zoom 处理。 */
@@ -110,11 +107,7 @@ function readRelationshipGraphCanvasTheme(): RelationshipGraphCanvasTheme {
       USER: readCssColor(styles, '--chart-3', 'CanvasText'),
     },
     linkColor: readCssColor(styles, '--border', 'GrayText'),
-    linkHighlightColor: readCssColor(
-      styles,
-      '--relationship-graph-link-highlight',
-      'Highlight',
-    ),
+    linkHighlightColor: readCssColor(styles, '--relationship-graph-link-highlight', 'Highlight'),
     labelColor: readCssColor(styles, '--foreground', 'CanvasText'),
     focusColor: readCssColor(styles, '--ring', 'Highlight'),
     backgroundColor: readCssColor(styles, '--card', 'Canvas'),
@@ -131,20 +124,6 @@ function getRelationshipGraphNodeRadius(
   return (4.2 + Math.min(Math.sqrt(degree) * 1.15, 5.5)) * typeScale * nodeSizeScale;
 }
 
-/** 用高连接度节点靠内、低连接度节点靠外的规则生成圆盘布局目标半径。 */
-function getRelationshipGraphRadialTarget(
-  node: RelationshipGraphSimulationNode,
-  nodeCount: number,
-  degree: number,
-  maxDegree: number,
-): number {
-  if (node.isCurrentUser) return 0;
-
-  const diskRadius = Math.max(160, Math.sqrt(nodeCount) * 30);
-  const degreeRatio = Math.sqrt(degree / Math.max(maxDegree, 1));
-  return diskRadius * (0.32 + (1 - degreeRatio) * 0.68);
-}
-
 /** 把线性进度转换成自然减速的选中动效进度。 */
 function easeOutRelationshipGraphSelection(progress: number): number {
   return 1 - Math.pow(1 - progress, 3);
@@ -152,7 +131,7 @@ function easeOutRelationshipGraphSelection(progress: number): number {
 
 /** 根据缩放倍率计算普通标签的渐显进度，避免适配视图一次展示全部文字。 */
 function getRelationshipGraphLabelRevealProgress(scale: number): number {
-  const progress = Math.max(0, Math.min(1, (scale - 0.9) / 0.9));
+  const progress = Math.max(0, Math.min(1, (scale - 1.15) / 0.85));
   return progress * progress * (3 - 2 * progress);
 }
 
@@ -188,14 +167,14 @@ function resolveRelationshipGraphCanvasColor(candidate: string, fallback: string
   return `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`;
 }
 
-/** 解除重播前遗留的节点固定位置，让 D3 可以重新计算布局。 */
-function releaseRelationshipGraphNodePositions(
-  nodes: RelationshipGraphSimulationNode[],
-): void {
-  for (const node of nodes) {
-    node.fx = null;
-    node.fy = null;
-  }
+/** 按黄金角生成稳定的圆盘初始坐标，避免节点重叠在同一个模拟起点。 */
+function getRelationshipGraphInitialPosition(index: number): { x: number; y: number } {
+  const angle = index * 2.399963229728653;
+  const radius = 18 * Math.sqrt(index);
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
+  };
 }
 
 /** 在有向连线末端绘制不遮挡目标节点的小箭头。 */
@@ -227,33 +206,6 @@ function drawRelationshipGraphArrow(
   );
   context.closePath();
   context.fill();
-}
-
-/** 把前景关系线裁到两个端点的圆周之外，避免提升层级后覆盖节点本身。 */
-function drawRelationshipGraphClippedLine(
-  context: CanvasRenderingContext2D,
-  source: RelationshipGraphSimulationNode,
-  target: RelationshipGraphSimulationNode,
-  sourceRadius: number,
-  targetRadius: number,
-): void {
-  const sourceX = source.x ?? 0;
-  const sourceY = source.y ?? 0;
-  const targetX = target.x ?? 0;
-  const targetY = target.y ?? 0;
-  const deltaX = targetX - sourceX;
-  const deltaY = targetY - sourceY;
-  const distance = Math.hypot(deltaX, deltaY);
-  const sourceInset = sourceRadius + 2;
-  const targetInset = targetRadius + 2;
-  if (distance <= sourceInset + targetInset) return;
-
-  const unitX = deltaX / distance;
-  const unitY = deltaY / distance;
-  context.beginPath();
-  context.moveTo(sourceX + unitX * sourceInset, sourceY + unitY * sourceInset);
-  context.lineTo(targetX - unitX * targetInset, targetY - unitY * targetInset);
-  context.stroke();
 }
 
 /** 封装关系图谱的完整 D3 Canvas 生命周期。 */
@@ -341,37 +293,36 @@ export function useRelationshipGraphCanvas({
       const selectionProgress = currentSelectedId
         ? easeOutRelationshipGraphSelection(selectionAnimationProgressRef.current)
         : 0;
+      const hoverLayerNodeIds = new Set<string>();
+      if (hoveredNodeId) hoverLayerNodeIds.add(hoveredNodeId);
+      if (draggedNodeId) hoverLayerNodeIds.add(draggedNodeId);
+      for (const [nodeId, progress] of hoverProgressByNodeId) {
+        if (progress > 0.001) hoverLayerNodeIds.add(nodeId);
+      }
+      const relatedHoverNodeIds = new Set<string>();
+      for (const nodeId of hoverLayerNodeIds) {
+        relatedHoverNodeIds.add(nodeId);
+        for (const neighborId of adjacencyRef.current.get(nodeId) ?? []) {
+          relatedHoverNodeIds.add(neighborId);
+        }
+      }
 
       for (const edge of edgesRef.current) {
         const source = getEndpointNode(edge.source, nodeByIdRef.current);
         const target = getEndpointNode(edge.target, nodeByIdRef.current);
         if (!source || !target) continue;
-        if (draggedNodeId && (source.id === draggedNodeId || target.id === draggedNodeId)) {
-          continue;
-        }
 
-        const touchesActive =
-          !activeNodeId || source.id === activeNodeId || target.id === activeNodeId;
+        const touchesActive = !activeNodeId || source.id === activeNodeId || target.id === activeNodeId;
         const touchesSelectedNode =
-          Boolean(currentSelectedId) &&
-          (source.id === currentSelectedId || target.id === currentSelectedId);
-        const edgeHoverProgress = Math.max(
-          hoverProgressByNodeId.get(source.id) ?? 0,
-          hoverProgressByNodeId.get(target.id) ?? 0,
-        );
+          Boolean(currentSelectedId) && (source.id === currentSelectedId || target.id === currentSelectedId);
         const touchesSearch =
-          !searchIsActive ||
-          currentSearchMatchIds.has(source.id) ||
-          currentSearchMatchIds.has(target.id);
+          !searchIsActive || currentSearchMatchIds.has(source.id) || currentSearchMatchIds.has(target.id);
         const opacity = (touchesActive ? 0.62 : 0.08) * (touchesSearch ? 1 : 0.22);
         const widthScale = currentSettings.appearance.linkWidthScale;
         const lineWidth = (0.55 + Math.min(edge.weight, 5) * 0.28) * widthScale;
 
         context.globalAlpha = opacity;
-        const linkHighlightProgress = Math.min(
-          1,
-          Math.max(touchesSelectedNode ? selectionProgress : 0, edgeHoverProgress),
-        );
+        const linkHighlightProgress = Math.min(1, touchesSelectedNode ? selectionProgress : 0);
         const linkColor = d3.interpolateRgb(
           currentTheme.linkColor,
           currentTheme.linkHighlightColor,
@@ -394,12 +345,14 @@ export function useRelationshipGraphCanvas({
               target,
               degreeByIdRef.current.get(target.id) ?? 0,
               currentSettings.appearance.nodeSizeScale,
-            ) * (1 + targetHighlightProgress * 0.12);
+            ) *
+            (1 + targetHighlightProgress * 0.12);
           drawRelationshipGraphArrow(context, source, target, targetRadius, lineWidth);
         }
       }
 
-      for (const node of nodesRef.current) {
+      /** 按当前帧状态绘制单个节点及文字，供底层与顶层节点复用。 */
+      const drawNode = (node: RelationshipGraphSimulationNode): void => {
         const isSelected = node.id === currentSelectedId;
         const nodeHoverProgress = hoverProgressByNodeId.get(node.id) ?? 0;
         const isHovered = node.id === hoveredNodeId || nodeHoverProgress > 0.01;
@@ -410,39 +363,25 @@ export function useRelationshipGraphCanvas({
           degreeByIdRef.current.get(node.id) ?? 0,
           currentSettings.appearance.nodeSizeScale,
         );
-        const radius =
-          baseRadius *
-          (1 + Math.max(isSelected ? selectionProgress : 0, nodeHoverProgress) * 0.12);
+        const radius = baseRadius * (1 + Math.max(isSelected ? selectionProgress : 0, nodeHoverProgress) * 0.12);
         const x = node.x ?? 0;
         const y = node.y ?? 0;
 
         context.globalAlpha = nodeOpacity;
         const defaultNodeColor = currentTheme.nodeColors[node.type];
         const nodeColor = resolvedNodeColorsRef.current.get(node.id) ?? defaultNodeColor;
-        const selectedHighlightProgress = isSelected
-          ? selectionProgress * (1 - hoverProgress)
-          : 0;
+        const selectedHighlightProgress = isSelected ? selectionProgress * (1 - hoverProgress) : 0;
         const selectedNodeColor = d3.interpolateRgb(
           nodeColor,
           currentTheme.linkHighlightColor,
         )(selectedHighlightProgress);
         let relatedHoverProgress = nodeHoverProgress;
         for (const neighborId of adjacencyRef.current.get(node.id) ?? []) {
-          relatedHoverProgress = Math.max(
-            relatedHoverProgress,
-            hoverProgressByNodeId.get(neighborId) ?? 0,
-          );
+          relatedHoverProgress = Math.max(relatedHoverProgress, hoverProgressByNodeId.get(neighborId) ?? 0);
         }
-        const whitenProgress =
-          Math.max(0, hoverProgress - relatedHoverProgress) * 0.68;
-        const whitenedNodeColor = d3.interpolateRgb(
-          selectedNodeColor,
-          currentTheme.backgroundColor,
-        )(whitenProgress);
-        context.fillStyle = d3.interpolateRgb(
-          whitenedNodeColor,
-          currentTheme.linkHighlightColor,
-        )(nodeHoverProgress);
+        const whitenProgress = Math.max(0, hoverProgress - relatedHoverProgress) * 0.68;
+        const whitenedNodeColor = d3.interpolateRgb(selectedNodeColor, currentTheme.backgroundColor)(whitenProgress);
+        context.fillStyle = d3.interpolateRgb(whitenedNodeColor, currentTheme.linkHighlightColor)(nodeHoverProgress);
         context.beginPath();
         context.arc(x, y, radius, 0, Math.PI * 2);
         context.fill();
@@ -453,11 +392,9 @@ export function useRelationshipGraphCanvas({
             nodeHoverProgress,
             node.isCurrentUser ? 1 : 0,
           );
-          context.globalAlpha =
-            (matchesSearch ? 0.95 : 0.35) * focusProgress;
-          context.strokeStyle = isSelected || nodeHoverProgress > 0
-            ? currentTheme.linkHighlightColor
-            : currentTheme.focusColor;
+          context.globalAlpha = (matchesSearch ? 0.95 : 0.35) * focusProgress;
+          context.strokeStyle =
+            isSelected || nodeHoverProgress > 0 ? currentTheme.linkHighlightColor : currentTheme.focusColor;
           context.lineWidth = 1.4 + Math.max(selectionProgress, nodeHoverProgress) * 0.8;
           context.beginPath();
           context.arc(x, y, radius + 2.5 + focusProgress * 1.5, 0, Math.PI * 2);
@@ -468,93 +405,70 @@ export function useRelationshipGraphCanvas({
         const shouldDrawLabel =
           currentSettings.appearance.labelOpacity > 0 &&
           (isSelected || isHovered || node.isCurrentUser || labelRevealProgress > 0.01);
-        if (!shouldDrawLabel) continue;
+        if (!shouldDrawLabel) return;
 
         context.globalAlpha =
           nodeOpacity *
           (isSelected || isHovered || node.isCurrentUser
             ? Math.max(currentSettings.appearance.labelOpacity, 0.82)
             : currentSettings.appearance.labelOpacity * labelRevealProgress);
-        context.fillStyle = d3.interpolateRgb(
-          currentTheme.labelColor,
-          currentTheme.backgroundColor,
-        )(whitenProgress);
+        context.fillStyle = d3.interpolateRgb(currentTheme.labelColor, currentTheme.backgroundColor)(whitenProgress);
         const labelSize = 11 / Math.pow(Math.max(transform.k, 0.25), 0.18);
         context.font = `${labelSize}px ui-sans-serif, system-ui, sans-serif`;
         context.textAlign = 'center';
         context.textBaseline = 'top';
-        context.fillText(
-          truncateRelationshipGraphLabel(node.title),
-          x,
-          y + radius + 5,
-          170,
-        );
+        context.fillText(truncateRelationshipGraphLabel(node.title), x, y + radius + 5, 170);
+      };
+
+      for (const node of nodesRef.current) {
+        if (!relatedHoverNodeIds.has(node.id)) drawNode(node);
       }
 
-      if (draggedNodeId) {
+      if (hoverLayerNodeIds.size > 0) {
         for (const edge of edgesRef.current) {
           const source = getEndpointNode(edge.source, nodeByIdRef.current);
           const target = getEndpointNode(edge.target, nodeByIdRef.current);
-          if (
-            !source ||
-            !target ||
-            (source.id !== draggedNodeId && target.id !== draggedNodeId)
-          ) {
+          if (!source || !target || (!hoverLayerNodeIds.has(source.id) && !hoverLayerNodeIds.has(target.id))) {
             continue;
           }
 
-          const sourceHighlightProgress = Math.max(
-            source.id === currentSelectedId ? selectionProgress : 0,
+          const edgeHoverProgress = Math.max(
             hoverProgressByNodeId.get(source.id) ?? 0,
+            hoverProgressByNodeId.get(target.id) ?? 0,
           );
+          if (edgeHoverProgress <= 0.001) continue;
           const targetHighlightProgress = Math.max(
             target.id === currentSelectedId ? selectionProgress : 0,
             hoverProgressByNodeId.get(target.id) ?? 0,
           );
-          const sourceRadius =
-            getRelationshipGraphNodeRadius(
-              source,
-              degreeByIdRef.current.get(source.id) ?? 0,
-              currentSettings.appearance.nodeSizeScale,
-            ) * (1 + sourceHighlightProgress * 0.12);
           const targetRadius =
             getRelationshipGraphNodeRadius(
               target,
               degreeByIdRef.current.get(target.id) ?? 0,
               currentSettings.appearance.nodeSizeScale,
-            ) * (1 + targetHighlightProgress * 0.12);
+            ) *
+            (1 + targetHighlightProgress * 0.12);
           const touchesSearch =
-            !searchIsActive ||
-            currentSearchMatchIds.has(source.id) ||
-            currentSearchMatchIds.has(target.id);
-          const lineWidth =
-            (0.55 + Math.min(edge.weight, 5) * 0.28) *
-            currentSettings.appearance.linkWidthScale;
-          const edgeHighlightProgress = Math.max(
-            sourceHighlightProgress,
-            targetHighlightProgress,
-          );
-          const linkColor = d3.interpolateRgb(
-            currentTheme.linkColor,
-            currentTheme.linkHighlightColor,
-          )(edgeHighlightProgress);
+            !searchIsActive || currentSearchMatchIds.has(source.id) || currentSearchMatchIds.has(target.id);
+          const lineWidth = (0.55 + Math.min(edge.weight, 5) * 0.28) * currentSettings.appearance.linkWidthScale;
 
-          context.globalAlpha = 0.62 * (touchesSearch ? 1 : 0.22);
-          context.strokeStyle = linkColor;
-          context.fillStyle = linkColor;
+          context.globalAlpha = 0.62 * edgeHoverProgress * (touchesSearch ? 1 : 0.22);
+          context.strokeStyle = currentTheme.linkHighlightColor;
+          context.fillStyle = currentTheme.linkHighlightColor;
           context.lineWidth = lineWidth;
-          drawRelationshipGraphClippedLine(
-            context,
-            source,
-            target,
-            sourceRadius,
-            targetRadius,
-          );
+          context.beginPath();
+          context.moveTo(source.x ?? 0, source.y ?? 0);
+          context.lineTo(target.x ?? 0, target.y ?? 0);
+          context.stroke();
 
           if (currentSettings.appearance.showArrows && edge.directed) {
             drawRelationshipGraphArrow(context, source, target, targetRadius, lineWidth);
           }
         }
+      }
+
+      for (const node of nodesRef.current) {
+        if (relatedHoverNodeIds.has(node.id)) drawNode(node);
       }
 
       context.restore();
@@ -577,9 +491,7 @@ export function useRelationshipGraphCanvas({
       }
 
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        hoverProgressByNodeIdRef.current = nextNodeId
-          ? new Map([[nextNodeId, 1]])
-          : new Map();
+        hoverProgressByNodeIdRef.current = nextNodeId ? new Map([[nextNodeId, 1]]) : new Map();
         requestDraw();
         return;
       }
@@ -680,9 +592,19 @@ export function useRelationshipGraphCanvas({
     [canvasRef],
   );
 
-  /** 重新释放固定坐标并加热当前力导向布局。 */
+  /** 清除旧布局坐标，从稳定圆盘起点重新运行力导向模拟。 */
   const restartLayout = useCallback(() => {
-    releaseRelationshipGraphNodePositions(nodesRef.current);
+    positionsRef.current.clear();
+    fitSignatureRef.current = null;
+    nodesRef.current.forEach((node, index) => {
+      const initialPosition = getRelationshipGraphInitialPosition(index);
+      node.x = initialPosition.x;
+      node.y = initialPosition.y;
+      node.vx = 0;
+      node.vy = 0;
+      node.fx = null;
+      node.fy = null;
+    });
     simulationRef.current?.alpha(1).restart();
   }, []);
 
@@ -704,9 +626,7 @@ export function useRelationshipGraphCanvas({
           visualStateRef.current.settings.appearance.nodeSizeScale,
         ) +
         5 / transformRef.current.k;
-      return Math.hypot((candidate.x ?? 0) - graphX, (candidate.y ?? 0) - graphY) <= radius
-        ? candidate
-        : null;
+      return Math.hypot((candidate.x ?? 0) - graphX, (candidate.y ?? 0) - graphY) <= radius ? candidate : null;
     },
     [canvasRef],
   );
@@ -716,26 +636,27 @@ export function useRelationshipGraphCanvas({
     const cachedPositions = positionsRef.current;
     const nodes: RelationshipGraphSimulationNode[] = data.nodes.map((node, index) => {
       const cached = cachedPositions.get(node.id);
-      const angle = index * 2.399963229728653;
-      const radius = 18 * Math.sqrt(index);
+      const initialPosition = getRelationshipGraphInitialPosition(index);
       return {
         ...node,
-        x: cached?.x ?? Math.cos(angle) * radius,
-        y: cached?.y ?? Math.sin(angle) * radius,
+        x: cached?.x ?? initialPosition.x,
+        y: cached?.y ?? initialPosition.y,
       };
     });
     const edges: RelationshipGraphSimulationEdge[] = data.edges.map((edge) => ({ ...edge }));
-    const graphSignature = data.nodes
+    const graphSignature = `${data.nodes
       .map((node) => node.id)
       .sort()
-      .join('|');
+      .join('|')}::${data.edges
+      .map((edge) => edge.id)
+      .sort()
+      .join('|')}`;
     graphSignatureRef.current = graphSignature;
+    fitSignatureRef.current = null;
     layoutTickCountRef.current = 0;
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     const degreeById = new Map<string, number>();
-    const adjacency = new Map<string, Set<string>>(
-      nodes.map((node) => [node.id, new Set<string>()]),
-    );
+    const adjacency = new Map<string, Set<string>>(nodes.map((node) => [node.id, new Set<string>()]));
     for (const edge of edges) {
       const sourceId = getEndpointId(edge.source);
       const targetId = getEndpointId(edge.target);
@@ -744,8 +665,6 @@ export function useRelationshipGraphCanvas({
       adjacency.get(sourceId)?.add(targetId);
       adjacency.get(targetId)?.add(sourceId);
     }
-    const maxDegree = Math.max(1, ...degreeById.values());
-
     nodesRef.current = nodes;
     edgesRef.current = edges;
     nodeByIdRef.current = nodeById;
@@ -763,31 +682,15 @@ export function useRelationshipGraphCanvas({
           .strength(settings.forces.linkStrength),
       )
       .force('charge', d3.forceManyBody().strength(settings.forces.chargeStrength))
-      .force('center', d3.forceCenter(0, 0).strength(settings.forces.centerStrength))
-      .force(
-        'radial',
-        d3
-          .forceRadial<RelationshipGraphSimulationNode>((node) =>
-            getRelationshipGraphRadialTarget(
-              node,
-              nodes.length,
-              degreeById.get(node.id) ?? 0,
-              maxDegree,
-            ),
-          )
-          .strength(0.07),
-      )
+      .force('center', d3.forceCenter(0, 0))
+      .force('inward', d3.forceRadial<RelationshipGraphSimulationNode>(0).strength(settings.forces.centerStrength))
       .force(
         'collision',
         d3
           .forceCollide<RelationshipGraphSimulationNode>()
           .radius(
             (node) =>
-              getRelationshipGraphNodeRadius(
-                node,
-                degreeById.get(node.id) ?? 0,
-                settings.appearance.nodeSizeScale,
-              ) + 4,
+              getRelationshipGraphNodeRadius(node, degreeById.get(node.id) ?? 0, settings.appearance.nodeSizeScale) + 4,
           )
           .iterations(2),
       )
@@ -807,11 +710,7 @@ export function useRelationshipGraphCanvas({
         .addAll(nodes);
       requestDraw();
 
-      if (
-        ticks >= 18 &&
-        fitSignatureRef.current !== graphSignature &&
-        fitCanvas()
-      ) {
+      if (ticks >= 60 && fitSignatureRef.current !== graphSignature && fitCanvas()) {
         fitSignatureRef.current = graphSignature;
       }
     });
@@ -861,7 +760,7 @@ export function useRelationshipGraphCanvas({
         width > 1 &&
         height > 1 &&
         graphSignature &&
-        layoutTickCountRef.current >= 18 &&
+        layoutTickCountRef.current >= 60 &&
         fitSignatureRef.current !== graphSignature &&
         fitCanvas()
       ) {
@@ -911,20 +810,12 @@ export function useRelationshipGraphCanvas({
       .filter((event) => {
         if (event.type === 'mousedown' && event.button !== 0) return false;
         if (event.type === 'touchstart' && event.touches?.length !== 1) return false;
-        const pointer = readRelationshipGraphSourcePointer(
-          event as MouseEvent | TouchEvent,
-        );
-        return pointer
-          ? Boolean(findNodeAtPointer(pointer.clientX, pointer.clientY))
-          : false;
+        const pointer = readRelationshipGraphSourcePointer(event as MouseEvent | TouchEvent);
+        return pointer ? Boolean(findNodeAtPointer(pointer.clientX, pointer.clientY)) : false;
       })
       .subject((event) => {
-        const pointer = readRelationshipGraphSourcePointer(
-          event.sourceEvent as MouseEvent | TouchEvent,
-        );
-        const node = pointer
-          ? findNodeAtPointer(pointer.clientX, pointer.clientY)
-          : null;
+        const pointer = readRelationshipGraphSourcePointer(event.sourceEvent as MouseEvent | TouchEvent);
+        const node = pointer ? findNodeAtPointer(pointer.clientX, pointer.clientY) : null;
         return {
           node: node!,
           x: transformRef.current.applyX(node?.x ?? 0),
@@ -953,16 +844,14 @@ export function useRelationshipGraphCanvas({
         event.subject.node.fx = null;
         event.subject.node.fy = null;
         draggedNodeIdRef.current = null;
-        const pointer = readRelationshipGraphSourcePointer(
-          event.sourceEvent as MouseEvent | TouchEvent,
-        );
+        const pointer = readRelationshipGraphSourcePointer(event.sourceEvent as MouseEvent | TouchEvent);
         const rect = canvas.getBoundingClientRect();
         const pointerIsInsideCanvas = Boolean(
           pointer &&
-            pointer.clientX >= rect.left &&
-            pointer.clientX <= rect.right &&
-            pointer.clientY >= rect.top &&
-            pointer.clientY <= rect.bottom,
+          pointer.clientX >= rect.left &&
+          pointer.clientX <= rect.right &&
+          pointer.clientY >= rect.top &&
+          pointer.clientY <= rect.bottom,
         );
         transitionHoveredNode(pointerIsInsideCanvas ? event.subject.node.id : null);
         canvas.style.cursor = pointerIsInsideCanvas ? 'pointer' : 'grab';
@@ -990,10 +879,9 @@ export function useRelationshipGraphCanvas({
   useEffect(() => {
     visualStateRef.current = { selectedNodeId, searchMatchIds, nodeColors, settings, theme };
     resolvedNodeColorsRef.current = new Map(
-      [...nodeColors].map(([nodeId, color]) => [
-        nodeId,
-        resolveRelationshipGraphCanvasColor(color, ''),
-      ] as [string, string]).filter((entry) => Boolean(entry[1])),
+      [...nodeColors]
+        .map(([nodeId, color]) => [nodeId, resolveRelationshipGraphCanvasColor(color, '')] as [string, string])
+        .filter((entry) => Boolean(entry[1])),
     );
     requestDraw();
   }, [nodeColors, requestDraw, searchMatchIds, selectedNodeId, settings, theme]);
