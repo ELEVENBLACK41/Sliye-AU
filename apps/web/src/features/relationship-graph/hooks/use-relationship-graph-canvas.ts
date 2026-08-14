@@ -77,7 +77,10 @@ function getEndpointNode(
 
 /** 从主题变量读取 Canvas 可直接使用的计算颜色。 */
 function readCssColor(styles: CSSStyleDeclaration, name: string, fallback: string): string {
-  return styles.getPropertyValue(name).trim() || fallback;
+  return resolveRelationshipGraphCanvasColor(
+    styles.getPropertyValue(name).trim() || fallback,
+    fallback,
+  );
 }
 
 /** 从鼠标或单指触控原生事件中读取客户端坐标，多指手势交由 D3 zoom 处理。 */
@@ -170,7 +173,19 @@ function resolveRelationshipGraphCanvasColor(candidate: string, fallback: string
   document.body.append(probe);
   const resolvedColor = window.getComputedStyle(probe).color;
   probe.remove();
-  return resolvedColor || fallback;
+  if (!resolvedColor) return fallback;
+
+  const colorCanvas = document.createElement('canvas');
+  colorCanvas.width = 1;
+  colorCanvas.height = 1;
+  const colorContext = colorCanvas.getContext('2d', { willReadFrequently: true });
+  if (!colorContext) return resolvedColor;
+
+  colorContext.clearRect(0, 0, 1, 1);
+  colorContext.fillStyle = resolvedColor;
+  colorContext.fillRect(0, 0, 1, 1);
+  const [red, green, blue, alpha] = colorContext.getImageData(0, 0, 1, 1).data;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`;
 }
 
 /** 解除重播前遗留的节点固定位置，让 D3 可以重新计算布局。 */
@@ -238,6 +253,8 @@ export function useRelationshipGraphCanvas({
   const animationFrameRef = useRef<number | null>(null);
   const selectionAnimationFrameRef = useRef<number | null>(null);
   const selectionAnimationProgressRef = useRef(0);
+  const hoverAnimationFrameRef = useRef<number | null>(null);
+  const hoverProgressByNodeIdRef = useRef(new Map<string, number>());
   const positionsRef = useRef(new Map<string, { x: number; y: number }>());
   const hoveredNodeIdRef = useRef<string | null>(null);
   const draggedNodeIdRef = useRef<string | null>(null);
@@ -286,8 +303,12 @@ export function useRelationshipGraphCanvas({
         settings: currentSettings,
       } = visualStateRef.current;
       const hoveredNodeId = hoveredNodeIdRef.current;
-      const activeNodeId = draggedNodeIdRef.current ?? currentSelectedId ?? hoveredNodeId;
-      const activeNeighbors = activeNodeId ? adjacencyRef.current.get(activeNodeId) : undefined;
+      const activeNodeId = draggedNodeIdRef.current ?? currentSelectedId;
+      const hoverProgressByNodeId = hoverProgressByNodeIdRef.current;
+      let hoverProgress = 0;
+      for (const progress of hoverProgressByNodeId.values()) {
+        hoverProgress = Math.min(1, hoverProgress + progress);
+      }
       const searchIsActive = currentSearchMatchIds.size < nodesRef.current.length;
       const selectionProgress = currentSelectedId
         ? easeOutRelationshipGraphSelection(selectionAnimationProgressRef.current)
@@ -300,12 +321,13 @@ export function useRelationshipGraphCanvas({
 
         const touchesActive =
           !activeNodeId || source.id === activeNodeId || target.id === activeNodeId;
-        const touchesHoveredNode =
-          Boolean(hoveredNodeId) &&
-          (source.id === hoveredNodeId || target.id === hoveredNodeId);
         const touchesSelectedNode =
           Boolean(currentSelectedId) &&
           (source.id === currentSelectedId || target.id === currentSelectedId);
+        const edgeHoverProgress = Math.max(
+          hoverProgressByNodeId.get(source.id) ?? 0,
+          hoverProgressByNodeId.get(target.id) ?? 0,
+        );
         const touchesSearch =
           !searchIsActive ||
           currentSearchMatchIds.has(source.id) ||
@@ -315,11 +337,10 @@ export function useRelationshipGraphCanvas({
         const lineWidth = (0.55 + Math.min(edge.weight, 5) * 0.28) * widthScale;
 
         context.globalAlpha = opacity;
-        const linkHighlightProgress = touchesHoveredNode
-          ? 1
-          : touchesSelectedNode
-            ? selectionProgress
-            : 0;
+        const linkHighlightProgress = Math.min(
+          1,
+          Math.max(touchesSelectedNode ? selectionProgress : 0, edgeHoverProgress),
+        );
         const linkColor = d3.interpolateRgb(
           currentTheme.linkColor,
           currentTheme.linkHighlightColor,
@@ -333,51 +354,82 @@ export function useRelationshipGraphCanvas({
         context.stroke();
 
         if (currentSettings.appearance.showArrows && edge.directed) {
+          const targetHighlightProgress = Math.max(
+            target.id === currentSelectedId ? selectionProgress : 0,
+            hoverProgressByNodeId.get(target.id) ?? 0,
+          );
           const targetRadius =
             getRelationshipGraphNodeRadius(
               target,
               degreeByIdRef.current.get(target.id) ?? 0,
               currentSettings.appearance.nodeSizeScale,
-            ) * (target.id === currentSelectedId ? 1 + selectionProgress * 0.12 : 1);
+            ) * (1 + targetHighlightProgress * 0.12);
           drawRelationshipGraphArrow(context, source, target, targetRadius, lineWidth);
         }
       }
 
       for (const node of nodesRef.current) {
         const isSelected = node.id === currentSelectedId;
-        const isHovered = node.id === hoveredNodeIdRef.current;
-        const isAdjacent = Boolean(activeNeighbors?.has(node.id));
+        const nodeHoverProgress = hoverProgressByNodeId.get(node.id) ?? 0;
+        const isHovered = node.id === hoveredNodeId || nodeHoverProgress > 0.01;
         const matchesSearch = currentSearchMatchIds.has(node.id);
-        const isMutedByFocus = Boolean(activeNodeId) && !isSelected && !isHovered && !isAdjacent;
-        const nodeOpacity = (isMutedByFocus ? 0.18 : 1) * (matchesSearch ? 1 : 0.16);
+        const nodeOpacity = matchesSearch ? 1 : 0.16;
         const baseRadius = getRelationshipGraphNodeRadius(
           node,
           degreeByIdRef.current.get(node.id) ?? 0,
           currentSettings.appearance.nodeSizeScale,
         );
-        const radius = baseRadius * (isSelected ? 1 + selectionProgress * 0.12 : 1);
+        const radius =
+          baseRadius *
+          (1 + Math.max(isSelected ? selectionProgress : 0, nodeHoverProgress) * 0.12);
         const x = node.x ?? 0;
         const y = node.y ?? 0;
 
         context.globalAlpha = nodeOpacity;
         const defaultNodeColor = currentTheme.nodeColors[node.type];
         const nodeColor = resolvedNodeColorsRef.current.get(node.id) ?? defaultNodeColor;
-        context.fillStyle = isSelected
-          ? d3.interpolateRgb(nodeColor, currentTheme.linkHighlightColor)(selectionProgress)
-          : nodeColor;
+        const selectedHighlightProgress = isSelected
+          ? selectionProgress * (1 - hoverProgress)
+          : 0;
+        const selectedNodeColor = d3.interpolateRgb(
+          nodeColor,
+          currentTheme.linkHighlightColor,
+        )(selectedHighlightProgress);
+        let relatedHoverProgress = nodeHoverProgress;
+        for (const neighborId of adjacencyRef.current.get(node.id) ?? []) {
+          relatedHoverProgress = Math.max(
+            relatedHoverProgress,
+            hoverProgressByNodeId.get(neighborId) ?? 0,
+          );
+        }
+        const whitenProgress =
+          Math.max(0, hoverProgress - relatedHoverProgress) * 0.68;
+        const whitenedNodeColor = d3.interpolateRgb(
+          selectedNodeColor,
+          currentTheme.backgroundColor,
+        )(whitenProgress);
+        context.fillStyle = d3.interpolateRgb(
+          whitenedNodeColor,
+          currentTheme.linkHighlightColor,
+        )(nodeHoverProgress);
         context.beginPath();
         context.arc(x, y, radius, 0, Math.PI * 2);
         context.fill();
 
         if (isSelected || isHovered || node.isCurrentUser) {
+          const focusProgress = Math.max(
+            isSelected ? selectionProgress : 0,
+            nodeHoverProgress,
+            node.isCurrentUser ? 1 : 0,
+          );
           context.globalAlpha =
-            (matchesSearch ? 0.95 : 0.35) * (isSelected ? 0.45 + selectionProgress * 0.55 : 1);
-          context.strokeStyle = isSelected
+            (matchesSearch ? 0.95 : 0.35) * focusProgress;
+          context.strokeStyle = isSelected || nodeHoverProgress > 0
             ? currentTheme.linkHighlightColor
             : currentTheme.focusColor;
-          context.lineWidth = isSelected ? 2.2 : 1.4;
+          context.lineWidth = 1.4 + Math.max(selectionProgress, nodeHoverProgress) * 0.8;
           context.beginPath();
-          context.arc(x, y, radius + (isSelected ? 4 : 2.5), 0, Math.PI * 2);
+          context.arc(x, y, radius + 2.5 + focusProgress * 1.5, 0, Math.PI * 2);
           context.stroke();
         }
 
@@ -392,7 +444,10 @@ export function useRelationshipGraphCanvas({
           (isSelected || isHovered || node.isCurrentUser
             ? Math.max(currentSettings.appearance.labelOpacity, 0.82)
             : currentSettings.appearance.labelOpacity * labelRevealProgress);
-        context.fillStyle = currentTheme.labelColor;
+        context.fillStyle = d3.interpolateRgb(
+          currentTheme.labelColor,
+          currentTheme.backgroundColor,
+        )(whitenProgress);
         const labelSize = 11 / Math.pow(Math.max(transform.k, 0.25), 0.18);
         context.font = `${labelSize}px ui-sans-serif, system-ui, sans-serif`;
         context.textAlign = 'center';
@@ -409,6 +464,54 @@ export function useRelationshipGraphCanvas({
       context.globalAlpha = 1;
     });
   }, [canvasRef]);
+
+  /** 在悬浮目标变化时同步补间节点、直连关系线与非直连内容的泛白状态。 */
+  const transitionHoveredNode = useCallback(
+    (nextNodeId: string | null): void => {
+      hoveredNodeIdRef.current = nextNodeId;
+      if (hoverAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(hoverAnimationFrameRef.current);
+        hoverAnimationFrameRef.current = null;
+      }
+
+      const previousProgress = new Map(hoverProgressByNodeIdRef.current);
+      if (nextNodeId && !previousProgress.has(nextNodeId)) {
+        previousProgress.set(nextNodeId, 0);
+      }
+
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        hoverProgressByNodeIdRef.current = nextNodeId
+          ? new Map([[nextNodeId, 1]])
+          : new Map();
+        requestDraw();
+        return;
+      }
+
+      const startedAt = window.performance.now();
+      const animateHover = (now: number): void => {
+        const linearProgress = Math.min(1, (now - startedAt) / 220);
+        const animationProgress = easeOutRelationshipGraphSelection(linearProgress);
+        const nextProgress = new Map<string, number>();
+
+        for (const [nodeId, fromProgress] of previousProgress) {
+          const targetProgress = nodeId === nextNodeId ? 1 : 0;
+          const progress = fromProgress + (targetProgress - fromProgress) * animationProgress;
+          if (progress > 0.001) nextProgress.set(nodeId, progress);
+        }
+
+        hoverProgressByNodeIdRef.current = nextProgress;
+        requestDraw();
+        if (linearProgress < 1) {
+          hoverAnimationFrameRef.current = window.requestAnimationFrame(animateHover);
+        } else {
+          hoverAnimationFrameRef.current = null;
+        }
+      };
+
+      hoverAnimationFrameRef.current = window.requestAnimationFrame(animateHover);
+    },
+    [requestDraw],
+  );
 
   /** 根据当前可见节点边界生成适配画布的缩放变换。 */
   const fitCanvas = useCallback((): boolean => {
@@ -736,7 +839,7 @@ export function useRelationshipGraphCanvas({
         event.subject.node.fx = event.subject.node.x;
         event.subject.node.fy = event.subject.node.y;
         draggedNodeIdRef.current = event.subject.node.id;
-        hoveredNodeIdRef.current = event.subject.node.id;
+        transitionHoveredNode(event.subject.node.id);
         if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
         draggedRecentlyRef.current = false;
         requestDraw();
@@ -764,7 +867,7 @@ export function useRelationshipGraphCanvas({
             pointer.clientY >= rect.top &&
             pointer.clientY <= rect.bottom,
         );
-        hoveredNodeIdRef.current = pointerIsInsideCanvas ? event.subject.node.id : null;
+        transitionHoveredNode(pointerIsInsideCanvas ? event.subject.node.id : null);
         canvas.style.cursor = pointerIsInsideCanvas ? 'pointer' : 'grab';
         requestDraw();
         window.setTimeout(() => {
@@ -784,7 +887,7 @@ export function useRelationshipGraphCanvas({
       selection.on('.zoom', null).on('.drag', null);
       if (zoomBehaviorRef.current === zoomBehavior) zoomBehaviorRef.current = null;
     };
-  }, [canvasRef, findNodeAtPointer, requestDraw]);
+  }, [canvasRef, findNodeAtPointer, requestDraw, transitionHoveredNode]);
 
   /** 将最新受控视觉状态同步到绘制循环，而不让物理布局重新启动。 */
   useEffect(() => {
@@ -845,6 +948,10 @@ export function useRelationshipGraphCanvas({
         window.cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
+      if (hoverAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(hoverAnimationFrameRef.current);
+        hoverAnimationFrameRef.current = null;
+      }
     },
     [],
   );
@@ -857,20 +964,18 @@ export function useRelationshipGraphCanvas({
       const node = findNodeAtPointer(event.clientX, event.clientY);
       const nextId = node?.id ?? null;
       if (nextId === hoveredNodeIdRef.current) return;
-      hoveredNodeIdRef.current = nextId;
+      transitionHoveredNode(nextId);
       if (canvasRef.current) canvasRef.current.style.cursor = node ? 'pointer' : 'grab';
-      requestDraw();
     },
-    [canvasRef, findNodeAtPointer, requestDraw],
+    [canvasRef, findNodeAtPointer, transitionHoveredNode],
   );
 
   /** 指针离开画布后清理悬停关系高亮。 */
   const onPointerLeave = useCallback(() => {
     if (draggedNodeIdRef.current) return;
-    hoveredNodeIdRef.current = null;
+    transitionHoveredNode(null);
     if (canvasRef.current) canvasRef.current.style.cursor = 'grab';
-    requestDraw();
-  }, [canvasRef, requestDraw]);
+  }, [canvasRef, transitionHoveredNode]);
 
   /** 单击命中节点时打开详情，单击空白时清理选中。 */
   const onClick = useCallback(
