@@ -17,8 +17,8 @@ import type {
 } from '@workspace/contracts/projects';
 
 import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
-import { getAccessDepartments } from '@/features/access-management/services/access-management-server.service';
-import { flattenDepartments } from '@/features/access-management/utils/flatten-departments';
+import { getOrganizationDepartments } from '@/features/organization-access/services/organization-access-server.service';
+import { flattenOrganizationDepartments } from '@/features/organization-access/utils/department-tree';
 import { ProjectSpaceEmptyState } from '@/features/project-space/components/project-space-empty-state';
 import { ProjectSpacePage } from '@/features/project-space/components/project-space-page';
 import {
@@ -72,10 +72,10 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
     searchParams,
     getProjectSpaceProjects(),
     canCreateProject && hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.access.department.read)
-      ? getAccessDepartments()
+      ? getOrganizationDepartments()
       : Promise.resolve([]),
   ]);
-  const createDepartmentOptions = flattenDepartments(departmentTree)
+  const createDepartmentOptions = flattenOrganizationDepartments(departmentTree)
     .filter(({ department }) => department.status === 'ACTIVE')
     .map(({ department, depth }) => ({ id: department.id, label: `${'　'.repeat(depth)}${department.name}` }));
 

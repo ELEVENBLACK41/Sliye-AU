@@ -73,6 +73,10 @@
   --meeting-room-sidebar: oklch(0.985 0.006 92);
   --meeting-room-success: oklch(0.72 0.18 145);
   --meeting-room-danger: oklch(0.63 0.22 28);
+  --organization-accent: oklch(0.76 0.13 151);
+  --organization-accent-soft: oklch(0.94 0.045 151);
+  --organization-surface: oklch(0.985 0.007 145 / 86%);
+  --organization-ink: oklch(0.34 0.075 151);
 }
 
 .dark {
@@ -139,6 +143,10 @@
   --meeting-room-sidebar: oklch(0.18 0.008 92);
   --meeting-room-success: oklch(0.72 0.18 145);
   --meeting-room-danger: oklch(0.63 0.22 28);
+  --organization-accent: oklch(0.72 0.13 151);
+  --organization-accent-soft: oklch(0.3 0.045 151);
+  --organization-surface: oklch(0.19 0.01 145 / 90%);
+  --organization-ink: oklch(0.82 0.1 151);
 }
 
 @theme inline {
@@ -202,6 +210,10 @@
   --color-meeting-room-sidebar: var(--meeting-room-sidebar);
   --color-meeting-room-success: var(--meeting-room-success);
   --color-meeting-room-danger: var(--meeting-room-danger);
+  --color-organization-accent: var(--organization-accent);
+  --color-organization-accent-soft: var(--organization-accent-soft);
+  --color-organization-surface: var(--organization-surface);
+  --color-organization-ink: var(--organization-ink);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

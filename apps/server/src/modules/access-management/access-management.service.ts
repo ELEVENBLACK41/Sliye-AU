@@ -7,11 +7,15 @@ import {
   SYSTEM_PERMISSION_CODES,
   SYSTEM_PERMISSION_DEFINITIONS,
   SYSTEM_ROLES,
+  type AccessAuditListQuery,
   type AccessAuditListResult,
   type AccessDepartmentTreeNode,
   type AccessPermission,
   type AccessRole,
   type AccessUser,
+  type AccessUserAuthorizationDetail,
+  type AccessUserListQuery,
+  type AccessUserListResult,
   type SystemPermissionCode,
 } from '@workspace/contracts/access';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
@@ -66,19 +70,201 @@ export class AccessManagementService {
     private readonly authorizationService: AuthorizationService,
   ) {}
 
-  /** 按操作者数据范围查询用户、角色和直接授权。 */
-  async listUsers(actor: AuthorizationContext): Promise<AccessUser[]> {
-    const where = await this.authorizationService.buildUserWhere(
+  /** 按操作者数据范围、筛选条件和分页查询成员摘要。 */
+  async listUsers(
+    actor: AuthorizationContext,
+    query: AccessUserListQuery,
+  ): Promise<AccessUserListResult> {
+    if (query.departmentId && query.withoutDepartment) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
+        message: '部门筛选不能与未分配部门同时使用',
+        status: 400,
+        details: [{ field: 'departmentId', message: '请保留一种部门筛选方式' }],
+      });
+    }
+
+    const scopeWhere = await this.authorizationService.buildUserWhere(
       actor,
       'access:user:read',
     );
-    const users = await this.prisma.user.findMany({
-      where,
-      orderBy: { id: 'asc' },
-      include: this.userAccessInclude(),
+    const departmentIds = query.departmentId
+      ? await this.authorizationService.getDepartmentTreeIds(query.departmentId)
+      : undefined;
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const keyword = query.keyword?.trim();
+    const filters: Prisma.UserWhereInput = {
+      ...(keyword
+        ? {
+            OR: [
+              { name: { contains: keyword, mode: 'insensitive' } },
+              { email: { contains: keyword, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(query.status ? { status: UserStatus[query.status] } : {}),
+      ...(departmentIds ? { deptId: { in: departmentIds } } : {}),
+      ...(query.withoutDepartment ? { deptId: null } : {}),
+      ...(query.roleId ? { roles: { some: { roleId: query.roleId } } } : {}),
+    };
+    const where: Prisma.UserWhereInput = { AND: [scopeWhere, filters] };
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        orderBy: { id: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          department: true,
+          roles: {
+            orderBy: { assignedAt: 'asc' },
+            include: { role: true },
+          },
+          _count: { select: { permissions: true } },
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      items: users.map((user) => ({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        status: user.status,
+        department: user.department
+          ? {
+              id: user.department.id,
+              code: user.department.code,
+              name: user.department.name,
+              status: user.department.status,
+            }
+          : null,
+        roles: user.roles.map(({ assignedAt, role }) => ({
+          id: role.id,
+          code: role.code,
+          name: role.name,
+          desc: role.desc,
+          isSystem: role.isSystem,
+          assignedAt: assignedAt.toISOString(),
+        })),
+        directPermissionCount: user._count.permissions,
+        lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+        createdAt: user.createdAt.toISOString(),
+      })),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  /** 查询单个用户的原始授权以及后端解析后的最终权限。 */
+  async getUserAuthorization(
+    actor: AuthorizationContext,
+    userId: number,
+  ): Promise<AccessUserAuthorizationDetail> {
+    const scopeWhere = await this.authorizationService.buildUserWhere(
+      actor,
+      'access:user:read',
+    );
+    const user = await this.prisma.user.findFirst({
+      where: { AND: [{ id: userId }, scopeWhere] },
+      include: this.userAuthorizationInclude(),
     });
 
-    return users.map(toAccessUser);
+    if (!user) {
+      this.throwNotFound('用户不存在或超出当前管理范围');
+    }
+
+    const context = this.authorizationService.buildContext({
+      id: user.id,
+      deptId: user.deptId,
+      roleCodes: user.roles.map(({ role }) => role.code),
+      roleGrants: user.roles.flatMap(({ role }) =>
+        role.perms.map((grant) => ({
+          code: grant.perm.code,
+          scopeType: grant.scopeType,
+        })),
+      ),
+      directGrants: user.permissions.map((grant) => ({
+        code: grant.permission.code,
+        effect: grant.effect,
+        scopeType: grant.scopeType,
+        expiresAt: grant.expiresAt,
+      })),
+    });
+    const now = Date.now();
+    const permissions = new Map(
+      [
+        ...user.roles.flatMap(({ role }) =>
+          role.perms.map((grant) => grant.perm),
+        ),
+        ...user.permissions.map((grant) => grant.permission),
+      ].map((permission) => [permission.code, permission]),
+    );
+
+    if (context.isSuperAdmin) {
+      const systemPermissions = await this.prisma.permission.findMany({
+        where: { code: { in: [...SYSTEM_PERMISSION_CODES] } },
+      });
+      for (const permission of systemPermissions)
+        permissions.set(permission.code, permission);
+    }
+
+    const effectivePermissionCodes = context.isSuperAdmin
+      ? [...new Set([...SYSTEM_PERMISSION_CODES, ...context.grants.keys()])]
+      : [...context.grants.keys()];
+
+    return {
+      user: toAccessUser({
+        ...user,
+        roles: user.roles.map(({ assignedAt, role }) => ({ assignedAt, role })),
+      }),
+      deniedPermissionCodes: [...context.deniedPermissions].sort(),
+      effectivePermissions: effectivePermissionCodes
+        .map((code) => {
+          const permission = permissions.get(code);
+          if (!permission) return null;
+          const sources = context.isSuperAdmin
+            ? [{ type: 'SUPER_ADMIN' as const }]
+            : [
+                ...user.roles.flatMap(({ role }) =>
+                  role.perms
+                    .filter((grant) => grant.perm.code === code)
+                    .map((grant) => ({
+                      type: 'ROLE' as const,
+                      roleId: role.id,
+                      roleName: role.name,
+                      scopeType: grant.scopeType,
+                    })),
+                ),
+                ...user.permissions
+                  .filter(
+                    (grant) =>
+                      grant.permission.code === code &&
+                      grant.effect === PermissionEffect.ALLOW &&
+                      (!grant.expiresAt || grant.expiresAt.getTime() > now),
+                  )
+                  .map((grant) => ({
+                    type: 'DIRECT' as const,
+                    grantId: grant.id,
+                    scopeType: grant.scopeType,
+                    expiresAt: grant.expiresAt?.toISOString() ?? null,
+                  })),
+              ];
+          return {
+            permission: toAccessPermission(permission),
+            scopes: context.isSuperAdmin
+              ? [DataScope.ALL]
+              : [...(context.grants.get(code) ?? [])],
+            sources,
+          };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null),
+    };
   }
 
   /** 查询全部角色及其权限范围和关联数量。 */
@@ -745,11 +931,19 @@ export class AccessManagementService {
   }
 
   /** 分页查询访问控制变更审计。 */
-  async listAuditLogs(page = 1, pageSize = 50): Promise<AccessAuditListResult> {
-    const normalizedPage = Math.max(1, page);
-    const normalizedPageSize = Math.min(100, Math.max(1, pageSize));
+  async listAuditLogs(
+    query: AccessAuditListQuery = {},
+  ): Promise<AccessAuditListResult> {
+    const normalizedPage = Math.max(1, query.page ?? 1);
+    const normalizedPageSize = Math.min(100, Math.max(1, query.pageSize ?? 20));
+    const where: Prisma.AccessControlAuditLogWhereInput = {
+      ...(query.action ? { action: query.action } : {}),
+      ...(query.targetType ? { targetType: query.targetType } : {}),
+      ...(query.actorId ? { actorId: query.actorId } : {}),
+    };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.accessControlAuditLog.findMany({
+        where,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (normalizedPage - 1) * normalizedPageSize,
         take: normalizedPageSize,
@@ -757,7 +951,7 @@ export class AccessManagementService {
           actor: { select: { id: true, email: true, name: true } },
         },
       }),
-      this.prisma.accessControlAuditLog.count(),
+      this.prisma.accessControlAuditLog.count({ where }),
     ]);
 
     return {
@@ -765,6 +959,7 @@ export class AccessManagementService {
       total,
       page: normalizedPage,
       pageSize: normalizedPageSize,
+      totalPages: Math.ceil(total / normalizedPageSize),
     };
   }
 
@@ -1097,6 +1292,33 @@ export class AccessManagementService {
       roles: {
         orderBy: { assignedAt: 'asc' as const },
         include: { role: true },
+      },
+      permissions: {
+        orderBy: { createdAt: 'asc' as const },
+        include: { permission: true },
+      },
+    } satisfies Prisma.UserInclude;
+  }
+
+  /** 用户授权详情需要额外加载角色权限及其权限目录记录。 */
+  private userAuthorizationInclude() {
+    return {
+      department: true,
+      roles: {
+        orderBy: { assignedAt: 'asc' as const },
+        include: {
+          role: {
+            include: {
+              perms: {
+                orderBy: [
+                  { perm: { code: 'asc' as const } },
+                  { scopeType: 'asc' as const },
+                ],
+                include: { perm: true },
+              },
+            },
+          },
+        },
       },
       permissions: {
         orderBy: { createdAt: 'asc' as const },

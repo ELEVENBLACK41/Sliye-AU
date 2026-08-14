@@ -1,141 +1,17 @@
 /**
- * 本文件是项目分区会议房间入口，支持普通会议与多决策会议目标切换。
+ * 本文件保留会议一级地址，并统一进入新版自研 LiveKit 全屏房间。
  */
 import { notFound, redirect } from 'next/navigation';
-import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
-import type {
-  DecisionDetail,
-  DecisionProposal,
-  DecisionResolution,
-  DecisionVoteRound,
-} from '@workspace/contracts/decisions';
-import type { DiscussionAreaSummary, ProjectChatMessagePage, ProjectDetail } from '@workspace/contracts/projects';
-import type { MeetingDetail } from '@workspace/contracts/meetings';
 
-import { hasSystemPermission, requireServerPermission } from '@/features/auth/services/auth-server.service';
-import {
-  DecisionServerError,
-  getDecisionDetail,
-  getDecisionProposals,
-  getDecisionResolutions,
-  getDecisionVoteRounds,
-} from '@/features/decisions';
-import {
-  getProject,
-  getProjectAreas,
-  getProjectMessages,
-  ProjectServerError,
-} from '@/features/projects/services/projects-server.service';
-import { MeetingRoomPage } from '@/features/meetings/components/meeting-room-page';
-import { getMeetingDetail, MeetingServerError } from '@/features/meetings/services/meetings-server.service';
-
-/** 会议房间动态路由与目标决策查询参数。 */
-type MeetingRoomRouteProps = {
-  /** Next.js 16 异步动态参数。 */
+/** 会议兼容入口属性。 */
+type MeetingEntryPageProps = {
+  /** 动态会议主键。 */
   params: Promise<{ meetingId: string }>;
-  /** 多决策会议当前选择的正式操作目标。 */
-  searchParams: Promise<{ decisionId?: string }>;
 };
 
-/** 渲染当前用户可见的分区会议，并为正式操作准备单项决策上下文。 */
-export default async function MeetingRoomRoutePage({ params, searchParams }: MeetingRoomRouteProps) {
-  const currentUser = await requireServerPermission(SYSTEM_PERMISSIONS.project.read);
+/** 校验会议主键后进入新版全屏房间。 */
+export default async function MeetingEntryPage({ params }: MeetingEntryPageProps) {
   const meetingId = Number((await params).meetingId);
-  const requestedDecisionId = Number((await searchParams).decisionId);
-
-  if (!Number.isInteger(meetingId) || meetingId < 1) {
-    notFound();
-  }
-
-  let meeting: MeetingDetail;
-  let project: ProjectDetail;
-  let area: DiscussionAreaSummary;
-  let initialChatPage: ProjectChatMessagePage;
-
-  try {
-    meeting = await getMeetingDetail(meetingId);
-    if (meeting.projectId === null || meeting.areaId === null) {
-      redirect(`/meetings/${meeting.id}/room`);
-    }
-    const [projectResult, areas, chatPage] = await Promise.all([
-      getProject(meeting.projectId),
-      getProjectAreas(meeting.projectId),
-      meeting.status === 'LIVE'
-        ? getProjectMessages(meeting.projectId, meeting.areaId)
-        : Promise.resolve({ items: [], nextCursor: null, hasMore: false }),
-    ]);
-    project = projectResult;
-    initialChatPage = chatPage;
-    const visibleArea = areas.find((item) => item.id === meeting.areaId);
-    if (!visibleArea) notFound();
-    area = visibleArea;
-  } catch (error) {
-    if ((error instanceof MeetingServerError || error instanceof ProjectServerError) && error.status === 404) {
-      notFound();
-    }
-    throw error;
-  }
-
-  const selectedSummary =
-    meeting.decisions.find((item) => item.id === requestedDecisionId) ?? meeting.decisions.at(0) ?? null;
-  let selectedDecision: DecisionDetail | null = null;
-  let proposals: DecisionProposal[] = [];
-  let voteRounds: DecisionVoteRound[] = [];
-  let resolutions: DecisionResolution[] = [];
-
-  if (meeting.status === 'LIVE' && selectedSummary) {
-    try {
-      [selectedDecision, proposals, voteRounds, resolutions] = await Promise.all([
-        getDecisionDetail(selectedSummary.id),
-        getDecisionProposals(selectedSummary.id),
-        getDecisionVoteRounds(selectedSummary.id),
-        getDecisionResolutions(selectedSummary.id),
-      ]);
-    } catch (error) {
-      if (error instanceof DecisionServerError && error.status === 404) notFound();
-      throw error;
-    }
-  }
-
-  const meetingRole = meeting.participants.find((item) => item.user.id === currentUser.id)?.role;
-  const participantRole = selectedDecision?.participants.find((item) => item.user.id === currentUser.id)?.role;
-  const canUpdateDecision = hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.decision.update);
-  const isLive = meeting.status === 'LIVE';
-  const isDraft = selectedDecision?.status === 'DRAFT';
-  const isDiscussing = selectedDecision?.status === 'DISCUSSING';
-  const canManageMeeting =
-    hasSystemPermission(currentUser, SYSTEM_PERMISSIONS.project.update) &&
-    (meetingRole === 'HOST' || meetingRole === 'CO_HOST');
-  const canCreateProposal =
-    isLive &&
-    (isDraft || isDiscussing) &&
-    canUpdateDecision &&
-    (participantRole === 'OWNER' || participantRole === 'EDITOR');
-  const canStartDiscussion = isLive && isDraft && canUpdateDecision && selectedDecision?.owner?.id === currentUser.id;
-  const canManageConclusion =
-    isLive && isDiscussing && canUpdateDecision && selectedDecision?.owner?.id === currentUser.id;
-  const canVote = isLive && isDiscussing && (participantRole === 'OWNER' || participantRole === 'APPROVER');
-  const canSendChat = project.status === 'ACTIVE' && area.status === 'ACTIVE' && isLive && meetingRole !== undefined;
-
-  return (
-    <MeetingRoomPage
-      meeting={meeting}
-      project={project}
-      area={area}
-      selectedDecision={selectedDecision}
-      initialChatPage={initialChatPage}
-      currentChatUser={{ id: currentUser.id, name: currentUser.name, avatarUrl: currentUser.avatarUrl }}
-      proposals={proposals}
-      voteRounds={voteRounds}
-      resolutions={resolutions}
-      canManageMeeting={canManageMeeting}
-      canStartDiscussion={canStartDiscussion}
-      canCreateProposal={canCreateProposal}
-      canManageVoteRounds={canManageConclusion}
-      canManageConclusion={canManageConclusion}
-      canVote={canVote}
-      canSendChat={canSendChat}
-      canJoinMeeting={isLive && meetingRole !== undefined}
-    />
-  );
+  if (!Number.isInteger(meetingId) || meetingId < 1) notFound();
+  redirect(`/meetings/${meetingId}/room`);
 }

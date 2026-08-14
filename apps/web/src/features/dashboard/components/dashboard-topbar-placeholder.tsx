@@ -29,7 +29,7 @@ const navigationItems = [
   { key: 'decisions', label: '决策中心', href: '/decisions' },
   { key: 'meetings', label: '会议中心', href: '/meetings' },
   { key: 'graph', label: '关系图谱', href: '/graph' },
-  { key: 'members', label: '成员管理', href: undefined },
+  { key: 'members', label: '组织与权限', href: '/members' },
 ] as const;
 
 /** 主导航中可由移动选中块覆盖的菜单标识。 */
@@ -39,13 +39,24 @@ type MainNavigationKey = (typeof navigationItems)[number]['key'];
 const navigationItemLayoutClass =
   'inline-flex h-10 shrink-0 items-center justify-center rounded-full border border-transparent bg-transparent px-4 text-center text-sm leading-none font-medium whitespace-nowrap';
 
-/** 渲染随页面滚动保持固定、并支持真实路由跳转的工作台顶部导航。 */
-export function DashboardTopbarPlaceholder() {
+/** 新版顶部导航属性。 */
+type DashboardTopbarPlaceholderProps = {
+  /** 当前账号是否允许进入组织与权限一级空间。 */
+  canAccessOrganization: boolean;
+};
+
+/** 渲染新版顶部导航。 */
+export function DashboardTopbarPlaceholder({ canAccessOrganization }: DashboardTopbarPlaceholderProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const visibleNavigationItems = navigationItems.filter(
+    (item) => item.key !== 'members' || canAccessOrganization,
+  );
   const navigationContainerRef = useRef<HTMLElement | null>(null);
-  const activeNavigation: MainNavigationKey = pathname.startsWith('/graph')
-    ? 'graph'
+  const activeNavigation: MainNavigationKey = pathname.startsWith('/members')
+    ? 'members'
+    : pathname.startsWith('/graph')
+      ? 'graph'
     : pathname.startsWith('/meetings')
       ? 'meetings'
       : pathname.startsWith('/decisions')
@@ -164,22 +175,7 @@ export function DashboardTopbarPlaceholder() {
               width: 'var(--navigation-indicator-width, 0px)',
             }}
           />
-          {navigationItems.map((item) => {
-            const navigationButton = (
-              <Button
-                type="button"
-                variant="ghost"
-                aria-current={activeNavigation === item.key ? 'page' : undefined}
-                aria-disabled={!item.href || undefined}
-                data-navigation-key={item.key}
-                disabled={!item.href}
-                className={`relative z-10 ${navigationItemLayoutClass} text-[#31322f] hover:bg-transparent hover:text-[#31322f] active:translate-y-0`}
-              >
-                {item.label}
-              </Button>
-            );
-
-            return item.href ? (
+          {visibleNavigationItems.map((item) => (
               <Button key={item.key} asChild variant="ghost" className="h-auto rounded-full p-0">
                 <Link
                   href={item.href}
@@ -194,10 +190,7 @@ export function DashboardTopbarPlaceholder() {
                   {item.label}
                 </Link>
               </Button>
-            ) : (
-              <span key={item.key}>{navigationButton}</span>
-            );
-          })}
+          ))}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 z-20 flex items-center gap-1 p-1 text-white"
@@ -206,7 +199,7 @@ export function DashboardTopbarPlaceholder() {
                 'inset(4px calc(100% - var(--navigation-indicator-x, 0px) - var(--navigation-indicator-width, 0px)) 4px var(--navigation-indicator-x, 0px) round 9999px)',
             }}
           >
-            {navigationItems.map((item) => (
+            {visibleNavigationItems.map((item) => (
               <span key={item.key} className={navigationItemLayoutClass}>
                 {item.label}
               </span>
@@ -245,8 +238,7 @@ export function DashboardTopbarPlaceholder() {
             </SheetHeader>
             <Separator />
             <nav className="flex flex-col gap-2 px-4" aria-label="移动端主导航">
-              {navigationItems.map((item) =>
-                item.href ? (
+              {visibleNavigationItems.map((item) => (
                   <SheetClose key={item.key} asChild>
                     <Button
                       asChild
@@ -258,20 +250,7 @@ export function DashboardTopbarPlaceholder() {
                       </Link>
                     </Button>
                   </SheetClose>
-                ) : (
-                  <Button
-                    key={item.key}
-                    type="button"
-                    variant="ghost"
-                    className="h-11 w-full justify-start rounded-xl px-4"
-                    disabled
-                    aria-disabled="true"
-                  >
-                    {item.label}
-                    <span className="ml-auto text-xs text-muted-foreground">暂未开放</span>
-                  </Button>
-                ),
-              )}
+              ))}
             </nav>
           </SheetContent>
         </Sheet>

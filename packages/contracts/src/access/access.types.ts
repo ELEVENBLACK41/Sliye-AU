@@ -185,6 +185,109 @@ export type AccessUser = {
   directPermissions: AccessUserPermission[];
 };
 
+/** 用户列表支持的服务端筛选和分页参数。 */
+export type AccessUserListQuery = {
+  /** 按姓名或邮箱执行不区分大小写的模糊搜索。 */
+  keyword?: string;
+  /** 按账号状态筛选。 */
+  status?: AccessUserStatus;
+  /** 按目标部门及其全部下级部门筛选。 */
+  departmentId?: number;
+  /** 是否只查看尚未分配主部门的用户；不能与 `departmentId` 同时使用。 */
+  withoutDepartment?: boolean;
+  /** 按已绑定角色主键筛选。 */
+  roleId?: number;
+  /** 从 1 开始的页码。 */
+  page?: number;
+  /** 每页记录数量。 */
+  pageSize?: number;
+};
+
+/** 分页成员列表中的轻量用户摘要。 */
+export type AccessUserListItem = {
+  /** 用户数据库主键。 */
+  id: number;
+  /** 用户登录邮箱。 */
+  email: string;
+  /** 用户显示名称。 */
+  name: string | null;
+  /** 用户头像地址。 */
+  avatarUrl: string | null;
+  /** 用户账号状态。 */
+  status: AccessUserStatus;
+  /** 用户主部门摘要。 */
+  department: AccessDepartmentSummary | null;
+  /** 用户已绑定的角色摘要。 */
+  roles: AccessUserRole[];
+  /** 用户直接授权记录数量。 */
+  directPermissionCount: number;
+  /** 最近登录时间；`null` 表示从未登录。 */
+  lastLoginAt: string | null;
+  /** 用户创建时间。 */
+  createdAt: string;
+};
+
+/** 服务端分页成员列表。 */
+export type AccessUserListResult = {
+  /** 当前页用户摘要。 */
+  items: AccessUserListItem[];
+  /** 符合筛选条件的用户总数。 */
+  total: number;
+  /** 当前页码。 */
+  page: number;
+  /** 当前每页记录数量。 */
+  pageSize: number;
+  /** 根据总数与每页数量计算出的总页数。 */
+  totalPages: number;
+};
+
+/** 一条最终生效权限的授权来源。 */
+export type AccessEffectivePermissionSource =
+  | {
+      /** 超级管理员显式旁路系统权限。 */
+      type: 'SUPER_ADMIN';
+    }
+  | {
+      /** 权限来自用户绑定的角色。 */
+      type: 'ROLE';
+      /** 来源角色主键。 */
+      roleId: number;
+      /** 来源角色名称。 */
+      roleName: string;
+      /** 该角色授权的数据范围。 */
+      scopeType: AccessDataScope;
+    }
+  | {
+      /** 权限来自用户级直接允许授权。 */
+      type: 'DIRECT';
+      /** 直接授权记录主键。 */
+      grantId: number;
+      /** 直接授权的数据范围。 */
+      scopeType: AccessDataScope;
+      /** 授权失效时间；`null` 表示长期有效。 */
+      expiresAt: string | null;
+    };
+
+/** 后端完成合并和拒绝处理后的一条最终权限。 */
+export type AccessEffectivePermission = {
+  /** 完整权限目录记录。 */
+  permission: AccessPermission;
+  /** 合并后的全部有效数据范围。 */
+  scopes: AccessDataScope[];
+  /** 形成该最终权限的有效授权来源。 */
+  sources: AccessEffectivePermissionSource[];
+};
+
+/** 用户详情抽屉使用的完整授权解析结果。 */
+export type AccessUserAuthorizationDetail = {
+  /** 用户、部门、角色和原始直接授权。 */
+  user: AccessUser;
+  /** 后端统一解析后的最终有效权限。 */
+  effectivePermissions: AccessEffectivePermission[];
+  /** 当前被有效直接拒绝完全移除的权限码。 */
+  deniedPermissionCodes: string[];
+};
+
 /** 创建自定义角色的请求体。 */
 export type CreateRoleRequestPayload = {
   /** 稳定且全局唯一的角色代码，创建后不允许修改。 */
@@ -383,4 +486,6 @@ export type AccessAuditListResult = {
   page: number;
   /** 当前每页记录数量。 */
   pageSize: number;
+  /** 根据总数与每页数量计算出的总页数。 */
+  totalPages: number;
 };

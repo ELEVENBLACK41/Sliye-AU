@@ -11,6 +11,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuthorization } from '../auth/decorators/current-authorization.decorator';
@@ -28,6 +29,8 @@ import { AssignRoleToUserDto } from './dto/assign-role-to-user.dto';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { MoveDepartmentDto } from './dto/move-department.dto';
+import { ListAccessAuditLogsDto } from './dto/list-access-audit-logs.dto';
+import { ListAccessUsersDto } from './dto/list-access-users.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { UpdateDepartmentStatusDto } from './dto/update-department-status.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -49,8 +52,22 @@ export class AccessManagementController {
   @Get('users')
   @RequirePermissions('access:user:read')
   @ApiOperation({ summary: '查询授权范围内的用户列表' })
-  listUsers(@CurrentAuthorization() actor: AuthorizationContext) {
-    return this.accessManagementService.listUsers(actor);
+  listUsers(
+    @CurrentAuthorization() actor: AuthorizationContext,
+    @Query() query: ListAccessUsersDto,
+  ) {
+    return this.accessManagementService.listUsers(actor, query);
+  }
+
+  /** 查询当前操作者数据范围内的单个用户及最终授权解析。 */
+  @Get('users/:userId/authorization')
+  @RequirePermissions('access:user:read')
+  @ApiOperation({ summary: '查询用户完整授权解析' })
+  getUserAuthorization(
+    @CurrentAuthorization() actor: AuthorizationContext,
+    @Param('userId', ParseIntPipe) userId: number,
+  ) {
+    return this.accessManagementService.getUserAuthorization(actor, userId);
   }
 
   /** 查询角色列表及其权限范围。 */
@@ -333,8 +350,8 @@ export class AccessManagementController {
   @Get('audit-logs')
   @RequirePermissions('access:audit:read')
   @ApiOperation({ summary: '查询访问控制变更审计' })
-  listAuditLogs() {
-    return this.accessManagementService.listAuditLogs();
+  listAuditLogs(@Query() query: ListAccessAuditLogsDto) {
+    return this.accessManagementService.listAuditLogs(query);
   }
 
   /** 通过独立审计入口只读访问私有分区或私有会议消息。 */

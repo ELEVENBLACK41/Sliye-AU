@@ -1,3 +1,11 @@
+/*
+ * @Author: shaoliye elevenblack41@gmail.com
+ * @Date: 2026-08-13 14:10:17
+ * @LastEditors: shaoliye elevenblack41@gmail.com
+ * @LastEditTime: 2026-08-14 16:50:27
+ * @FilePath: \NextNest\apps\web\src\app\(newroute)\meetings\page.tsx
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 /**
  * 本文件提供新版会议中心 Server Component 入口并按 URL 状态读取真实会议数据。
  */
@@ -11,7 +19,7 @@ import {
   getMeetingCenterProjects,
   getMeetingCenterRecords,
 } from '@/features/meeting-center/services/meeting-center-server.service';
-import { getMeetingDetail } from '@/features/meetings/services/meetings-server.service';
+import { getMeetingRoomDetail } from '@/features/meeting-room/services/meeting-room-server.service';
 import {
   createOverviewQuery,
   createRecordsQuery,
@@ -31,7 +39,7 @@ export default async function MeetingsPage({ searchParams }: MeetingsPageProps) 
   const query = parseMeetingCenterPageQuery(await searchParams);
   const projectsPromise = getMeetingCenterProjects();
   const selectedMeetingPromise = query.meetingId
-    ? getMeetingDetail(query.meetingId).then((detail) =>
+    ? getMeetingRoomDetail(query.meetingId).then((detail) =>
         createMeetingCenterListItem(detail, currentUser.id),
       )
     : Promise.resolve(undefined);

@@ -14,7 +14,6 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { getCurrentAuthUser } from '@/features/auth/services/auth-server.service';
 import { MeetingRuntime } from '@/features/meeting-session/components/meeting-runtime';
 import { NotificationRuntime } from '@/features/notifications/components/notification-runtime';
-import { NotificationTestButton } from '@/features/notifications/components/notification-test-button';
 import { Toaster } from '@workspace/ui/components/sonner';
 
 import '../styles/globals.css';

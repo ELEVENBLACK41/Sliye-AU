@@ -30,9 +30,12 @@ function createPrismaMock() {
   return {
     role: { findUnique: jest.fn() },
     department: { findFirst: jest.fn() },
-    user: { findFirst: jest.fn(), count: jest.fn() },
+    user: { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn() },
     userRole: { findFirst: jest.fn() },
     permission: { findUnique: jest.fn() },
+    $transaction: jest.fn((operations: Array<Promise<unknown>>) =>
+      Promise.all(operations),
+    ),
   };
 }
 
@@ -48,6 +51,73 @@ function createAuthorizationMock() {
 }
 
 describe('AccessManagementService', () => {
+  it('成员列表应叠加部门后代筛选并返回稳定分页结果', async () => {
+    const prisma = createPrismaMock();
+    const authorization = createAuthorizationMock();
+    authorization.buildUserWhere.mockResolvedValue({
+      deptId: { in: [10, 11] },
+    });
+    authorization.getDepartmentTreeIds.mockResolvedValue([20, 21]);
+    prisma.user.findMany.mockResolvedValue([
+      {
+        id: 5,
+        email: 'member@example.com',
+        name: '成员甲',
+        avatarUrl: null,
+        status: UserStatus.ACTIVE,
+        department: {
+          id: 20,
+          code: 'product',
+          name: '产品部',
+          status: DepartmentStatus.ACTIVE,
+        },
+        roles: [],
+        _count: { permissions: 2 },
+        lastLoginAt: null,
+        createdAt: new Date('2026-08-01T00:00:00.000Z'),
+      },
+    ]);
+    prisma.user.count.mockResolvedValue(21);
+    const service = new AccessManagementService(
+      prisma as unknown as PrismaService,
+      authorization as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.listUsers(createActor(), {
+        keyword: 'member',
+        departmentId: 20,
+        roleId: 3,
+        page: 2,
+        pageSize: 10,
+      }),
+    ).resolves.toMatchObject({
+      total: 21,
+      page: 2,
+      pageSize: 10,
+      totalPages: 3,
+      items: [{ id: 5, directPermissionCount: 2 }],
+    });
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 10, take: 10, orderBy: { id: 'asc' } }),
+    );
+    expect(authorization.getDepartmentTreeIds).toHaveBeenCalledWith(20);
+  });
+
+  it('成员列表不能同时筛选指定部门和未分配部门', async () => {
+    const service = new AccessManagementService(
+      createPrismaMock() as unknown as PrismaService,
+      createAuthorizationMock() as unknown as AuthorizationService,
+    );
+
+    await expect(
+      service.listUsers(createActor(), {
+        departmentId: 10,
+        withoutDepartment: true,
+      }),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.COMMON_VALIDATION_FAILED });
+  });
+
   it('系统角色不能通过普通更新接口修改', async () => {
     const prisma = createPrismaMock();
     const authorization = createAuthorizationMock();
@@ -189,7 +259,12 @@ describe('AccessManagementService', () => {
     );
 
     await expect(
-      service.updateUserDepartment(createActor(), 1, { departmentId: null }, {}),
+      service.updateUserDepartment(
+        createActor(),
+        1,
+        { departmentId: null },
+        {},
+      ),
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.ACCESS_PERMISSION_DENIED,
     });
