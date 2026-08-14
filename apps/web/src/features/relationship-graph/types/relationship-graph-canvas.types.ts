@@ -26,6 +26,8 @@ export type RelationshipGraphCanvasTheme = {
   nodeColors: Record<RelationshipGraphNodeType, string>;
   /** 普通连线颜色。 */
   linkColor: string;
+  /** 鼠标悬浮或拖拽节点时，与该节点直接相连的关系线颜色。 */
+  linkHighlightColor: string;
   /** 节点标签颜色。 */
   labelColor: string;
   /** 选中和聚焦轮廓颜色。 */
@@ -57,4 +59,3 @@ export type RelationshipGraphCanvasHandle = {
   /** 将指定节点移动到画布中心。 */
   focusNode: (nodeId: string) => void;
 };
-
