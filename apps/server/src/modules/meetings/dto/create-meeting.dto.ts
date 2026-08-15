@@ -1,0 +1,83 @@
+/**
+ * 本文件定义创建无音视频会议的运行时校验 DTO。
+ */
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { CreateMeetingRequestPayload } from '@workspace/contracts/meetings';
+import { Transform } from 'class-transformer';
+import {
+  ArrayUnique,
+  IsArray,
+  IsISO8601,
+  IsInt,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
+
+/** 校验在一项决策中创建计划会议所需的字段。 */
+export class CreateMeetingDto implements CreateMeetingRequestPayload {
+  /** 会议所属讨论分区主键。 */
+  @ApiProperty({ minimum: 1 })
+  @IsInt()
+  @Min(1)
+  areaId!: number;
+
+  /** 会议标题。 */
+  @ApiProperty({ example: '权限模块重构方案评审会' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  title!: string;
+
+  /** 会议目标或补充说明。 */
+  @ApiPropertyOptional({ example: '讨论候选方案并决定是否进入投票。' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  /** 可选的计划开始时间。 */
+  @ApiPropertyOptional({ example: '2026-07-25T06:00:00.000Z' })
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  scheduledAt?: string;
+
+  /** 计划持续分钟数；未传时服务端默认使用 60 分钟。 */
+  @ApiPropertyOptional({ minimum: 15, maximum: 480, default: 60 })
+  @IsOptional()
+  @IsInt()
+  @Min(15)
+  @Max(480)
+  scheduledDurationMinutes?: number;
+
+  /** 会议默认媒体模式；旧项目入口未传时使用视频。 */
+  @ApiPropertyOptional({ enum: ['AUDIO', 'VIDEO'], default: 'VIDEO' })
+  @IsOptional()
+  @IsString()
+  mediaMode?: CreateMeetingRequestPayload['mediaMode'];
+
+  /** 同一项目内需要关联的决策主键，普通会议允许为空数组。 */
+  @ApiProperty({ type: [Number], example: [11, 12] })
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  decisionIds!: number[];
+
+  /** 当前分区可见成员中的受邀用户主键。 */
+  @ApiProperty({ type: [Number], example: [3, 5, 8] })
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  participantIds!: number[];
+}

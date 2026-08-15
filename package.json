@@ -1,6 +1,10 @@
 {
   "name": "nextnest",
   "private": true,
+  "packageManager": "pnpm@10.24.0",
+  "engines": {
+    "node": ">=22.21.1 <23"
+  },
   "scripts": {
     "dev": "pnpm -r --parallel dev",
     "dev:web": "pnpm --filter @nextnest/web dev",
@@ -11,6 +15,10 @@
     "build:admin": "pnpm --filter @nextnest/admin build",
     "build:server": "pnpm --filter @nextnest/server build",
     "lint": "pnpm -r lint",
+    "shadcn": "shadcn",
     "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "shadcn": "^4.13.1"
   }
 }

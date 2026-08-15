@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 @source "../../../../packages/ui/**/*.tsx";
 
 :root {
@@ -34,6 +36,47 @@
   --sidebar-accent-foreground: oklch(0.212 0.019 322.12);
   --sidebar-border: oklch(0.922 0.005 325.62);
   --sidebar-ring: oklch(0.711 0.019 323.02);
+  --project-accent: oklch(0.82 0.17 88);
+  --project-accent-soft: oklch(0.96 0.07 91);
+  --project-surface: oklch(0.975 0.008 92);
+  --project-ink: oklch(0.28 0.012 105);
+  --decision-accent: oklch(0.84 0.16 88);
+  --decision-accent-soft: oklch(0.96 0.07 91);
+  --decision-surface: oklch(0.985 0.008 92 / 82%);
+  --decision-ink: oklch(0.28 0.012 105);
+  --decision-panel: oklch(0.27 0.01 105);
+  --decision-heat-0: oklch(0.97 0.035 92);
+  --decision-heat-1: oklch(0.93 0.08 91);
+  --decision-heat-2: oklch(0.88 0.13 89);
+  --decision-heat-3: oklch(0.81 0.17 86);
+  --decision-heat-4: oklch(0.68 0.16 78);
+  --decision-meeting: oklch(0.66 0.16 260);
+  --decision-proposal: oklch(0.72 0.14 38);
+  --decision-vote: oklch(0.74 0.15 82);
+  --decision-resolution: oklch(0.66 0.12 155);
+  --relationship-graph-link-highlight: color-mix(
+    in oklch,
+    var(--decision-meeting) 65%,
+    var(--decision-proposal)
+  );
+  --meeting-accent: oklch(0.86 0.18 91);
+  --meeting-accent-foreground: oklch(0.22 0.015 93);
+  --meeting-accent-soft: oklch(0.97 0.06 92);
+  --meeting-surface: oklch(0.985 0.006 92);
+  --meeting-panel: oklch(0.23 0.008 95);
+  --meeting-panel-foreground: oklch(0.985 0.004 95);
+  --meeting-line: oklch(0.9 0.012 91);
+  --meeting-room-background: oklch(0.12 0.006 95);
+  --meeting-room-foreground: oklch(0.985 0.004 95);
+  --meeting-room-control: oklch(0.2 0.007 95);
+  --meeting-room-video: oklch(0.17 0.006 95);
+  --meeting-room-sidebar: oklch(0.985 0.006 92);
+  --meeting-room-success: oklch(0.72 0.18 145);
+  --meeting-room-danger: oklch(0.63 0.22 28);
+  --organization-accent: oklch(0.76 0.13 151);
+  --organization-accent-soft: oklch(0.94 0.045 151);
+  --organization-surface: oklch(0.985 0.007 145 / 86%);
+  --organization-ink: oklch(0.34 0.075 151);
 }
 
 .dark {
@@ -68,10 +111,46 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.542 0.034 322.5);
+  --project-accent: oklch(0.82 0.17 88);
+  --project-accent-soft: oklch(0.34 0.05 88);
+  --project-surface: oklch(0.19 0.008 92);
+  --project-ink: oklch(0.96 0.004 95);
+  --decision-accent: oklch(0.84 0.16 88);
+  --decision-accent-soft: oklch(0.34 0.05 88);
+  --decision-surface: oklch(0.2 0.009 92 / 88%);
+  --decision-ink: oklch(0.96 0.004 95);
+  --decision-panel: oklch(0.17 0.008 92);
+  --decision-heat-0: oklch(0.28 0.035 91);
+  --decision-heat-1: oklch(0.38 0.07 90);
+  --decision-heat-2: oklch(0.5 0.11 88);
+  --decision-heat-3: oklch(0.66 0.15 86);
+  --decision-heat-4: oklch(0.82 0.17 84);
+  --decision-meeting: oklch(0.72 0.14 260);
+  --decision-proposal: oklch(0.76 0.12 38);
+  --decision-vote: oklch(0.8 0.14 82);
+  --decision-resolution: oklch(0.72 0.11 155);
+  --meeting-accent: oklch(0.83 0.17 89);
+  --meeting-accent-foreground: oklch(0.2 0.013 93);
+  --meeting-accent-soft: oklch(0.32 0.05 89);
+  --meeting-surface: oklch(0.18 0.008 92);
+  --meeting-panel: oklch(0.12 0.006 95);
+  --meeting-panel-foreground: oklch(0.985 0.004 95);
+  --meeting-line: oklch(0.33 0.016 91);
+  --meeting-room-background: oklch(0.1 0.005 95);
+  --meeting-room-foreground: oklch(0.985 0.004 95);
+  --meeting-room-control: oklch(0.18 0.006 95);
+  --meeting-room-video: oklch(0.14 0.005 95);
+  --meeting-room-sidebar: oklch(0.18 0.008 92);
+  --meeting-room-success: oklch(0.72 0.18 145);
+  --meeting-room-danger: oklch(0.63 0.22 28);
+  --organization-accent: oklch(0.72 0.13 151);
+  --organization-accent-soft: oklch(0.3 0.045 151);
+  --organization-surface: oklch(0.19 0.01 145 / 90%);
+  --organization-ink: oklch(0.82 0.1 151);
 }
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-satoshi), var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -104,6 +183,37 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-project-accent: var(--project-accent);
+  --color-project-accent-soft: var(--project-accent-soft);
+  --color-project-surface: var(--project-surface);
+  --color-project-ink: var(--project-ink);
+  --color-decision-accent: var(--decision-accent);
+  --color-decision-accent-soft: var(--decision-accent-soft);
+  --color-decision-surface: var(--decision-surface);
+  --color-decision-ink: var(--decision-ink);
+  --color-decision-panel: var(--decision-panel);
+  --color-decision-meeting: var(--decision-meeting);
+  --color-decision-proposal: var(--decision-proposal);
+  --color-decision-vote: var(--decision-vote);
+  --color-decision-resolution: var(--decision-resolution);
+  --color-meeting-accent: var(--meeting-accent);
+  --color-meeting-accent-foreground: var(--meeting-accent-foreground);
+  --color-meeting-accent-soft: var(--meeting-accent-soft);
+  --color-meeting-surface: var(--meeting-surface);
+  --color-meeting-panel: var(--meeting-panel);
+  --color-meeting-panel-foreground: var(--meeting-panel-foreground);
+  --color-meeting-line: var(--meeting-line);
+  --color-meeting-room-background: var(--meeting-room-background);
+  --color-meeting-room-foreground: var(--meeting-room-foreground);
+  --color-meeting-room-control: var(--meeting-room-control);
+  --color-meeting-room-video: var(--meeting-room-video);
+  --color-meeting-room-sidebar: var(--meeting-room-sidebar);
+  --color-meeting-room-success: var(--meeting-room-success);
+  --color-meeting-room-danger: var(--meeting-room-danger);
+  --color-organization-accent: var(--organization-accent);
+  --color-organization-accent-soft: var(--organization-accent-soft);
+  --color-organization-surface: var(--organization-surface);
+  --color-organization-ink: var(--organization-ink);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

@@ -1,6 +1,10 @@
+/**
+ * 本文件实现登录、公开注册和邮箱验证三种认证表单状态。
+ */
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertCircle, Loader2, LogIn } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -12,34 +16,42 @@ import type {
   LoginFormValues,
   RegisterFormValues,
 } from '@/features/auth/types/auth.type';
+import { AUTH_SESSION_CHANGED_EVENT } from '@/features/notifications/constants';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 
+/** 登录表单初始值。 */
 const INITIAL_LOGIN_VALUES: LoginFormValues = {
   email: '',
   password: '',
 };
 
+/** 注册表单初始值。 */
 const INITIAL_REGISTER_VALUES: RegisterFormValues = {
   email: '',
   password: '',
   name: '',
 };
 
+/** 邮箱验证码确认表单初始值。 */
 const INITIAL_CONFIRM_VALUES: ConfirmEmailFormValues = {
   email: '',
   code: '',
 };
 
+/** 认证表单属性。 */
 type LoginFormProps = {
+  /** 登录或验证成功后允许跳转的站内路径。 */
   redirectTo?: string;
 };
 
+/** 当前认证表单展示的业务模式。 */
 type AuthMode = 'login' | 'register' | 'confirm';
 
+/** 渲染登录、注册和邮箱验证表单，并维护三种模式之间的安全切换。 */
 export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>('login');
@@ -63,18 +75,9 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
     return () => window.clearInterval(timer);
   }, [mode]);
 
-  const canLogin = useMemo(
-    () => loginValues.email.trim().length > 0 && loginValues.password.trim().length > 0,
-    [loginValues.email, loginValues.password],
-  );
-  const canRegister = useMemo(
-    () => registerValues.email.trim().length > 0 && registerValues.password.length >= 8,
-    [registerValues.email, registerValues.password],
-  );
-  const canConfirm = useMemo(
-    () => confirmValues.email.trim().length > 0 && /^\d{6}$/.test(confirmValues.code.trim()),
-    [confirmValues.code, confirmValues.email],
-  );
+  const canLogin = loginValues.email.trim().length > 0 && loginValues.password.trim().length > 0;
+  const canRegister = registerValues.email.trim().length > 0 && registerValues.password.length >= 8;
+  const canConfirm = confirmValues.email.trim().length > 0 && /^\d{6}$/.test(confirmValues.code.trim());
   const secondsUntilExpiry = emailVerification?.expiresAt
     ? Math.max(0, Math.ceil((new Date(emailVerification.expiresAt).getTime() - now) / 1000))
     : null;
@@ -84,10 +87,9 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
       : 0;
   const canResend = mode === 'confirm' && cooldownSeconds <= 0 && !isSubmitting;
 
-
-  // 登录
+  /** 校验登录表单后调用 BFF，并在成功后进入原目标页面。 */
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); //阻止表单默认行文，防止页面刷新
+    event.preventDefault();
 
     if (!canLogin || isSubmitting) {
       return;
@@ -105,6 +107,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
         ...current,
         password: '',
       }));
+      window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
       router.replace(redirectTo);
       router.refresh();
     } catch (error) {
@@ -118,7 +121,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
     }
   }
 
-  //注册
+  /** 注册新账号并切换到邮箱验证码确认模式。 */
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -163,6 +166,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
     }
   }
 
+  /** 确认邮箱验证码，成功后建立登录 Cookie 并进入目标页面。 */
   async function handleConfirm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -182,6 +186,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
         ...current,
         code: '',
       }));
+      window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
       router.replace(redirectTo);
       router.refresh();
     } catch (error) {
@@ -191,6 +196,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
     }
   }
 
+  /** 在冷却结束后重新发送邮箱验证码。 */
   async function handleResendCode() {
     if (!canResend) {
       return;
@@ -221,6 +227,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
     }
   }
 
+  /** 切换认证模式并清理上一模式的提示信息。 */
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
     setErrorMessage('');
@@ -229,7 +236,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
 
   if (mode === 'register') {
     return (
-      <Card className="w-full rounded-md border-zinc-200 shadow-none">
+      <Card className="w-full rounded-md shadow-none">
         <CardHeader className="space-y-2">
           <CardTitle className="text-2xl">注册账号</CardTitle>
           <CardDescription>创建 Decision Hub 账号</CardDescription>
@@ -314,7 +321,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
 
   if (mode === 'confirm') {
     return (
-      <Card className="w-full rounded-md border-zinc-200 shadow-none">
+      <Card className="w-full rounded-md shadow-none">
         <CardHeader className="space-y-2">
           <CardTitle className="text-2xl">验证邮箱</CardTitle>
           <CardDescription>输入 Nest 日志中的 6 位验证码</CardDescription>
@@ -330,7 +337,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
             {errorMessage ? <ErrorAlert message={errorMessage} /> : null}
 
             {secondsUntilExpiry !== null ? (
-              <div className="rounded-md border bg-zinc-50 p-3 text-sm text-muted-foreground">
+              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
                 <p>发送邮箱：{emailVerification?.sentTo}</p>
                 <p>有效期剩余：{formatDuration(secondsUntilExpiry)}</p>
                 {secondsUntilExpiry === 0 ? <p className="text-destructive">验证码已过期，请重新发送。</p> : null}
@@ -396,7 +403,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
   }
 
   return (
-    <Card className="w-full rounded-md border-zinc-200 shadow-none">
+    <Card className="w-full rounded-md shadow-none">
       <CardHeader className="space-y-2">
         <CardTitle className="text-2xl">账号登录</CardTitle>
         <CardDescription>使用已注册邮箱和密码登录</CardDescription>
@@ -444,7 +451,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
           </div>
         </CardContent>
 
-        <CardFooter className="pt-6">
+        <CardFooter className="flex-col gap-3 pt-6">
           <Button type="submit" className="w-full" disabled={!canLogin || isSubmitting}>
             {isSubmitting ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -453,7 +460,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
             )}
             登录
           </Button>
-          <Button type="button" variant="ghost" className="mt-3 w-full" onClick={() => switchMode('register')}>
+          <Button type="button" variant="ghost" className="w-full" onClick={() => switchMode('register')}>
             没有账号，先注册
           </Button>
         </CardFooter>
@@ -462,7 +469,7 @@ export function LoginForm({ redirectTo = LOGIN_REDIRECT_PATH }: LoginFormProps) 
   );
 }
 
-// 提示信息的显示
+/** 渲染认证流程的统一错误提示。 */
 function ErrorAlert({ message }: { message: string }) {
   return (
     <Alert variant="destructive">
@@ -472,6 +479,7 @@ function ErrorAlert({ message }: { message: string }) {
   );
 }
 
+/** 把验证码剩余秒数格式化为 `mm:ss`。 */
 function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;

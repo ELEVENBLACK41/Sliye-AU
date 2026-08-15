@@ -1,208 +1,168 @@
-# Server — NestJS 后端服务
+# Server：认证、权限与业务 API
 
-## 目录
+`apps/server` 是项目的 NestJS 11 后端。当前权限体系采用“全局默认认证 + RBAC 功能权限 + 数据范围”的组合模型，所有真实权限判断都在后端完成。
 
-- [项目简介](#项目简介)
-- [技术栈](#技术栈)
-- [目录结构](#目录结构)
-- [快速启动](#快速启动)
-- [环境变量](#环境变量)
-- [接口列表](#接口列表)
-- [统一响应格式](#统一响应格式)
-- [规范评审](#规范评审)
+## 请求授权链路
 
----
+```mermaid
+flowchart LR
+  A[HTTP 请求] --> B[RequestContextMiddleware]
+  B --> C[全局 AccessTokenGuard]
+  C --> D[加载用户、部门、角色授权、直接授权]
+  D --> E[生成请求级 AuthorizationContext]
+  E --> F[全局 PermissionGuard]
+  F --> G[Controller 权限码]
+  G --> H[Service 数据范围]
+  H --> I[Prisma where / 事务]
+  I --> J[统一成功拦截器]
+  C -.异常.-> K[统一异常过滤器]
+  F -.异常.-> K
+  H -.异常.-> K
+```
 
-## 项目简介
-
-基于 **NestJS 11 + Prisma 7 + PostgreSQL** 搭建的 REST API 后端服务，作为 NextNest 全栈脚手架的服务端部分，运行于 `3001` 端口，供 Next.js BFF 层代理调用。
-
----
-
-## 技术栈
-
-| 分类 | 技术 |
-|------|------|
-| 框架 | NestJS 11 |
-| 语言 | TypeScript 5 |
-| ORM | Prisma 7（Driver Adapter 模式） |
-| 数据库 | PostgreSQL |
-| 数据库连接 | `@prisma/adapter-pg` + `pg` |
-| 配置管理 | `@nestjs/config` |
-| HTTP 平台 | Express（默认） |
-| 构建 | `@nestjs/cli` |
-| 代码规范 | ESLint + Prettier |
-
----
+- 认证守卫默认保护所有 Controller；登录、注册、刷新、邮箱验证和健康检查使用 `@Public()` 显式开放。
+- `@RequirePermissions()` 只接受共享契约派生的 `SystemPermissionCode`，避免随意手写未知权限码。
+- JWT 只表达身份和会话，不保存权限；每次请求从数据库读取最新授权，因此权限调整在下一次请求生效。
+- 用户直接 `DENY/ALL` 优先于角色和直接 `ALLOW`；过期直接授权自动忽略。
+- 多条允许范围按 OR 合并，详情接口使用“资源 ID + 授权范围”联合查询，避免 IDOR。
 
 ## 目录结构
 
-```
-server/
-├── prisma/                     # Prisma 数据库相关
-│   ├── schema.prisma           # 数据模型定义
-│   ├── prisma.config.ts        # Prisma 7 数据源配置（替代 schema url）
-│   └── migrations/             # 数据库迁移历史
-│
-├── src/
-│   ├── main.ts                 # 应用入口：注册全局 Filter / Interceptor
-│   ├── app.module.ts           # 根模块：汇总所有功能模块
-│   │
-│   ├── database/               # 数据库基础设施层
-│   │   ├── prisma.module.ts    # 全局 Prisma 模块（@Global）
-│   │   └── prisma.service.ts   # PrismaService：管理连接生命周期
-│   │
-│   ├── common/                 # 跨模块公共基础设施
-│   │   ├── interceptors/       # 拦截器（统一响应格式）
-│   │   ├── filters/            # 异常过滤器（统一异常格式）
-│   │   ├── guards/             # 守卫（鉴权 / 权限）[待扩展]
-│   │   ├── pipes/              # 管道（入参校验 / 转换）[待扩展]
-│   │   ├── decorators/         # 自定义装饰器 [待扩展]
-│   │   └── utils/              # 工具函数 [待扩展]
-│   │
-│   ├── config/                 # 配置层（env 解析、类型化配置）[待扩展]
-│   │
-│   ├── modules/                # 业务功能模块
-│   │   ├── test/               # 测试模块（开发调试用）
-│   │   ├── user/               # 用户模块 [待扩展]
-│   │   ├── auth/               # 认证模块 [待扩展]
-│   │   └── audit/              # 审计日志模块 [待扩展]
-│   │
-│   ├── types/                  # 全局共享类型定义 [待扩展]
-│   └── generated/              # Prisma 自动生成的客户端（勿手动编辑）
-│
-└── test/                       # E2E 测试
+```text
+apps/server/
+├── prisma/
+│   ├── schema.prisma
+│   ├── access-control.sync.ts
+│   └── migrations/20260711090000_access_control_v2/
+├── src/common/
+│   ├── exceptions/            # BusinessException
+│   ├── filters/               # 统一异常与 Prisma 错误映射
+│   ├── interceptors/          # 统一成功响应
+│   ├── middleware/            # requestId 上下文
+│   └── request-context/
+├── src/modules/auth/          # 会话、全局守卫、统一授权服务
+├── src/modules/access-management/ # 部门、用户、角色、授权、审计
+├── src/modules/decisions/     # 最小决策列表、创建、详情
+└── test/                      # 不写业务数据的 HTTP E2E
 ```
 
----
+## 权限目录与系统角色
 
-## 快速启动
+系统权限和四个系统角色的唯一事实来源位于 `packages/contracts/src/access/permission-catalog.ts`。系统角色不能通过管理接口改名、删除或修改默认授权。
 
-### 前置条件
+| 角色代码             | 后端行为                                                                      |
+| -------------------- | ----------------------------------------------------------------------------- |
+| `SUPER_ADMIN`        | 显式旁路全部系统权限和数据范围；普通接口不能分配或解除；至少保留一个有效账号  |
+| `ADMIN`              | 同步全部系统权限的 `ALL` 范围；不能操作超级管理员或修改系统角色               |
+| `DEPARTMENT_MANAGER` | 查看和调动本部门及下级成员；读取部门树；创建/读取部门树内决策，并读取参与决策 |
+| `MEMBER`             | 查看主部门；在主部门创建决策；读取自己参与的决策                              |
 
-- Node.js ≥ 22
-- pnpm ≥ 9
-- PostgreSQL 数据库（本地或远程）
+启动时 `AccessControlCatalogCheckService` 只读检查系统权限、系统角色默认授权和有效超级管理员。发现漂移会停止启动，并提示显式执行同步命令；应用启动不会偷偷写库。
 
-### 安装依赖
+## 部门与数据范围
 
-```bash
-pnpm install
-```
+用户第一版只有一个 `deptId` 主部门。部门使用邻接表 `parentId` 形成树，并提供稳定 `code`、`status` 和 `sortOrder`。
 
-### 配置环境变量
+| 范围             | 决策语义                                   |
+| ---------------- | ------------------------------------------ |
+| `ALL`            | 全部决策                                   |
+| `OWN`            | 当前用户创建或负责的决策                   |
+| `DEPT`           | 当前主部门决策；无部门时不匹配任何数据     |
+| `DEPT_AND_CHILD` | 当前主部门及全部后代部门决策               |
+| `PARTICIPATED`   | `DecisionParticipant` 中包含当前用户的决策 |
 
-```bash
-# 编辑 .env，设置 DATABASE_URL
-DATABASE_URL="postgresql://user:pass@localhost:5432/dbname?schema=public"
-```
+停用部门不能接收新成员或新决策。移动部门会拒绝自己、直接或间接下级作为新父节点。部门存在直属成员或启用下级时不能停用。
 
-### 数据库迁移
+## 主要接口
 
-```bash
-pnpm prisma migrate dev
-```
+默认前缀为 `/api/v1`。
 
-### 启动开发服务
+| 方法                  | 路径                                                    | 权限码或开放策略                                 |
+| --------------------- | ------------------------------------------------------- | ------------------------------------------------ |
+| GET                   | `/health`、`/health/ready`                              | `@Public()`                                      |
+| GET/POST              | `/auth/password-public-key`、注册、登录、刷新、邮箱验证 | `@Public()`                                      |
+| GET/PATCH             | `/auth/profile`、`/auth/me`                             | 仅认证；读取或修改本人资料                       |
+| POST/DELETE           | `/auth/profile/avatar`                                  | 仅认证；上传、替换或移除本人头像                 |
+| GET                   | `/auth/profile/avatar/:fileName`                        | 仅认证；读取不可变头像资源                       |
+| POST                  | `/auth/logout`                                          | 仅认证                                           |
+| GET                   | `/access-management/users`                              | `access:user:read` + 用户范围                    |
+| PATCH                 | `/access-management/users/:id/status`                   | `access:user:status:update` + 用户范围           |
+| PATCH                 | `/access-management/users/:id/department`               | `access:user:department:update` + 部门范围       |
+| GET/POST/PATCH        | `/access-management/departments...`                     | 部门 read/create/update/move 权限                |
+| GET/POST/PATCH/DELETE | `/access-management/roles...`                           | 角色 read/create/update 权限；仅自定义角色可修改 |
+| GET                   | `/access-management/permissions`                        | `access:permission:read`；系统权限只读           |
+| POST/DELETE           | 用户角色、角色授权、用户直接授权子路径                  | 对应 assign 权限和授权上限                       |
+| GET                   | `/access-management/audit-logs`                         | `access:audit:read`                              |
+| GET/POST              | `/decisions`                                            | `decision:read` / `decision:create` + 数据范围   |
+| GET                   | `/decisions/:decisionId`                                | `decision:read`；越权与不存在统一 404            |
 
-```bash
-pnpm dev
-# 等同于: nest start --watch
-# 监听端口: 3001
-```
+角色权限删除路径中的最后一个参数是独立授权记录 `grantId`，不是权限主键；这样同一权限可以保留多条不同数据范围。
 
-### 构建生产包
+## 统一响应与错误
 
-```bash
-pnpm build
-node dist/src/main.js
-```
-
----
-
-## 环境变量
-
-| 变量名 | 说明 | 示例 |
-|--------|------|------|
-| `DATABASE_URL` | PostgreSQL 连接串 | `postgresql://user:pass@localhost:5432/dbname?schema=public` |
-| `PORT` | 服务监听端口（可选，默认 3001） | `3001` |
-
----
-
-## 接口列表
-
-> 所有响应均包装为统一格式，见下节。
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/test` | 心跳测试 |
-| GET | `/test/test1` | 心跳测试 2 |
-| GET | `/test/users` | 查询用户列表（含文章），表空自动 seed |
-
----
-
-## 统一响应格式
-
-### 成功
+成功响应：
 
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": { "..." : "..." },
-  "timestamp": 1778041000929
+  "success": true,
+  "code": "COMMON.OK",
+  "message": "请求成功",
+  "data": {},
+  "timestamp": 1783700000000,
+  "requestId": "..."
 }
 ```
 
-### 失败
+失败响应：
 
 ```json
 {
-  "code": 404,
-  "message": "Cannot GET /xxx",
+  "success": false,
+  "code": "ACCESS.PERMISSION_DENIED",
+  "message": "当前账号没有执行该操作的权限",
   "data": null,
-  "timestamp": 1778041000929
+  "details": [{ "field": "scopeType", "message": "数据范围与权限不兼容" }],
+  "timestamp": 1783700000000,
+  "requestId": "...",
+  "path": "/api/v1/example"
 }
 ```
 
-> - `code: 0` 代表业务成功
-> - `code` 为 HTTP 状态码代表异常
-> - `timestamp` 为服务端响应时刻的 Unix 毫秒时间戳
+HTTP 状态继续表达传输结果，字符串业务码用于稳定分支。全局过滤器统一处理 DTO 校验、401、403、404、409、Prisma `P2002/P2003/P2025` 和脱敏 500。
 
----
+## 迁移、同步与启动
 
-## 规范评审
+```bash
+# 在 apps/server 下执行
+pnpm prisma migrate deploy
+pnpm prisma generate
 
-> 以下是对当前代码库与大厂 NestJS 最佳实践的对比评审。
+# 部署或首次升级时显式、幂等同步
+pnpm access-control:sync
 
-### ✅ 已达标
+# CI 或启动前只读检查，不写数据库
+pnpm access-control:check
 
-| 规范项 | 说明 |
-|--------|------|
-| 模块化分层架构 | 按 `database / common / modules / config` 四层划分，职责清晰 |
-| 全局统一响应格式 | `TransformInterceptor` 封装所有成功响应 |
-| 全局统一异常处理 | `AllExceptionsFilter` 捕获全量异常，避免裸露堆栈 |
-| 数据库连接生命周期管理 | `PrismaService` 实现 `OnModuleInit / OnModuleDestroy`，支持优雅关闭 |
-| 全局 PrismaModule | `@Global()` 装饰，避免在每个业务模块重复导入 |
-| 配置全局化 | `ConfigModule.forRoot({ isGlobal: true })` |
-| Prisma 7 适配 | 使用 `@prisma/adapter-pg` Driver Adapter 模式 |
-| 文件头注释 | 每个文件均有作者、日期、描述等标准注释头 |
-| 跨域支持 | `app.enableCors()` 已开启 |
-| Logger 使用 | 使用 NestJS 内置 `Logger` 而非 `console.log` |
-| Controller / Service 分离 | 控制器只做路由映射，业务逻辑下沉到 Service |
-| 构建产物资源复制 | `nest-cli.json` 配置 assets 将 `generated/` 正确复制到 `dist/` |
+pnpm dev
+```
 
-### ⚠️ 待改进（成长路线）
+首次同步没有有效超级管理员时：脚本优先把唯一有效旧 `ADMIN` 升级为 `SUPER_ADMIN`；无法唯一确定时，才使用 `BOOTSTRAP_SUPER_ADMIN_EMAIL` 精确匹配。匹配不到或候选不唯一会安全失败。旧 `MANAGER` 用户关系迁移到 `DEPARTMENT_MANAGER`；历史权限保留为 `LEGACY`，不会静默删除。
 
-| 规范项 | 当前状态 | 建议 |
-|--------|----------|------|
-| 入参校验 | `pipes/` 目录为空，接口无 DTO 校验 | 安装 `class-validator + class-transformer`，为每个接口定义请求 DTO |
-| API 版本控制 | 无版本前缀 | 使用 `app.setGlobalPrefix('api/v1')` 或路由级版本控制 |
-| Swagger 文档 | 无接口文档 | 集成 `@nestjs/swagger`，自动生成 OpenAPI 文档 |
-| 认证鉴权 | `auth/guards/` 目录均为空 | 集成 JWT（`@nestjs/passport` + `passport-jwt`） |
-| TypeScript strict 模式 | `noImplicitAny: false` | 逐步开启，消除隐式 `any` |
-| Seed 数据与业务代码混合 | `TestService.getUsers()` 内含 seed 逻辑 | 独立 `prisma/seed.ts`，通过 `prisma db seed` 命令执行 |
-| 环境变量类型安全 | `DATABASE_URL` 为 `string \| undefined` | 用 `Joi` 在启动时校验必填项，防止空值运行时崩溃 |
-| `start:prod` 路径错误 | `package.json` 中写的是 `dist/main` | 应改为 `dist/src/main` |
-| 测试覆盖 | 无业务单元测试 | 补充 `*.spec.ts` 单元测试和 E2E 测试 |
-| 异常过滤器 any 类型 | `exception.getResponse() as any` | 使用类型收窄替代 `as any` |
+## 验证命令
+
+```bash
+pnpm lint
+pnpm build
+pnpm test --runInBand
+pnpm test:e2e --runInBand
+pnpm prisma validate
+pnpm access-control:check
+```
+
+E2E 只验证公开健康检查和未登录全局鉴权，不向当前业务数据库写入临时测试数据。
+
+## 头像存储
+
+个人头像默认保存在 `AVATAR_UPLOAD_DIR=./uploads/avatars`，该目录已被 Git 忽略。上传接口仅接受经过文件头校验的 JPG、PNG 和 WebP，单个文件最大 2MB；替换或移除头像时会清理旧的本地文件。
+
+本地文件存储用于当前开发和单实例部署。生产环境必须把 `AVATAR_UPLOAD_DIR` 指向持久化挂载目录；如果后续改用对象存储，只替换 `AvatarStorageService` 的实现，不需要修改个人资料接口和前端页面。修改该环境变量后需要重启 NestJS 服务。

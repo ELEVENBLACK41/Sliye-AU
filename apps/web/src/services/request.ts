@@ -1,210 +1,240 @@
-/*
- * @Author: shaoliye
- * @Date: 2026-05-06 16:52:37
- * @Email: elevenblack41@gmail.com
- * @LastEditTime: 2026-05-06 17:04:37
- * @LastEditors: shaoliye
- * @LastEditorsEmail: elevenblack41@gmail.com
- * @Copyright: Copyright 1990 - 2026
- *
- * @module services/request
- *
- * 客户端 HTTP 请求层 —— 完整请求链路：
- *
- *   浏览器 request() → Next.js BFF Route Handler → requestNest() → NestJS 后端
- *
- * 本模块提供两级封装：
- *   - `request()`    底层 fetch 封装，只关心 HTTP 层（拼 baseUrl、格式化 body、检查 res.ok）
- *   - `requestData()` 业务层封装，解包后端统一响应 ApiResponse，检查 code===0 后提取 data
- */
-
 /**
- * 后端统一响应结构
- *
- * 所有 NestJS 接口均返回此格式，例如：
- * ```json
- * { "code": 0, "message": "success", "data": { ... }, "timestamp": 1715000000 }
- * ```
- *
- * @template T - `data` 字段的类型
+ * 浏览器请求服务，web请求Next服务端，统一处理 BFF 响应、业务错误和登录会话续签。
+ * Browser to Next BFF
  */
-type ApiResponse<T> = {
-  /** 业务状态码，约定 0 = 成功，非 0 = 业务异常 */
-  code: number
-  message?: string
-  data: T
-  timestamp?: number
-}
+import { API_ERROR_CODES } from '@workspace/contracts/common';
+import type { ApiErrorCode, ApiErrorDetail, ApiErrorResponse, ApiResponse } from '@workspace/contracts/common';
 
-/**
- * RequestInit 的泛型封装
- *
- * 将原生 `RequestInit.body` 替换为泛型 `TBody`，让调用方可以用具体类型
- * 声明请求体（例如 `LoginDto`），而不用手动 `JSON.stringify`。
- *
- * @template TBody - 请求体的类型，默认 unknown
- */
-type JsonRequestInit<TBody = unknown> = Omit<RequestInit, "body"> & {
-  body?: TBody
-}
+/** 支持普通 JSON 对象的请求初始化参数。 */
+type JsonRequestInit<TBody = unknown> = Omit<RequestInit, 'body'> & {
+  /** 发送给 BFF 的请求体；普通对象会自动序列化为 JSON。 */
+  body?: TBody;
+};
 
-/**
- * requestData 的选项类型
- *
- * 在 JsonRequestInit 基础上扩展 `errorMessage`，允许调用方自定义
- * 业务异常时的兜底提示文案。
- *
- * @template TBody - 请求体的类型
- */
+/** `requestData` 额外支持的页面级兜底错误文案。 */
 type RequestDataOptions<TBody = unknown> = JsonRequestInit<TBody> & {
-  /** 业务异常时的兜底错误提示，优先级低于后端返回的 message */
-  errorMessage?: string
-}
+  /** BFF 没有返回可展示消息时使用的中文兜底文案。 */
+  errorMessage?: string;
+};
+
+/** 创建 `ApiClientError` 所需的结构化错误信息。 */
+type ApiClientErrorOptions = {
+  /** HTTP 状态码；网络层尚未收到响应时为 `0`。 */
+  status: number;
+  /** 前后端约定的稳定业务错误码。 */
+  code: ApiErrorCode;
+  /** 面向用户展示的中文错误说明。 */
+  message: string;
+  /** 可选的字段级校验错误明细。 */
+  details?: ApiErrorDetail[];
+  /** 可选的链路请求标识，便于结合服务端日志排查。 */
+  requestId?: string;
+};
 
 /**
- * 底层 fetch 封装
+ * 浏览器 API 请求错误。
  *
- * 职责：
- * 1. 拼接 `NEXT_PUBLIC_BASE_URL` 前缀（默认当前域名，即 Next.js BFF）
- * 2. 通过 `formatBody()` 自动格式化请求体（普通对象 → JSON，FormData/字符串透传）
- * 3. 检查 `res.ok`（HTTP 2xx），非 2xx 直接抛错
+ * 页面既可以沿用 `message` 展示中文提示，也可以通过业务码和 requestId
+ * 做稳定分支判断与问题追踪，避免把结构化错误退化成普通 `Error`。
+ */
+export class ApiClientError extends Error {
+  /** HTTP 状态码；网络错误为 `0`。 */
+  readonly status: number;
+
+  /** 前后端共享的稳定业务错误码。 */
+  readonly code: ApiErrorCode;
+
+  /** 字段级校验错误明细。 */
+  readonly details?: ApiErrorDetail[];
+
+  /** 贯穿 BFF 与 Nest 日志的请求标识。 */
+  readonly requestId?: string;
+
+  /** 根据结构化 API 错误创建浏览器异常。 */
+  constructor(options: ApiClientErrorOptions) {
+    super(options.message);
+    this.name = 'ApiClientError';
+    this.status = options.status;
+    this.code = options.code;
+    this.details = options.details;
+    this.requestId = options.requestId;
+  }
+}
+
+/** 当前正在进行的浏览器会话续签，同一时刻只允许存在一个请求。 */
+let refreshRequest: Promise<boolean> | null = null;
+
+/**
+ * 浏览器侧请求 Next.js BFF。
  *
- * ⚠️ 此函数不做业务层检查（不解析 ApiResponse），适用于需要自定义响应处理的场景。
- *    大部分页面应优先使用 `requestData()`。
- *
- * @template T      - 响应体 JSON 的类型
- * @template TBody  - 请求体类型
- * @param url       - 请求路径，会自动拼接 baseUrl（如 `/api/auth/login`）
- * @param options   - fetch 选项，body 支持泛型
- * @returns 解析后的 JSON 响应体
- * @throws HTTP 非 2xx 时抛出 `Error("Request error: {status}")`
- *
- * @example
- * ```ts
- * // 简单 GET
- * const data = await request<UserInfo>("/api/user/profile")
- *
- * // POST with body
- * const res = await request<ApiResponse<boolean>, LoginDto>("/api/auth/login", {
- *   method: "POST",
- *   body: { username: "admin", password: "xxx" },
- * })
- * ```
+ * access token 失效时会等待同一个 refresh 请求并重试一次，从而避免
+ * refresh token 轮换场景下多个并发 401 相互撤销会话。
  */
 export async function request<T = unknown, TBody = unknown>(
   url: string,
   options?: JsonRequestInit<TBody>,
+  fallbackErrorMessage = '请求失败，请稍后再试',
 ): Promise<T> {
-  // 从环境变量获取基础 URL，默认为空（即请求发往当前 Next.js 服务 / BFF）
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? ""
-  // 将传入的 headers 合并到 Headers 实例，方便后续 formatBody 追加 Content-Type
-  const headers = new Headers(options?.headers)
-  // 自动格式化请求体（普通对象 → JSON.stringify，FormData / 字符串透传）
-  const body = formatBody(options?.body, headers)
-
-  // 发起 fetch 请求，res 是浏览器原生 Response 对象
-  const res = await fetch(`${baseUrl}${url}`, {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? '';
+  const requestUrl = `${baseUrl}${url}`;
+  const headers = new Headers(options?.headers);
+  const body = formatBody(options?.body, headers);
+  const requestInit: RequestInit = {
     ...options,
     headers,
     body,
-  })
+    credentials: options?.credentials ?? 'include',
+  };
 
-  // HTTP 层检查：非 2xx 尝试从响应体提取错误信息
-  if (!res.ok) {
-    let errorMessage = `请求失败 (${res.status})`
-    try {
-      const errorBody = await res.json()
-      if (errorBody?.message) {
-        errorMessage = errorBody.message
-      }
-    } catch {
-      // 响应体非 JSON（如 Next.js 框架兜底的空 500），使用默认 message
+  let response = await fetchBff(requestUrl, requestInit);
+
+  if (response.status === 401 && shouldRefreshBeforeRetry(url)) {
+    const refreshed = await refreshAuthSessionOnce(baseUrl);
+
+    if (refreshed) {
+      response = await fetchBff(requestUrl, requestInit);
     }
-    throw new Error(errorMessage)
   }
 
-  // 解析 JSON 响应体并返回
-  return res.json() as Promise<T>
+  const responseBody = await parseJsonBody(response);
+
+  if (!response.ok) {
+    throw createClientError(response.status, responseBody, fallbackErrorMessage);
+  }
+
+  return responseBody as T;
 }
 
-/**
- * 业务层请求封装（推荐使用）
- *
- * 在 `request()` 基础上增加：
- * 1. 解包 `ApiResponse<T>` → 提取 `data` 字段
- * 2. 检查 `code === 0` 且 `data !== null`，否则视为业务异常
- * 3. 错误提示优先级：后端 `message` > 调用方 `errorMessage` > 兜底文案
- *
- * @template TData  - 业务数据 data 字段的类型
- * @template TBody  - 请求体类型
- * @param url       - 请求路径
- * @param options   - 请求选项，额外支持 errorMessage 自定义兜底提示
- * @returns 解包后的 `data` 字段（类型为 TData）
- * @throws 业务异常时抛出 `Error`，message 取优先级最高的提示文案
- *
- * @example
- * ```ts
- * // 自动解包，直接拿到 data
- * const user = await requestData<UserInfo>("/api/user/profile")
- *
- * // 自定义错误提示
- * const result = await requestData<boolean, LoginDto>("/api/auth/login", {
- *   method: "POST",
- *   body: { username: "admin", password: "xxx" },
- *   errorMessage: "登录失败，请检查账号密码",
- * })
- * ```
- */
+/** 解包统一响应，只把 `success: true` 的业务数据返回给页面层。 */
 export async function requestData<TData, TBody = unknown>(
   url: string,
   options?: RequestDataOptions<TBody>,
 ): Promise<TData> {
-  // 从 options 中提取 errorMessage，其余传给底层 request()
-  const { errorMessage, ...requestOptions } = options ?? {}
-  const result = await request<ApiResponse<TData | null>, TBody>(
-    url,
-    requestOptions,
-  )
+  const { errorMessage = '请求失败，请稍后再试', ...requestOptions } = options ?? {};
+  const result = await request<ApiResponse<TData>, TBody>(url, requestOptions, errorMessage);
 
-  // 约定后端 code=0 且 data 非 null 才是真正业务成功
-  // HTTP 200 但 code 非 0 也要抛给页面展示
-  if (result.code !== 0 || result.data === null) {
-    throw new Error(result.message || errorMessage || "请求失败，请稍后再试")
+  if (!result.success) {
+    throw new ApiClientError({
+      status: 200,
+      code: result.code,
+      message: result.message || errorMessage,
+      details: result.details,
+      requestId: result.requestId,
+    });
   }
 
-  return result.data
+  return result.data;
 }
 
-/**
- * 请求体格式化
- *
- * 根据传入的 body 类型自动处理：
- * - `undefined` / `null` → 不发送 body（如 GET 请求）
- * - `string` / `FormData` → 直接透传（文件上传等场景由调用方自行构造）
- * - 普通对象 → `JSON.stringify()` + 自动设置 `Content-Type: application/json`
- *
- * 这样业务层调用 `request()` 时只需传普通对象，无需手动序列化。
- *
- * @template TBody - body 的类型
- * @param body     - 原始请求体
- * @param headers  - Headers 实例，可能会被追加 Content-Type
- * @returns 格式化后的 body（string | FormData | undefined）
- */
-function formatBody<TBody>(body: TBody | undefined, headers: Headers) {
-  // 无 body，直接跳过（GET、DELETE 等不需要 body 的请求）
+/** 执行 BFF 请求，并把尚未收到 HTTP 响应的网络异常转换为统一客户端错误。 */
+async function fetchBff(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new ApiClientError({
+      status: 0,
+      code: API_ERROR_CODES.COMMON_INTERNAL_ERROR,
+      message: '网络连接失败，请检查网络后重试',
+    });
+  }
+}
+
+/** 普通对象自动转 JSON，`FormData` 和字符串保持原样透传。 */
+function formatBody<TBody>(body: TBody | undefined, headers: Headers): BodyInit | undefined {
   if (body === undefined || body === null) {
-    return undefined
+    return undefined;
   }
 
-  // 已经是字符串或 FormData，直接透传
-  if (typeof body === "string" || body instanceof FormData) {
-    return body
+  if (typeof body === 'string' || body instanceof FormData) {
+    return body;
   }
 
-  // 普通对象 → JSON 序列化，业务 service 不用每个接口重复写 headers/body
-  if (!headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json")
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
-  return JSON.stringify(body)
+  return JSON.stringify(body);
+}
+
+/** 判断当前请求是否适合走 refresh 与单次重试，避免认证接口形成刷新循环。 */
+function shouldRefreshBeforeRetry(url: string): boolean {
+  return !url.startsWith('/api/auth/login') && !url.startsWith('/api/auth/refresh');
+}
+
+/** 复用当前正在进行的 refresh 请求，完成后及时清理 single-flight 状态。 */
+function refreshAuthSessionOnce(baseUrl: string): Promise<boolean> {
+  if (!refreshRequest) {
+    refreshRequest = refreshAuthSession(baseUrl).finally(() => {
+      refreshRequest = null;
+    });
+  }
+
+  return refreshRequest;
+}
+
+/** 调用 BFF refresh 接口轮换 httpOnly Cookie，并判断统一成功响应。 */
+async function refreshAuthSession(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${baseUrl}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const body = await parseJsonBody(response);
+    return isSuccessResponse(body);
+  } catch {
+    return false;
+  }
+}
+
+/** 安全解析 JSON 响应；空响应或非 JSON 响应返回 `null`。 */
+async function parseJsonBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+/** 判断未知数据是否为统一失败响应。 */
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<ApiErrorResponse>;
+  return (
+    candidate.success === false &&
+    typeof candidate.code === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.requestId === 'string'
+  );
+}
+
+/** 判断 refresh 接口是否返回了统一成功响应。 */
+function isSuccessResponse(value: unknown): boolean {
+  return Boolean(value && typeof value === 'object' && (value as { success?: unknown }).success === true);
+}
+
+/** 根据 HTTP 状态和统一失败响应创建结构化客户端错误。 */
+function createClientError(status: number, body: unknown, fallbackMessage: string): ApiClientError {
+  if (isApiErrorResponse(body)) {
+    return new ApiClientError({
+      status,
+      code: body.code,
+      message: body.message || fallbackMessage,
+      details: body.details,
+      requestId: body.requestId,
+    });
+  }
+
+  return new ApiClientError({
+    status,
+    code: API_ERROR_CODES.COMMON_INTERNAL_ERROR,
+    message: fallbackMessage,
+  });
 }

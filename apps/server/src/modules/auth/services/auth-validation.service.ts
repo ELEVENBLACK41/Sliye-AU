@@ -29,8 +29,14 @@ export class AuthValidationService {
 
   // 解析注册请求并还原出可落库的注册输入。
   parseRegister(dto: RegisterDto): RegisterInput {
-    const passwordCiphertext = this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext');
-    const passwordKeyId = this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId');
+    const passwordCiphertext = this.parseRequiredString(
+      dto.passwordCiphertext,
+      'passwordCiphertext',
+    );
+    const passwordKeyId = this.parseRequiredString(
+      dto.passwordKeyId,
+      'passwordKeyId',
+    );
 
     // 先消耗 nonce + 校验密文去重，再解密密码——确保同一密文无法被重放
     this.passwordCryptoService.consumeNonce(
@@ -53,8 +59,14 @@ export class AuthValidationService {
 
   // 解析登录请求并还原出可校验的登录输入。
   parseLogin(dto: LoginDto): LoginInput {
-    const passwordCiphertext = this.parseRequiredString(dto.passwordCiphertext, 'passwordCiphertext');
-    const passwordKeyId = this.parseRequiredString(dto.passwordKeyId, 'passwordKeyId');
+    const passwordCiphertext = this.parseRequiredString(
+      dto.passwordCiphertext,
+      'passwordCiphertext',
+    );
+    const passwordKeyId = this.parseRequiredString(
+      dto.passwordKeyId,
+      'passwordKeyId',
+    );
 
     // 先消耗 nonce + 校验密文去重，再解密密码——确保同一密文无法被重放
     this.passwordCryptoService.consumeNonce(

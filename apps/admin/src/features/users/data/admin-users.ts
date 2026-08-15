@@ -1,0 +1,67 @@
+/*
+ * @Description: 这个文件提供 admin 用户页面的静态示例数据。
+ */
+import type { AdminUserListItem } from '../types/admin-user';
+
+export const adminUsers: AdminUserListItem[] = [
+  {
+    id: 1001,
+    name: 'Shao Liye',
+    email: 'liye@example.com',
+    avatarUrl: null,
+    status: 'ACTIVE',
+    roles: ['Owner', 'Admin'],
+    department: 'Platform',
+    emailVerifiedAt: '2026-05-12T08:22:00.000Z',
+    lastLoginAt: '2026-06-02T08:30:00.000Z',
+    createdAt: '2026-04-28T06:16:00.000Z',
+  },
+  {
+    id: 1002,
+    name: 'Ada Chen',
+    email: 'ada.chen@example.com',
+    avatarUrl: null,
+    status: 'ACTIVE',
+    roles: ['Decision Manager'],
+    department: 'Product',
+    emailVerifiedAt: '2026-05-18T03:10:00.000Z',
+    lastLoginAt: '2026-06-01T14:06:00.000Z',
+    createdAt: '2026-05-02T09:44:00.000Z',
+  },
+  {
+    id: 1003,
+    name: 'Ming Zhou',
+    email: 'ming.zhou@example.com',
+    avatarUrl: null,
+    status: 'PENDING',
+    roles: ['Viewer'],
+    department: 'Operation',
+    emailVerifiedAt: null,
+    lastLoginAt: null,
+    createdAt: '2026-05-26T11:18:00.000Z',
+  },
+  {
+    id: 1004,
+    name: 'Nora Wang',
+    email: 'nora.wang@example.com',
+    avatarUrl: null,
+    status: 'LOCKED',
+    roles: ['Auditor'],
+    department: 'Finance',
+    emailVerifiedAt: '2026-05-09T10:20:00.000Z',
+    lastLoginAt: '2026-05-30T07:42:00.000Z',
+    createdAt: '2026-05-05T02:09:00.000Z',
+  },
+  {
+    id: 1005,
+    name: null,
+    email: 'disabled.user@example.com',
+    avatarUrl: null,
+    status: 'DISABLED',
+    roles: ['Viewer'],
+    department: null,
+    emailVerifiedAt: '2026-05-03T04:36:00.000Z',
+    lastLoginAt: '2026-05-21T05:12:00.000Z',
+    createdAt: '2026-04-30T13:30:00.000Z',
+  },
+];

@@ -25,4 +25,7 @@ export const AUTH_AUDIT_EVENTS = {
   loginFailed: 'auth.login.failed',
   tokenRefreshed: 'auth.token.refreshed',
   logoutSucceeded: 'auth.logout.succeeded',
+  profileUpdated: 'auth.profile.updated',
+  avatarUpdated: 'auth.avatar.updated',
+  avatarRemoved: 'auth.avatar.removed',
 } as const;

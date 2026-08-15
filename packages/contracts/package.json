@@ -1,0 +1,23 @@
+{
+  "name": "@workspace/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./access": "./src/access/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./common": "./src/common/index.ts",
+    "./decisions": "./src/decisions/index.ts",
+    "./projects": "./src/projects/index.ts",
+    "./meetings": "./src/meetings/index.ts",
+    "./notifications": "./src/notifications/index.ts",
+    "./relationship-graph": "./src/relationship-graph/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

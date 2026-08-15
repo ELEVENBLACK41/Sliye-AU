@@ -1,148 +1,190 @@
 /**
- * @module services/bff-request
- *
- * BFF 层共享请求工具 —— Next.js Route Handler 到 NestJS 的 fetch 封装。
- *
- * 所有 Route Handler 都应通过 `requestNest()` 请求上游，不要直接 fetch。
- * 这样 NestJS 宕机时自动返回结构化 503，无需每个 route 手写 try-catch。
- *
- * 使用方式：
- * ```ts
- * // 在 *-bff.service.ts 中
- * const upstream = await requestNest<UserInfo>("/user/profile")
- * return NextResponse.json(upstream.body, { status: upstream.status })
- * ```
- *
- * 请求链路：
- *   浏览器 request() → Next.js BFF Route Handler → requestNest() → NestJS 后端
+ * Web BFF 到 NestJS 的服务端请求工具，也就是Next得服务端请求Nest，负责保留统一响应与请求链路标识。
+ * Next BFF to NestJS
  */
+import { API_ERROR_CODES } from '@workspace/contracts/common';
+import type { ApiErrorResponse, ApiResponse } from '@workspace/contracts/common';
 
-/** 后端统一响应结构（与客户端 request.ts 中的 ApiResponse 保持一致） */
-type ApiResponse<T> = {
-  code: number
-  message?: string
-  data: T
-  timestamp?: number
-}
+/** NestJS 默认 API 前缀。 */
+const DEFAULT_NEST_API_PREFIX = 'api/v1';
 
-/** requestNest 的返回结构：将 HTTP status 和解析后的 body 一起返回 */
+/** NestJS 返回非统一响应时，BFF 对浏览器返回的网关错误状态码。 */
+const UPSTREAM_RESPONSE_FORMAT_ERROR_STATUS = 502;
+
+/** BFF 调用 NestJS 后返回给 Route Handler 的结果。 */
 export type NestResponse<T> = {
-  body: ApiResponse<T | null>
-  status: number
-}
+  /** NestJS 的统一成功或失败响应体。 */
+  body: ApiResponse<T>;
+  /** NestJS 返回的 HTTP 状态码，或 BFF 生成的网关错误状态码。 */
+  status: number;
+};
 
-/** requestNest 的请求选项，body 支持泛型（与 JsonRequestInit 同理） */
-type NestRequestOptions<TBody = unknown> = Omit<RequestInit, "body"> & {
-  body?: TBody
-}
+/** 解析上游响应后的结果，额外标记其是否符合共享 API 契约。 */
+type ParsedNestResponse<T> = {
+  /** 供 BFF 原样转发或脱敏返回的统一响应体。 */
+  body: ApiResponse<T>;
+  /** 上游响应是否可被确认符合共享 API 响应契约。 */
+  isValid: boolean;
+};
+
+/** 支持普通 JSON 对象的 NestJS 请求参数。 */
+type NestRequestOptions<TBody = unknown> = Omit<RequestInit, 'body'> & {
+  /** 发送给 NestJS 的请求体；普通对象会自动序列化为 JSON。 */
+  body?: TBody;
+};
 
 /**
- * BFF 层统一请求 NestJS 上游
+ * BFF 侧请求 NestJS。
  *
- * 内置三重保障：
- * 1. `NEST_BASE_URL` 未配置 → 返回 500 结构化错误
- * 2. `fetch()` 抛 TypeError（NestJS 宕机/网络不通） → 返回 503 结构化错误
- * 3. 响应体非 JSON（NestJS 返回异常格式） → 降级为兜底 ApiResponse
- *
- * Route Handler 只需 `NextResponse.json(upstream.body, { status: upstream.status })`，
- * 无需手写任何 try-catch。
- *
- * @template TData - 业务数据 data 字段的类型
- * @template TBody - 请求体类型
- * @param path     - NestJS 路径（如 `/auth/login`），会自动拼接 NEST_BASE_URL
- * @param options  - fetch 选项，body 支持普通对象自动 JSON 序列化
+ * 上游返回统一响应时保持原始业务码和 requestId；上游不可用或响应格式
+ * 异常时，由 BFF 生成脱敏的中文失败响应，避免向浏览器泄漏内部异常。
  */
-export async function requestNest<TData, TBody = unknown>(  //简单理解 requestNest<收到什么, 寄出什么>(地址, 包裹)
+export async function requestNest<TData, TBody = unknown>(
   path: string,
   options?: NestRequestOptions<TBody>,
 ): Promise<NestResponse<TData>> {
-  const baseUrl = getNestBaseUrl()
+  const baseUrl = getNestBaseUrl();
 
   if (!baseUrl) {
-    return createBffError<TData>("NEST_BASE_URL 未配置，无法连接后端服务", 500)
+    return createBffError<TData>('服务暂不可用，请稍后再试', 500, path);
   }
 
-  const headers = new Headers(options?.headers)
-  const body = formatBody(options?.body, headers)
+  const headers = new Headers(options?.headers);
+  const body = formatBody(options?.body, headers);
 
   try {
-    // BFF 到 Nest 是服务端内部请求，默认禁用缓存，避免认证状态拿到旧数据
     const response = await fetch(`${baseUrl}${path}`, {
       ...options,
       headers,
       body,
-      cache: options?.cache ?? "no-store",
-    })
+      cache: options?.cache ?? 'no-store',
+    });
+
+    const parsed = await parseNestBody<TData>(response, path);
 
     return {
-      body: await parseNestBody<TData>(response),
-      status: response.status,
-    }
+      body: parsed.body,
+      // 上游即便错误地返回 200，只要响应体不符合契约，就不能把失败伪装成成功。
+      status: parsed.isValid ? response.status : UPSTREAM_RESPONSE_FORMAT_ERROR_STATUS,
+    };
   } catch {
-    // fetch 本身抛出异常（NestJS 未启动、网络不通等）
-    // 捕获后返回结构化错误，避免异常冒泡到 Next.js 框架层变成空洞 500
-    return createBffError<TData>("后端服务暂不可用，请稍后再试", 503)
+    return createBffError<TData>('后端服务暂不可用，请稍后再试', 503, path);
   }
 }
 
-/** 从环境变量获取 NestJS 基础 URL，去掉末尾斜杠 */
-function getNestBaseUrl() {
-  return process.env.NEST_BASE_URL?.replace(/\/$/, "")
+/**
+ * 请求 NestJS 的二进制资源并保留原始响应。
+ *
+ * 仅供需要流式转发图片等非统一 JSON 响应的受保护 BFF 使用。
+ */
+export async function requestNestRaw(path: string, options?: RequestInit): Promise<Response> {
+  const baseUrl = getNestBaseUrl();
+
+  if (!baseUrl) {
+    throw new Error('Nest base URL is not configured');
+  }
+
+  return fetch(`${baseUrl}${path}`, {
+    ...options,
+    cache: options?.cache ?? 'no-store',
+  });
 }
 
-/**
- * 请求体格式化
- *
- * - undefined / null → 不发送 body
- * - string / FormData → 直接透传
- * - 普通对象 → JSON.stringify + 自动设置 Content-Type: application/json
- */
-function formatBody<TBody>(body: TBody | undefined, headers: Headers) {
+/** 读取 NestJS 地址，并自动补全默认 API 前缀。 */
+function getNestBaseUrl(): string | undefined {
+  const baseUrl = process.env.NEST_BASE_URL?.replace(/\/+$/, '');
+
+  if (!baseUrl) {
+    return undefined;
+  }
+
+  const apiPrefix = normalizeApiPrefix(process.env.NEST_API_PREFIX ?? DEFAULT_NEST_API_PREFIX);
+
+  if (!apiPrefix || baseUrl.endsWith(`/${apiPrefix}`)) {
+    return baseUrl;
+  }
+
+  return `${baseUrl}/${apiPrefix}`;
+}
+
+/** 标准化 NestJS API 前缀，并允许通过空字符串关闭前缀拼接。 */
+function normalizeApiPrefix(prefix: string): string {
+  return prefix.replace(/^\/+|\/+$/g, '');
+}
+
+/** 普通对象自动转 JSON，`FormData` 和字符串保持原样透传。 */
+function formatBody<TBody>(body: TBody | undefined, headers: Headers): BodyInit | undefined {
   if (body === undefined || body === null) {
-    return undefined
+    return undefined;
   }
 
-  if (typeof body === "string" || body instanceof FormData) {
-    return body
+  if (typeof body === 'string' || body instanceof FormData) {
+    return body;
   }
 
-  if (!headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json")
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
 
-  return JSON.stringify(body)
+  return JSON.stringify(body);
 }
 
-/**
- * 安全解析 NestJS 响应体
- *
- * 正常情况解析 JSON 为 ApiResponse；如果响应体非 JSON（如 502 页面），
- * 降级为兜底结构，保证返回值始终是 ApiResponse 类型。
- */
-async function parseNestBody<T>(
-  response: Response,
-): Promise<ApiResponse<T | null>> {
+/** 解析并校验 NestJS 统一响应，格式不合法时返回 BFF 自身的脱敏错误。 */
+async function parseNestBody<T>(response: Response, path: string): Promise<ParsedNestResponse<T>> {
   try {
-    return (await response.json()) as ApiResponse<T | null>
-  } catch {
-    return {
-      code: response.status,
-      message: response.ok ? "success" : "后端服务响应格式异常",
-      data: null,
-      timestamp: Date.now(),
+    const body = (await response.json()) as unknown;
+
+    if (isApiResponse<T>(body)) {
+      return { body, isValid: true };
     }
+  } catch {
+    // 非 JSON 响应统一落入下方的格式异常错误，避免泄漏上游原始内容。
   }
+
+  return {
+    body: createBffErrorBody(
+      '后端服务响应格式异常，请稍后再试',
+      response.headers.get('x-request-id') ?? undefined,
+      path,
+    ),
+    isValid: false,
+  };
 }
 
-/** 构造 BFF 层结构化错误响应（用于 NestJS 不可用等场景） */
-function createBffError<T>(message: string, status: number): NestResponse<T> {
+/** 对统一响应执行最小结构校验，确保后续可以安全使用判别字段。 */
+function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.success === 'boolean' &&
+    typeof candidate.code === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.timestamp === 'number' &&
+    typeof candidate.requestId === 'string' &&
+    (candidate.success === true || candidate.data === null)
+  );
+}
+
+/** 创建包含 HTTP 状态和统一失败响应体的 BFF 错误结果。 */
+function createBffError<T>(message: string, status: number, path: string): NestResponse<T> {
   return {
     status,
-    body: {
-      code: status,
-      message,
-      data: null,
-      timestamp: Date.now(),
-    },
-  }
+    body: createBffErrorBody(message, undefined, path),
+  };
+}
+
+/** 创建 BFF 自身的统一失败响应，并生成可追踪的 requestId。 */
+function createBffErrorBody(message: string, requestId: string | undefined, path: string): ApiErrorResponse {
+  return {
+    success: false,
+    code: API_ERROR_CODES.COMMON_INTERNAL_ERROR,
+    message,
+    data: null,
+    timestamp: Date.now(),
+    requestId: requestId || crypto.randomUUID(),
+    path,
+  };
 }

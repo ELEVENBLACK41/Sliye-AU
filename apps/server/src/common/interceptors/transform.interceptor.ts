@@ -1,43 +1,67 @@
-/*
- * @Author: shaoliye
- * @Date: 2026-05-06 00:00:00
- * @Description: 统一响应体拦截器，将所有接口返回值包装为标准格式
- *               { code: 0, message: 'success', data: T, timestamp: number }
- * @Copyright: Copyright 1990 - 2026
+/**
+ * API 成功响应转换拦截器。
+ *
+ * Controller 和 Service 只返回真实业务数据，本拦截器负责补充统一成功响应外壳与 requestId。
  */
+
 import {
+  CallHandler,
+  ExecutionContext,
   Injectable,
   NestInterceptor,
-  ExecutionContext,
-  CallHandler,
+  StreamableFile,
 } from '@nestjs/common';
+import type { ApiResponse } from '@workspace/contracts/common';
+import type { Response } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import {
+  API_SUCCESS_CODE,
+  API_SUCCESS_MESSAGE,
+} from '../constants/api-response.constants';
+import {
+  ensureRequestId,
+  type RequestWithContext,
+} from '../request-context/request-context';
 
-export interface ApiResponse<T> {
-  code: number;
-  message: string;
-  data: T;
-  timestamp: number;
-}
+export type { ApiResponse } from '@workspace/contracts/common';
 
+/** 将控制器返回值包装为统一 API 成功响应。 */
 @Injectable()
 export class TransformInterceptor<T> implements NestInterceptor<
   T,
   ApiResponse<T>
 > {
-  // 将控制器返回值统一包装成标准 API 响应体。
+  /**
+   * 包装控制器返回的真实业务数据，并保持响应 requestId 与请求上下文一致。
+   *
+   * @param context Nest 当前执行上下文。
+   * @param next 后续请求处理器。
+   * @returns 包含统一成功响应结构的 Observable。
+   */
   intercept(
     context: ExecutionContext,
-    next: CallHandler,
+    next: CallHandler<T>,
   ): Observable<ApiResponse<T>> {
+    const httpContext = context.switchToHttp();
+    const request = httpContext.getRequest<RequestWithContext>();
+    const response = httpContext.getResponse<Response>();
+    const requestId = ensureRequestId(request, response);
+
     return next.handle().pipe(
-      map((data: T) => ({
-        code: 0,
-        message: 'success',
-        data,
-        timestamp: Date.now(),
-      })),
+      map(
+        (data: T): ApiResponse<T> =>
+          data instanceof StreamableFile
+            ? (data as unknown as ApiResponse<T>)
+            : {
+                success: true,
+                code: API_SUCCESS_CODE,
+                message: API_SUCCESS_MESSAGE,
+                data,
+                timestamp: Date.now(),
+                requestId,
+              },
+      ),
     );
   }
 }

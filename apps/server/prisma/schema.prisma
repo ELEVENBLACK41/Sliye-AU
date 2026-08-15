@@ -1,11 +1,11 @@
-/*
+/**
  * @Author: shaoliye
  * @Date: 2026-05-22 10:31:15
  * @Email: elevenblack41@gmail.com
  * @LastEditTime: 2026-05-22 11:20:14
  * @LastEditors: shaoliye
  * @LastEditorsEmail: elevenblack41@gmail.com
- * @Description: 
+ * @Description:
  * @Copyright: Copyright 1990 - 2026
  */
 // This is your Prisma schema file,
@@ -70,7 +70,27 @@ enum PermissionEffect {
   DENY
 }
 
+/// 部门在组织树中的启停状态。
+enum DepartmentStatus {
+  /// 部门正常启用，可以接收成员和业务数据。
+  ACTIVE
+  /// 部门已停用，仅保留历史关系和数据。
+  DISABLED
+}
+
+/// 权限记录的来源类型，用于区分代码目录与历史、自定义数据。
+enum PermissionKind {
+  /// 由代码权限目录维护的系统权限。
+  SYSTEM
+  /// 由管理员按业务需要创建的自定义权限。
+  CUSTOM
+  /// V2 上线前遗留并继续保留的兼容权限。
+  LEGACY
+}
+
 enum ResourceType {
+  PROJECT
+  DISCUSSION_AREA
   DECISION
   MEETING
   AUDIT
@@ -86,8 +106,8 @@ enum ParticipantRole {
 enum DecisionStatus {
   DRAFT
   DISCUSSING
-  VOTING
-  DECIDED
+  RESOLVED
+  CANCELLED
   ARCHIVED
 }
 
@@ -98,10 +118,73 @@ enum ProposalStatus {
   CANCELLED
 }
 
-enum VoteOption {
-  APPROVE
-  REJECT
-  ABSTAIN
+/// 单轮投票从草稿到结束的独立状态，不再占用议题全局状态。
+enum VoteRoundStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+/// 一轮投票允许采用的选择规则。
+enum VoteMethod {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  APPROVAL
+}
+
+/// 正式决议在决策过程中的用途类型。
+enum ResolutionKind {
+  INTERIM
+  FINAL
+  SUPPLEMENT
+}
+
+/// 正式决议创建后的有效状态。
+enum ResolutionStatus {
+  ACTIVE
+  SUPERSEDED
+  REVOKED
+}
+
+/// 一项项目从协作中到关闭、归档的生命周期状态。
+enum ProjectStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+/// 用户在项目成员列表中承担的资源级角色。
+enum ProjectMemberRole {
+  OWNER
+  MANAGER
+  MEMBER
+  VIEWER
+}
+
+/// 讨论分区决定消息、会议及录像的默认可见边界。
+enum DiscussionAreaType {
+  PUBLIC
+  PRIVATE
+}
+
+/// 私有讨论分区中的成员角色；公共区直接继承项目成员关系。
+enum DiscussionAreaMemberRole {
+  MANAGER
+  MEMBER
+}
+
+/// 讨论分区的独立生命周期状态。
+enum DiscussionAreaStatus {
+  ACTIVE
+  READ_ONLY
+  ARCHIVED
+}
+
+/// 讨论空间消息的内容类型。
+enum DiscussionMessageType {
+  TEXT
+  SYSTEM
 }
 
 enum TaskStatus {
@@ -116,6 +199,50 @@ enum MeetingStatus {
   LIVE
   ENDED
   CANCELLED
+  EXPIRED
+}
+
+/// 会议创建入口和生命周期类型；快速通话创建后立即振铃，预约会议按开放时间窗加入。
+enum MeetingKind {
+  QUICK_CALL
+  APPOINTMENT
+}
+
+/// 会议初始媒体模式；参与人进入房间后仍可自行关闭麦克风或摄像头。
+enum MeetingMediaMode {
+  AUDIO
+  VIDEO
+}
+
+/// 用户在单次会议中的实际参会角色。
+enum MeetingParticipantRole {
+  HOST
+  CO_HOST
+  ATTENDEE
+}
+
+/// 受邀人在当前会议中的响应状态；历史数据允许为空以避免伪造响应结果。
+enum MeetingInvitationStatus {
+  INVITED
+  ACCEPTED
+  DECLINED
+  MISSED
+}
+
+/// 由 LiveKit Webhook 确认的参与人连接事件类型。
+enum MeetingPresenceEventType {
+  JOINED
+  LEFT
+  CONNECTION_ABORTED
+}
+
+/// 会议录像从准备到可播放的处理状态。
+enum RecordingStatus {
+  PENDING
+  RECORDING
+  PROCESSING
+  READY
+  FAILED
 }
 
 enum DecisionEventType {
@@ -126,12 +253,20 @@ enum DecisionEventType {
   PARTICIPANT_REMOVED
   PROPOSAL_CREATED
   PROPOSAL_UPDATED
+  VOTE_ROUND_CREATED
+  VOTE_ROUND_OPENED
+  VOTE_ROUND_CLOSED
   VOTE_CAST
-  VOTE_CLOSED
+  RESOLUTION_CREATED
+  RESOLUTION_SUPERSEDED
+  RESOLUTION_REVOKED
   TASK_CREATED
   TASK_UPDATED
+  SPACE_LINKED
+  MESSAGE_PINNED
   MEETING_STARTED
   MEETING_ENDED
+  RECORDING_READY
   AI_SUMMARY_CREATED
 }
 
@@ -160,20 +295,36 @@ model User {
   roles       UserRole[]
   permissions UserPermission[]
 
+  /// 该用户作为操作人产生的访问控制审计日志。
+  accessControlAuditLogs AccessControlAuditLog[] @relation("AccessControlAuditActor")
+  /// 该用户通过审计入口读取私有协作内容时产生的日志。
+  collaborationAuditLogs CollaborationAuditLog[] @relation("CollaborationAuditActor")
+
   requestsMade     PermissionRequest[] @relation("RequestsMade")
   requestsReviewed PermissionRequest[] @relation("RequestsReviewed")
 
   posts Post[]
 
-  createdDecisions     Decision[]            @relation("DecisionCreator")
-  ownedDecisions       Decision[]            @relation("DecisionOwner")
-  decisionParticipants DecisionParticipant[]
-  proposalsCreated     DecisionProposal[]    @relation("ProposalCreator")
-  votesCast            DecisionVote[]
-  assignedTasks        DecisionTask[]        @relation("TaskAssignee")
-  createdTasks         DecisionTask[]        @relation("TaskCreator")
-  decisionEvents       DecisionEvent[]       @relation("DecisionEventActor")
-  meetingParticipants  MeetingParticipant[]
+  projectsCreated            Project[]              @relation("ProjectCreator")
+  projectsOwned              Project[]              @relation("ProjectOwner")
+  projectMemberships         ProjectMember[]
+  discussionAreasCreated     DiscussionArea[]       @relation("DiscussionAreaCreator")
+  discussionAreaMemberships  DiscussionAreaMember[]
+  createdDecisions           Decision[]             @relation("DecisionCreator")
+  ownedDecisions             Decision[]             @relation("DecisionOwner")
+  decisionParticipants       DecisionParticipant[]
+  proposalsCreated           DecisionProposal[]     @relation("ProposalCreator")
+  voteRoundsCreated          DecisionVoteRound[]    @relation("DecisionVoteRoundCreator")
+  decisionBallots            DecisionBallot[]
+  resolutionsDecided         DecisionResolution[]   @relation("DecisionResolutionDecider")
+  assignedTasks              DecisionTask[]         @relation("TaskAssignee")
+  createdTasks               DecisionTask[]         @relation("TaskCreator")
+  decisionEvents             DecisionEvent[]        @relation("DecisionEventActor")
+  discussionMessagesAuthored DiscussionMessage[]    @relation("DiscussionMessageAuthor")
+  discussionMessagesPinned   DiscussionMessage[]    @relation("DiscussionMessagePinner")
+  meetingsCreated            MeetingSession[]       @relation("MeetingSessionCreator")
+  meetingParticipants        MeetingParticipant[]
+  meetingPresenceEvents      MeetingPresenceEvent[]
 
   @@index([deptId])
   @@index([status])
@@ -343,9 +494,15 @@ model Post {
 }
 
 model Role {
-  id   Int     @id @default(autoincrement())
-  name String  @unique
-  desc String?
+  id       Int     @id @default(autoincrement())
+  /// 稳定的角色代码，接口和权限判断只能依赖该字段。
+  code     String  @unique
+  /// 面向用户展示的中文角色名称。
+  name     String  @unique
+  /// 角色用途说明。
+  desc     String?
+  /// 是否为只能通过代码目录同步的系统角色。
+  isSystem Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -357,11 +514,18 @@ model Role {
 model Permission {
   id Int @id @default(autoincrement())
 
-  code   String  @unique
+  /// 稳定的权限码，格式为“模块:资源:动作”或“模块:动作”。
+  code   String         @unique
+  /// 面向用户展示的中文权限名称。
   name   String?
+  /// 权限所属业务模块。
   module String
+  /// 权限对应的业务动作。
   action String
+  /// 权限用途说明。
   desc   String?
+  /// 权限来源类型，系统目录权限不可通过管理端修改。
+  kind   PermissionKind @default(CUSTOM)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -388,15 +552,21 @@ model UserRole {
 }
 
 model RolePermission {
+  /// 角色授权记录主键，允许同一权限按不同数据范围分别授权。
+  id Int @id @default(autoincrement())
+
   roleId Int
   permId Int
 
-  grantedAt DateTime @default(now())
+  /// 当前授权记录的数据可见范围。
+  scopeType DataScope @default(ALL)
+  grantedAt DateTime  @default(now())
 
   role Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   perm Permission @relation(fields: [permId], references: [id], onDelete: Cascade)
 
-  @@id([roleId, permId])
+  @@unique([roleId, permId, scopeType])
+  @@index([roleId])
   @@index([permId])
 }
 
@@ -451,7 +621,8 @@ model UserPermission {
   permId Int
 
   effect    PermissionEffect
-  scopeType DataScope?
+  /// 直接授权的数据范围；拒绝授权只能使用 ALL，由业务层校验。
+  scopeType DataScope        @default(ALL)
 
   expiresAt       DateTime?
   sourceRequestId Int?
@@ -471,8 +642,16 @@ model UserPermission {
 model Department {
   id Int @id @default(autoincrement())
 
-  name     String
-  parentId Int?
+  /// 跨接口、导入和同步场景使用的稳定部门代码。
+  code      String           @unique
+  /// 面向用户展示的中文部门名称。
+  name      String
+  /// 部门启停状态，停用部门不能接收新成员或新决策。
+  status    DepartmentStatus @default(ACTIVE)
+  /// 同级部门的升序排列值。
+  sortOrder Int              @default(0)
+  /// 上级部门主键；空值表示组织树根节点。
+  parentId  Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -481,9 +660,231 @@ model Department {
   children Department[] @relation("DeptTree")
 
   users     User[]
+  projects  Project[]
   decisions Decision[]
 
   @@index([parentId])
+  @@index([status])
+  @@index([sortOrder])
+}
+
+/// 访问控制配置变更审计日志，记录操作者、目标和变更前后快照。
+model AccessControlAuditLog {
+  /// 审计日志主键。
+  id Int @id @default(autoincrement())
+
+  /// 操作者用户主键；访问控制变更必须能追溯到具体用户。
+  actorId Int
+
+  /// 稳定的审计动作代码。
+  action     String
+  /// 被操作资源类型，例如 ROLE、USER 或 DEPARTMENT。
+  targetType String
+  /// 被操作资源标识；兼容数字主键和字符串代码。
+  targetId   String
+
+  /// 变更前的安全快照。
+  before Json?
+  /// 变更后的安全快照。
+  after  Json?
+
+  /// 贯穿一次 HTTP 请求或系统任务的追踪标识。
+  requestId String
+  /// 操作者 IP 地址。
+  ipAddress String?
+  /// 操作者客户端标识。
+  userAgent String?
+
+  /// 审计日志创建时间。
+  createdAt DateTime @default(now())
+
+  actor User @relation("AccessControlAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([requestId])
+  @@index([createdAt])
+}
+
+/// 一项项目是多项正式决策、公开讨论和私有分区的顶层协作容器。
+model Project {
+  id Int @id @default(autoincrement())
+
+  title       String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+
+  createdById Int
+  ownerId     Int?
+  deptId      Int
+
+  closedAt   DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  department Department @relation(fields: [deptId], references: [id], onDelete: Restrict)
+  createdBy  User       @relation("ProjectCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  owner      User?      @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  members   ProjectMember[]
+  areas     DiscussionArea[]
+  decisions Decision[]
+  auditLogs CollaborationAuditLog[]
+
+  @@index([createdById])
+  @@index([ownerId])
+  @@index([deptId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// 用户与项目之间的显式成员关系；项目级决策以此为可见边界，小组决策还需校验分区成员关系。
+model ProjectMember {
+  id Int @id @default(autoincrement())
+
+  projectId Int
+  userId    Int
+  role      ProjectMemberRole @default(MEMBER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@index([role])
+}
+
+/// 项目内的公开或私有讨论边界；项目会议属于分区，独立会议不建立该关系。
+model DiscussionArea {
+  id Int @id @default(autoincrement())
+
+  projectId   Int
+  createdById Int
+
+  name        String
+  description String?
+  type        DiscussionAreaType   @default(PRIVATE)
+  status      DiscussionAreaStatus @default(ACTIVE)
+  /// 公共区固定写入 PUBLIC，私有区为空；复合唯一键保证每项项目至多一个公共区。
+  publicKey   String?
+
+  closedAt   DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  createdBy User    @relation("DiscussionAreaCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  members   DiscussionAreaMember[]
+  messages  DiscussionMessage[]
+  meetings  MeetingSession[]
+  decisions Decision[]
+  auditLogs CollaborationAuditLog[]
+
+  @@unique([projectId, publicKey])
+  @@index([projectId, type])
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// 私有讨论分区的显式成员关系；公共区不重复保存成员。
+model DiscussionAreaMember {
+  id Int @id @default(autoincrement())
+
+  areaId Int
+  userId Int
+  role   DiscussionAreaMemberRole @default(MEMBER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  area DiscussionArea @relation(fields: [areaId], references: [id], onDelete: Cascade)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([areaId, userId])
+  @@index([userId])
+  @@index([role])
+}
+
+/// 分区中的持久化消息；普通消息不重复写入决策时间线，重要消息可被事件引用。
+model DiscussionMessage {
+  id Int @id @default(autoincrement())
+
+  areaId          Int
+  authorId        Int?
+  /// 浏览器生成的消息幂等标识；系统消息不经过浏览器发送时允许为空。
+  clientMessageId String? @db.Uuid
+  meetingId       Int?
+  decisionId      Int?
+  replyToId       Int?
+  pinnedById      Int?
+
+  type    DiscussionMessageType @default(TEXT)
+  content String
+
+  pinnedAt  DateTime?
+  editedAt  DateTime?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  area     DiscussionArea      @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  author   User?               @relation("DiscussionMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  meeting  MeetingSession?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  decision Decision?           @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  replyTo  DiscussionMessage?  @relation("DiscussionMessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies  DiscussionMessage[] @relation("DiscussionMessageReplies")
+  pinnedBy User?               @relation("DiscussionMessagePinner", fields: [pinnedById], references: [id], onDelete: SetNull)
+
+  events DecisionEvent[]
+
+  @@unique([authorId, clientMessageId])
+  @@index([areaId, createdAt])
+  @@index([areaId, id])
+  @@index([authorId])
+  @@index([meetingId])
+  @@index([decisionId])
+  @@index([replyToId])
+  @@index([pinnedById])
+  @@index([type])
+}
+
+/// 管理员通过独立审计入口读取私有协作内容时写入的不可变日志。
+model CollaborationAuditLog {
+  id Int @id @default(autoincrement())
+
+  actorId   Int
+  projectId Int
+  areaId    Int?
+  meetingId Int?
+
+  action String
+  reason String
+
+  requestId String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  actor   User            @relation("CollaborationAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  area    DiscussionArea? @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  meeting MeetingSession? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([projectId])
+  @@index([areaId])
+  @@index([meetingId])
+  @@index([action])
+  @@index([requestId])
+  @@index([createdAt])
 }
 
 model Decision {
@@ -493,8 +894,12 @@ model Decision {
   description String?
   status      DecisionStatus @default(DRAFT)
 
+  projectId Int
+  /// 为空表示项目级决策；有值时表示仅属于一个私有讨论分区的小组决策。
+  areaId    Int?
   creatorId Int
   ownerId   Int?
+  /// 牵头部门只表达业务责任归属，不决定项目聊天可见性。
   deptId    Int
 
   decidedAt  DateTime?
@@ -502,16 +907,23 @@ model Decision {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  department Department @relation(fields: [deptId], references: [id], onDelete: Restrict)
-  creator    User       @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  owner      User?      @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  area       DiscussionArea? @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  department Department      @relation(fields: [deptId], references: [id], onDelete: Restrict)
+  creator    User            @relation("DecisionCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  owner      User?           @relation("DecisionOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   participants DecisionParticipant[]
   proposals    DecisionProposal[]
+  voteRounds   DecisionVoteRound[]
+  resolutions  DecisionResolution[]
   tasks        DecisionTask[]
   events       DecisionEvent[]
-  meetings     MeetingSession[]
+  messages     DiscussionMessage[]
+  meetingLinks MeetingDecision[]
 
+  @@index([projectId])
+  @@index([areaId])
   @@index([deptId])
   @@index([creatorId])
   @@index([ownerId])
@@ -559,6 +971,8 @@ model DecisionProposal {
 
   decisionId Int
   creatorId  Int
+  /// 可选的提案形成会议；为空表示提案在非会议协作场景中创建。
+  meetingId  Int?
 
   title       String
   description String?
@@ -569,43 +983,206 @@ model DecisionProposal {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now()) @updatedAt
 
-  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  creator  User     @relation("ProposalCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  decision Decision        @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  creator  User            @relation("ProposalCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  meeting  MeetingSession? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
 
-  votes  DecisionVote[]
-  events DecisionEvent[]
+  voteOptions DecisionVoteOption[]
+  resolutions DecisionResolution[]
+  events      DecisionEvent[]
 
   @@index([decisionId])
   @@index([creatorId])
+  @@index([meetingId])
   @@index([status])
 }
 
-model DecisionVote {
+/// 一次独立投票轮次；同一决策事项可以没有投票，也可以拥有多轮投票。
+model DecisionVoteRound {
   id Int @id @default(autoincrement())
 
-  proposalId Int
-  voterId    Int
+  /// 本轮投票所属的决策事项。
+  decisionId Int
+  /// 创建本轮投票的用户。
+  creatorId  Int
+  /// 可选的投票发起会议；为空表示投票在非会议协作场景中发起。
+  meetingId  Int?
 
-  option VoteOption
-  reason String?
+  /// 面向参与者展示的投票标题。
+  title       String
+  /// 投票背景、规则或补充说明。
+  description String?
+  /// 本轮采用的选择规则。
+  method      VoteMethod
+  /// 本轮自身的生命周期状态。
+  status      VoteRoundStatus @default(DRAFT)
+
+  /// 是否在业务展示层隐藏投票人与选项的对应关系；数据库仍保留 voterId 防止重复投票。
+  isAnonymous Boolean @default(false)
+  /// 达到有效投票所需的最少有效选票数；为空时不限制。
+  quorumCount Int?
+  /// 单张选票最多允许选择的选项数；单选通常为 1。
+  maxChoices  Int?
+
+  /// 实际开放投票的时间。
+  openedAt  DateTime?
+  /// 实际结束或取消投票的时间。
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  decision Decision        @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  creator  User            @relation("DecisionVoteRoundCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  meeting  MeetingSession? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  options     DecisionVoteOption[]
+  ballots     DecisionBallot[]
+  resolutions DecisionResolution[]
+  events      DecisionEvent[]
+
+  @@index([decisionId])
+  @@index([creatorId])
+  @@index([meetingId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// 一轮投票中的可选项；可以是普通文字，也可以关联一个候选方案。
+model DecisionVoteOption {
+  id Int @id @default(autoincrement())
+
+  /// 所属投票轮次。
+  roundId    Int
+  /// 可选的候选方案关联，用于同一轮比较多个方案。
+  proposalId Int?
+
+  /// 轮次内稳定且唯一的选项代码，例如 APPROVE、REJECT 或 PROPOSAL_12。
+  code        String
+  /// 面向用户展示的选项名称。
+  label       String
+  /// 选项的补充说明。
+  description String?
+  /// 控制选项的稳定展示顺序。
+  sortOrder   Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  proposal DecisionProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  voter    User             @relation(fields: [voterId], references: [id], onDelete: Cascade)
+  round    DecisionVoteRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  proposal DecisionProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
 
-  @@unique([proposalId, voterId])
+  choices DecisionBallotChoice[]
+
+  @@unique([roundId, code])
+  @@unique([id, roundId])
+  @@index([proposalId])
+  @@index([roundId, sortOrder])
+}
+
+/// 用户在某一轮投票中提交的一张选票；同一用户每轮最多一张。
+model DecisionBallot {
+  id Int @id @default(autoincrement())
+
+  /// 所属投票轮次。
+  roundId Int
+  /// 投票用户；匿名投票也保留该字段用于资格校验和防止重复。
+  voterId Int
+
+  /// 用户对整张选票填写的可选理由。
+  reason      String?
+  /// 选票正式提交的业务时间。
+  submittedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  round DecisionVoteRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  voter User              @relation(fields: [voterId], references: [id], onDelete: Restrict)
+
+  choices DecisionBallotChoice[]
+
+  @@unique([roundId, voterId])
+  @@unique([id, roundId])
   @@index([voterId])
-  @@index([option])
+  @@index([submittedAt])
+}
+
+/// 一张选票实际选择的选项；复合外键保证选票和选项属于同一投票轮次。
+model DecisionBallotChoice {
+  /// 用于同时约束选票和选项所属的轮次。
+  roundId  Int
+  /// 所属选票。
+  ballotId Int
+  /// 被选择的投票选项。
+  optionId Int
+
+  createdAt DateTime @default(now())
+
+  ballot DecisionBallot     @relation(fields: [ballotId, roundId], references: [id, roundId], onDelete: Cascade)
+  option DecisionVoteOption @relation(fields: [optionId, roundId], references: [id, roundId], onDelete: Cascade)
+
+  @@id([roundId, ballotId, optionId])
+  @@index([ballotId, roundId])
+  @@index([optionId, roundId])
+}
+
+/// 决策事项中被正式确认的结论；可以不经过投票，也可以记录方案、投票轮次和会议来源。
+model DecisionResolution {
+  id Int @id @default(autoincrement())
+
+  /// 所属决策事项。
+  decisionId        Int
+  /// 可选的来源候选方案。
+  sourceProposalId  Int?
+  /// 可选的依据投票轮次。
+  sourceVoteRoundId Int?
+  /// 可选的形成决议会议。
+  meetingId         Int?
+  /// 正式确认该决议的用户。
+  decidedById       Int
+  /// 当前决议直接替代的上一条决议；唯一约束保证替代关系是一对一链条。
+  supersedesId      Int? @unique
+
+  /// 决议标题。
+  title   String
+  /// 决议的正式正文或结论内容。
+  content String
+  /// 阶段性、最终或补充决议。
+  kind    ResolutionKind   @default(FINAL)
+  /// 当前是否有效、已被替代或已撤销。
+  status  ResolutionStatus @default(ACTIVE)
+
+  /// 决议在业务流程中被正式确认的时间。
+  decidedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  decision        Decision            @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  sourceProposal  DecisionProposal?   @relation(fields: [sourceProposalId], references: [id], onDelete: SetNull)
+  sourceVoteRound DecisionVoteRound?  @relation(fields: [sourceVoteRoundId], references: [id], onDelete: SetNull)
+  meeting         MeetingSession?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  decidedBy       User                @relation("DecisionResolutionDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  supersedes      DecisionResolution? @relation("DecisionResolutionSupersession", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy    DecisionResolution? @relation("DecisionResolutionSupersession")
+  tasks           DecisionTask[]
+  events          DecisionEvent[]
+
+  @@index([decisionId])
+  @@index([sourceProposalId])
+  @@index([sourceVoteRoundId])
+  @@index([meetingId])
+  @@index([decidedById])
+  @@index([kind])
+  @@index([status])
+  @@index([decidedAt])
 }
 
 model DecisionTask {
   id Int @id @default(autoincrement())
 
-  decisionId Int
-  creatorId  Int
-  assigneeId Int?
+  decisionId   Int
+  resolutionId Int?
+  creatorId    Int
+  assigneeId   Int?
 
   title       String
   description String?
@@ -616,13 +1193,16 @@ model DecisionTask {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  creator  User     @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Restrict)
-  assignee User?    @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  decision   Decision            @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  /// 可选的正式决议来源；删除决议时保留任务并清空关联。
+  resolution DecisionResolution? @relation(fields: [resolutionId], references: [id], onDelete: SetNull)
+  creator    User                @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+  assignee   User?               @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
   events DecisionEvent[]
 
   @@index([decisionId])
+  @@index([resolutionId])
   @@index([creatorId])
   @@index([assigneeId])
   @@index([status])
@@ -632,29 +1212,74 @@ model DecisionTask {
 model MeetingSession {
   id Int @id @default(autoincrement())
 
-  decisionId Int
-  title      String
-  status     MeetingStatus @default(SCHEDULED)
+  areaId      Int?
+  createdById Int
 
-  startedAt DateTime?
-  endedAt   DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now()) @updatedAt
+  title       String
+  description String?
+  status      MeetingStatus    @default(SCHEDULED)
+  kind        MeetingKind      @default(APPOINTMENT)
+  mediaMode   MeetingMediaMode @default(VIDEO)
 
-  decision Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  /// 项目内部稳定且不可重复的房间代码，不保存临时加入令牌。
+  roomKey        String  @unique @default(cuid())
+  /// 外部音视频服务商标识，例如 LiveKit；为空表示尚未分配服务商。
+  provider       String?
+  /// 外部音视频服务商侧的房间标识。
+  providerRoomId String?
 
-  participants MeetingParticipant[]
-  events       DecisionEvent[]
+  scheduledAt              DateTime?
+  scheduledDurationMinutes Int?
+  ringExpiresAt            DateTime?
+  startedAt                DateTime?
+  endedAt                  DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @default(now()) @updatedAt
 
-  @@index([decisionId])
+  area      DiscussionArea? @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  createdBy User            @relation("MeetingSessionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  participants   MeetingParticipant[]
+  presenceEvents MeetingPresenceEvent[]
+  decisionLinks  MeetingDecision[]
+  messages       DiscussionMessage[]
+  proposals      DecisionProposal[]
+  voteRounds     DecisionVoteRound[]
+  recordings     MeetingRecording[]
+  resolutions    DecisionResolution[]
+  events         DecisionEvent[]
+  auditLogs      CollaborationAuditLog[]
+
+  @@unique([provider, providerRoomId])
+  @@index([areaId])
+  @@index([createdById])
   @@index([status])
+  @@index([scheduledAt])
+  @@index([createdAt])
+}
+
+/// 会议与决策之间的多对多关联；一场会议可以讨论同一项目中的多项决策。
+model MeetingDecision {
+  meetingId  Int
+  decisionId Int
+
+  createdAt DateTime @default(now())
+
+  meeting  MeetingSession @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  decision Decision       @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  @@id([meetingId, decisionId])
+  @@index([decisionId])
 }
 
 model MeetingParticipant {
   id Int @id @default(autoincrement())
 
-  meetingId Int
-  userId    Int
+  meetingId        Int
+  userId           Int
+  role             MeetingParticipantRole   @default(ATTENDEE)
+  invitationStatus MeetingInvitationStatus?
+  respondedAt      DateTime?
 
   joinedAt  DateTime?
   leftAt    DateTime?
@@ -665,16 +1290,64 @@ model MeetingParticipant {
 
   @@unique([meetingId, userId])
   @@index([userId])
+  @@index([role])
+  @@index([invitationStatus])
+}
+
+/// LiveKit 对参与人连接状态的可信事件历史；providerEventId 用于抵御 Webhook 重试。
+model MeetingPresenceEvent {
+  id Int @id @default(autoincrement())
+
+  meetingId       Int
+  userId          Int?
+  type            MeetingPresenceEventType
+  providerEventId String                   @unique
+  occurredAt      DateTime
+  createdAt       DateTime                 @default(now())
+
+  meeting MeetingSession @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([meetingId, occurredAt])
+  @@index([userId, occurredAt])
+  @@index([type])
+}
+
+/// 一场会议的一段录像及其外部资产、存储和处理状态。
+model MeetingRecording {
+  id Int @id @default(autoincrement())
+
+  meetingId       Int
+  providerAssetId String?
+  storageKey      String?
+  durationMs      Int?
+  status          RecordingStatus @default(PENDING)
+
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+
+  meeting MeetingSession  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  events  DecisionEvent[]
+
+  @@unique([meetingId, providerAssetId])
+  @@index([meetingId, status])
+  @@index([createdAt])
 }
 
 model DecisionEvent {
   id Int @id @default(autoincrement())
 
-  decisionId Int
-  actorId    Int?
-  meetingId  Int?
-  proposalId Int?
-  taskId     Int?
+  decisionId   Int
+  actorId      Int?
+  meetingId    Int?
+  proposalId   Int?
+  voteRoundId  Int?
+  resolutionId Int?
+  recordingId  Int?
+  messageId    Int?
+  taskId       Int?
 
   type  DecisionEventType
   title String
@@ -687,16 +1360,24 @@ model DecisionEvent {
   recordingOffsetMs Int?
   createdAt         DateTime @default(now())
 
-  decision Decision          @relation(fields: [decisionId], references: [id], onDelete: Cascade)
-  actor    User?             @relation("DecisionEventActor", fields: [actorId], references: [id], onDelete: SetNull)
-  meeting  MeetingSession?   @relation(fields: [meetingId], references: [id], onDelete: SetNull)
-  proposal DecisionProposal? @relation(fields: [proposalId], references: [id], onDelete: SetNull)
-  task     DecisionTask?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  decision   Decision            @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  actor      User?               @relation("DecisionEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  meeting    MeetingSession?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  proposal   DecisionProposal?   @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  voteRound  DecisionVoteRound?  @relation(fields: [voteRoundId], references: [id], onDelete: SetNull)
+  resolution DecisionResolution? @relation(fields: [resolutionId], references: [id], onDelete: SetNull)
+  recording  MeetingRecording?   @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+  message    DiscussionMessage?  @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  task       DecisionTask?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([decisionId])
   @@index([actorId])
   @@index([meetingId])
   @@index([proposalId])
+  @@index([voteRoundId])
+  @@index([resolutionId])
+  @@index([recordingId])
+  @@index([messageId])
   @@index([taskId])
   @@index([type])
   @@index([occurredAt])

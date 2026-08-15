@@ -7,6 +7,7 @@ import {
   randomUUID,
   type KeyObject,
 } from 'node:crypto';
+import type { PasswordPublicKey } from '@workspace/contracts/auth';
 
 type PasswordTransportKey = {
   keyId: string;
@@ -22,14 +23,7 @@ type NonceRecord = {
   expiresAt: Date;
 };
 
-export type PasswordPublicKeyResponse = {
-  keyId: string;
-  algorithm: 'RSA-OAEP-256';
-  publicKeyPem: string;
-  expiresAt: string;
-  /** 一次性随机数，登录/注册时必须原样回传，消耗后不可重放 */
-  nonce: string;
-};
+export type PasswordPublicKeyResponse = PasswordPublicKey;
 
 @Injectable()
 export class PasswordCryptoService {
@@ -50,7 +44,7 @@ export class PasswordCryptoService {
    * - 同一 keyId 下，同一密文只能被解密一次（即使换了新 nonce）
    * - 防止攻击者截获密文后，获取新 nonce 搭配旧密文重放
    * - RSA-OAEP 每次加密产生不同密文，所以合法用户不会误触
-  */
+   */
   private readonly usedCiphertexts = new Map<string, Set<string>>();
 
   // 返回当前密码传输公钥并签发一次性 nonce。
@@ -92,7 +86,9 @@ export class PasswordCryptoService {
     }
 
     if (record.used) {
-      this.logger.warn(`Replay attack detected: nonce already consumed (keyId=${keyId})`);
+      this.logger.warn(
+        `Replay attack detected: nonce already consumed (keyId=${keyId})`,
+      );
       throw new BadRequestException('Nonce has already been used');
     }
 
@@ -102,19 +98,25 @@ export class PasswordCryptoService {
     }
 
     if (record.keyId !== keyId) {
-      this.logger.warn(`Nonce-keyId mismatch: nonce bound to ${record.keyId}, got ${keyId}`);
+      this.logger.warn(
+        `Nonce-keyId mismatch: nonce bound to ${record.keyId}, got ${keyId}`,
+      );
       throw new BadRequestException('Nonce does not match keyId');
     }
 
     // --- 密文去重：同一 keyId 下，同一密文只能用一次 ---
-    const ciphertextHash = createHash('sha256').update(ciphertext).digest('hex');
+    const ciphertextHash = createHash('sha256')
+      .update(ciphertext)
+      .digest('hex');
     const usedSet = this.usedCiphertexts.get(keyId);
 
     if (usedSet?.has(ciphertextHash)) {
       this.logger.warn(
         `Replay attack detected: ciphertext already used with keyId=${keyId}`,
       );
-      throw new BadRequestException('Password ciphertext has already been used');
+      throw new BadRequestException(
+        'Password ciphertext has already been used',
+      );
     }
 
     // 标记 nonce 已用

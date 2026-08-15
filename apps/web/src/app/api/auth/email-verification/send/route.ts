@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { apiError, apiErrorFromUnknown } from "@/app/api/_utils/response"
-import { requestSendEmailVerificationFromNest } from "@/features/auth/services/auth-bff.service"
+import { requestSendEmailVerificationFromNest } from "@/features/auth/services/auth-nest-client"
 import type { SendEmailVerificationFormValues } from "@/features/auth/types/auth.type"
 
 export async function POST(request: Request) {

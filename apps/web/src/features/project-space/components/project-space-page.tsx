@@ -1,0 +1,138 @@
+/**
+ * 本文件组合新版项目空间的项目导航、当前业务工作区和项目概览。
+ */
+'use client';
+
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useState } from 'react';
+import type { DecisionSummary } from '@workspace/contracts/decisions';
+import type { MeetingSummary } from '@workspace/contracts/meetings';
+import type {
+  DiscussionAreaMember,
+  DiscussionAreaSummary,
+  ProjectChatMessagePage,
+  ProjectDetail,
+  ProjectMember,
+  ProjectMemberCandidate,
+  ProjectSummary,
+  ProjectUserSummary,
+} from '@workspace/contracts/projects';
+
+import type { ProjectCreateDepartmentOption, ProjectSectionKey } from '../types/project-space.type';
+import { ProjectListPanel } from './project-list-panel';
+import { ProjectOverviewPanel } from './project-overview-panel';
+import { ProjectWorkspacePanel } from './project-workspace-panel';
+
+/** 新版项目空间组合页属性。 */
+type ProjectSpacePageProps = {
+  /** 当前用户可见的全部项目。 */
+  projects: ProjectSummary[];
+  /** 当前选中项目。 */
+  project: ProjectDetail;
+  /** 当前项目下用户可见的讨论分区。 */
+  areas: DiscussionAreaSummary[];
+  /** 当前选中的讨论分区。 */
+  currentArea: DiscussionAreaSummary;
+  /** 当前私有分区的显式成员；公共分区复用项目成员。 */
+  currentAreaMembers: DiscussionAreaMember[];
+  /** 当前分区的首屏聊天消息。 */
+  initialMessages: ProjectChatMessagePage;
+  /** 当前项目成员。 */
+  members: ProjectMember[];
+  /** 当前项目尚可添加的组织用户。 */
+  memberCandidates: ProjectMemberCandidate[];
+  /** 当前项目决策摘要。 */
+  decisions: DecisionSummary[];
+  /** 当前项目会议摘要。 */
+  meetings: MeetingSummary[];
+  /** 当前认证用户的安全摘要。 */
+  currentUser: ProjectUserSummary;
+  /** 当前用户是否具备创建项目权限。 */
+  canCreateProject: boolean;
+  /** 当前用户是否可以维护项目成员和私有小群组。 */
+  canManageProject: boolean;
+  /** 当前用户是否拥有创建决策权限。 */
+  canCreateDecision: boolean;
+  /** 当前用户是否拥有更新参与决策权限。 */
+  canUpdateDecision: boolean;
+  /** 当前用户创建项目时可以选择的启用部门。 */
+  createDepartmentOptions: ProjectCreateDepartmentOption[];
+};
+
+/** 渲染接入真实业务数据后的项目空间。 */
+export function ProjectSpacePage(props: ProjectSpacePageProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [isOverviewCollapsed, setIsOverviewCollapsed] = useState(false);
+  const querySection = searchParams.get('section');
+  const activeSection: ProjectSectionKey = isProjectSectionKey(querySection) ? querySection : 'discussion';
+
+  /** 切换桌面端右侧项目概览栏，扩大中央工作区的可用宽度。 */
+  function handleOverviewCollapseToggle(): void {
+    setIsOverviewCollapsed((currentValue) => !currentValue);
+  }
+
+  /** 切换项目模块，并把当前位置写入查询参数以支持刷新和浏览器返回。 */
+  function handleSectionChange(section: ProjectSectionKey): void {
+    const nextSearchParams = new URLSearchParams(searchParams.toString());
+    nextSearchParams.set('section', section);
+    router.push(`${pathname}?${nextSearchParams}`, { scroll: false });
+  }
+
+  return (
+    <section
+      className="relative mt-6 flex min-w-0 flex-none flex-col overflow-visible rounded-[1.4rem] border border-white/70 bg-[#f8f7f2]/82 shadow-[0_18px_60px_rgba(41,42,39,0.08)] lg:-mb-6 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-b-none"
+      aria-label="项目空间"
+    >
+      <div
+        className={
+          isOverviewCollapsed
+            ? 'grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] transition-[grid-template-columns] duration-300 ease-out motion-reduce:transition-none lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_3.5rem] lg:overflow-hidden xl:grid-cols-[14rem_minmax(0,1fr)_3.5rem]'
+            : 'grid min-w-0 flex-none grid-cols-[minmax(0,1fr)] transition-[grid-template-columns] duration-300 ease-out motion-reduce:transition-none lg:h-full lg:min-h-0 lg:flex-1 lg:grid-cols-[12.5rem_minmax(0,1fr)_14rem] lg:overflow-hidden xl:grid-cols-[14rem_minmax(0,1fr)_16rem]'
+        }
+      >
+        <ProjectListPanel
+          projects={props.projects}
+          currentProjectId={props.project.id}
+          canCreate={props.canCreateProject}
+          createDepartmentOptions={props.createDepartmentOptions}
+        />
+        <ProjectWorkspacePanel
+          project={props.project}
+          areas={props.areas}
+          currentArea={props.currentArea}
+          currentAreaMembers={props.currentAreaMembers}
+          initialMessages={props.initialMessages}
+          projectMembers={props.members}
+          decisions={props.decisions}
+          meetings={props.meetings}
+          currentUser={props.currentUser}
+          activeSection={activeSection}
+          onSectionChange={handleSectionChange}
+          canCreateDecision={props.canCreateDecision}
+          canUpdateDecision={props.canUpdateDecision}
+        />
+        <ProjectOverviewPanel
+          project={props.project}
+          areas={props.areas}
+          currentArea={props.currentArea}
+          currentAreaMembers={props.currentAreaMembers}
+          members={props.members}
+          memberCandidates={props.memberCandidates}
+          decisions={props.decisions}
+          meetings={props.meetings}
+          canManage={props.canManageProject}
+          showCurrentArea={activeSection === 'discussion'}
+          isCollapsed={isOverviewCollapsed}
+          onToggleCollapsed={handleOverviewCollapseToggle}
+        />
+      </div>
+    </section>
+  );
+}
+
+/** 判断查询参数是否为项目空间支持的一级模块。 */
+function isProjectSectionKey(value: string | null): value is ProjectSectionKey {
+  return value === 'discussion' || value === 'decisions' || value === 'meetings';
+}

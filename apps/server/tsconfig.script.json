@@ -1,0 +1,10 @@
+{
+  // 本配置只供 ts-node 直接运行仓库 TypeScript 脚本使用。
+  // 运行时必须保留 contracts 内部的 .ts 扩展名，不能改写成尚未生成的 .js 文件。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false
+  }
+}

@@ -2,11 +2,11 @@
 
 本目录负责环境变量的**解析、校验与类型化**，是整个应用配置管理的统一入口。
 
-当前状态：目录已预留，`@nestjs/config` 已在 `AppModule` 中以 `isGlobal: true` 全局初始化，可直接在任何 Service 中注入 `ConfigService` 使用。
+当前状态：`@nestjs/config` 已在 `AppModule` 中以 `isGlobal: true` 全局初始化，并通过 `validateEnvConfig` 在启动时校验关键环境变量。
 
 ---
 
-## 当前使用方式（基础版）
+## 当前使用方式
 
 ```ts
 // 在任意 Service 中注入 ConfigService
@@ -24,37 +24,27 @@ export class SomeService {
 
 ---
 
-## 推荐扩展方案
+## 已实现能力
 
-### 1. 环境变量校验（推荐优先实现）
-
-在应用启动时校验必填环境变量，避免缺失配置导致运行时崩溃：
-
-**`config/env.config.ts`**
-
-```ts
-import * as Joi from 'joi';
-
-export const envValidationSchema = Joi.object({
-  DATABASE_URL: Joi.string().required(),
-  PORT:         Joi.number().default(3001),
-  NODE_ENV:     Joi.string().valid('development', 'production', 'test').default('development'),
-  JWT_SECRET:   Joi.string().min(32).required(),
-});
-```
+- `DATABASE_URL` 必填，避免 Prisma 在运行期才因缺失连接串崩溃。
+- `PORT`、`SERVER_API_PREFIX`、token TTL、邮箱验证码 TTL 等都有默认值。
+- `production` 环境强制要求 `AUTH_ACCESS_TOKEN_SECRET` 和 `AUTH_EMAIL_CODE_SECRET`。
+- API 前缀会自动去掉首尾 `/`，例如 `/api/v1/` 会被规范化为 `api/v1`。
 
 在 `AppModule` 中启用：
 
 ```ts
 ConfigModule.forRoot({
   isGlobal: true,
-  validationSchema: envValidationSchema,
+  validate: validateEnvConfig,
 })
 ```
 
 ---
 
-### 2. 类型化配置工厂（进阶）
+## 后续可扩展方向
+
+### 1. 类型化配置工厂
 
 将松散的 `process.env` 聚合为强类型配置对象：
 
@@ -81,12 +71,12 @@ private readonly dbConfig: ConfigType<typeof databaseConfig>,
 
 ---
 
-### 3. 建议的文件规划
+### 2. 建议的文件规划
 
 ```
 config/
 ├── index.ts           # 统一导出所有配置工厂
-├── env.config.ts      # Joi 校验 schema
+├── env.config.ts      # 启动期环境变量校验
 ├── database.config.ts # 数据库配置工厂
 ├── jwt.config.ts      # JWT 配置工厂
 └── app.config.ts      # 应用级配置（端口、前缀等）
