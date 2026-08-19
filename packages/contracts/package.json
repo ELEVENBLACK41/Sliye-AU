@@ -11,7 +11,8 @@
     "./projects": "./src/projects/index.ts",
     "./meetings": "./src/meetings/index.ts",
     "./notifications": "./src/notifications/index.ts",
-    "./relationship-graph": "./src/relationship-graph/index.ts"
+    "./relationship-graph": "./src/relationship-graph/index.ts",
+    "./dashboard": "./src/dashboard/index.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit",

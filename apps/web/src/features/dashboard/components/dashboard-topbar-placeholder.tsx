@@ -8,6 +8,7 @@ import { gsap } from 'gsap';
 import { Bell, Menu } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import type { AuthUser } from '@workspace/contracts/auth';
 
 import { Button } from '@workspace/ui/components/button';
 import { Separator } from '@workspace/ui/components/separator';
@@ -43,43 +44,37 @@ const navigationItemLayoutClass =
 type DashboardTopbarPlaceholderProps = {
   /** 当前账号是否允许进入组织与权限一级空间。 */
   canAccessOrganization: boolean;
+  /** 当前登录用户的真实认证资料。 */
+  currentUser: Pick<AuthUser, 'name' | 'email' | 'avatarUrl'>;
 };
 
 /** 渲染新版顶部导航。 */
-export function DashboardTopbarPlaceholder({ canAccessOrganization }: DashboardTopbarPlaceholderProps) {
+export function DashboardTopbarPlaceholder({ canAccessOrganization, currentUser }: DashboardTopbarPlaceholderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const visibleNavigationItems = navigationItems.filter(
-    (item) => item.key !== 'members' || canAccessOrganization,
-  );
+  const visibleNavigationItems = navigationItems.filter((item) => item.key !== 'members' || canAccessOrganization);
   const navigationContainerRef = useRef<HTMLElement | null>(null);
   const activeNavigation: MainNavigationKey = pathname.startsWith('/members')
     ? 'members'
     : pathname.startsWith('/graph')
       ? 'graph'
-    : pathname.startsWith('/meetings')
-      ? 'meetings'
-      : pathname.startsWith('/decisions')
-        ? 'decisions'
-        : pathname.startsWith('/projects')
-          ? 'projects'
-          : 'dashboard';
+      : pathname.startsWith('/meetings')
+        ? 'meetings'
+        : pathname.startsWith('/decisions')
+          ? 'decisions'
+          : pathname.startsWith('/projects')
+            ? 'projects'
+            : 'dashboard';
   const activeNavigationRef = useRef<MainNavigationKey>(activeNavigation);
   const hasPositionedIndicatorRef = useRef(false);
 
   /** 测量目标菜单，并把现有黑色选中块直接移动或平滑重定向到该位置。 */
   const moveNavigationIndicator = useCallback(
-    (
-      targetNavigation: MainNavigationKey,
-      shouldAnimate: boolean,
-      onComplete?: () => void,
-    ): void => {
+    (targetNavigation: MainNavigationKey, shouldAnimate: boolean, onComplete?: () => void): void => {
       const navigationContainer = navigationContainerRef.current;
       if (!navigationContainer) return;
 
-      const targetItem = navigationContainer.querySelector<HTMLElement>(
-        `[data-navigation-key="${targetNavigation}"]`,
-      );
+      const targetItem = navigationContainer.querySelector<HTMLElement>(`[data-navigation-key="${targetNavigation}"]`);
 
       gsap.to(navigationContainer, {
         ...(targetItem && {
@@ -134,10 +129,7 @@ export function DashboardTopbarPlaceholder({ canAccessOrganization }: DashboardT
   }, [moveNavigationIndicator]);
 
   /** 先完成选中块动画，再提交可能包含大量客户端组件的目标路由渲染。 */
-  function handleNavigationIntent(
-    targetNavigation: MainNavigationKey,
-    targetHref: string,
-  ): void {
+  function handleNavigationIntent(targetNavigation: MainNavigationKey, targetHref: string): void {
     if (activeNavigationRef.current === targetNavigation) return;
 
     activeNavigationRef.current = targetNavigation;
@@ -149,10 +141,7 @@ export function DashboardTopbarPlaceholder({ canAccessOrganization }: DashboardT
   }
 
   return (
-    <header
-      className="relative z-50 flex items-center gap-4 lg:sticky lg:top-0"
-      aria-label="工作台顶部导航"
-    >
+    <header className="relative z-50 flex items-center gap-4 lg:sticky lg:top-0" aria-label="工作台顶部导航">
       <div
         className="flex h-12 shrink-0 items-center rounded-full border border-black/25 bg-white/30 px-6 text-2xl font-medium tracking-tight"
         aria-label="Decision Hub 品牌标识"
@@ -176,20 +165,20 @@ export function DashboardTopbarPlaceholder({ canAccessOrganization }: DashboardT
             }}
           />
           {visibleNavigationItems.map((item) => (
-              <Button key={item.key} asChild variant="ghost" className="h-auto rounded-full p-0">
-                <Link
-                  href={item.href}
-                  aria-current={activeNavigation === item.key ? 'page' : undefined}
-                  data-navigation-key={item.key}
-                  className={`relative z-10 ${navigationItemLayoutClass} text-[#31322f] hover:bg-transparent hover:text-[#31322f]`}
-                  onNavigate={(event) => {
-                    event.preventDefault();
-                    handleNavigationIntent(item.key, item.href);
-                  }}
-                >
-                  {item.label}
-                </Link>
-              </Button>
+            <Button key={item.key} asChild variant="ghost" className="h-auto rounded-full p-0">
+              <Link
+                href={item.href}
+                aria-current={activeNavigation === item.key ? 'page' : undefined}
+                data-navigation-key={item.key}
+                className={`relative z-10 ${navigationItemLayoutClass} text-[#31322f] hover:bg-transparent hover:text-[#31322f]`}
+                onNavigate={(event) => {
+                  event.preventDefault();
+                  handleNavigationIntent(item.key, item.href);
+                }}
+              >
+                {item.label}
+              </Link>
+            </Button>
           ))}
           <div
             aria-hidden
@@ -217,7 +206,7 @@ export function DashboardTopbarPlaceholder({ canAccessOrganization }: DashboardT
           <Bell className="size-5" aria-hidden />
         </Button>
 
-        <DashboardAccountMenuPlaceholder />
+        <DashboardAccountMenuPlaceholder user={currentUser} />
 
         <Sheet>
           <SheetTrigger asChild>
@@ -239,17 +228,17 @@ export function DashboardTopbarPlaceholder({ canAccessOrganization }: DashboardT
             <Separator />
             <nav className="flex flex-col gap-2 px-4" aria-label="移动端主导航">
               {visibleNavigationItems.map((item) => (
-                  <SheetClose key={item.key} asChild>
-                    <Button
-                      asChild
-                      variant={activeNavigation === item.key ? 'secondary' : 'ghost'}
-                      className="h-11 w-full justify-start rounded-xl px-4"
-                    >
-                      <Link href={item.href} aria-current={activeNavigation === item.key ? 'page' : undefined}>
-                        {item.label}
-                      </Link>
-                    </Button>
-                  </SheetClose>
+                <SheetClose key={item.key} asChild>
+                  <Button
+                    asChild
+                    variant={activeNavigation === item.key ? 'secondary' : 'ghost'}
+                    className="h-11 w-full justify-start rounded-xl px-4"
+                  >
+                    <Link href={item.href} aria-current={activeNavigation === item.key ? 'page' : undefined}>
+                      {item.label}
+                    </Link>
+                  </Button>
+                </SheetClose>
               ))}
             </nav>
           </SheetContent>

@@ -3,38 +3,15 @@
  */
 'use client';
 
-import {
-  useLayoutEffect,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from 'react';
+import { useLayoutEffect, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowUpRight, GripHorizontal, MessageCircle, UsersRound } from 'lucide-react';
 import { gsap } from 'gsap';
 import { InertiaPlugin } from 'gsap/InertiaPlugin';
+import type { DashboardDecisionStackItem } from '@workspace/contracts/dashboard';
 
 import { Button } from '@workspace/ui/components/button';
 
-gsap.registerPlugin(InertiaPlugin);//惯性动画插件
-
-/** 单张决策卡片在样例中使用的数据结构。 */
-type DecisionStackItem = {
-  /** 卡片强调色。 */
-  accent: string;
-  /** 当前参与人数。 */
-  participantCount: number;
-  /** 当前提案数量。 */
-  proposalCount: number;
-  /** 决策所属项目空间。 */
-  space: string;
-  /** 决策当前阶段。 */
-  stage: string;
-  /** 决策标题。 */
-  title: string;
-  /** 卡片唯一标识。 */
-  id: string;
-};
+gsap.registerPlugin(InertiaPlugin);
 
 /** 一次长按拖拽过程中需要保存的瞬时数据。 */
 type DragSession = {
@@ -62,45 +39,14 @@ type DragSession = {
   velocityY: number;
 };
 
-/** 卡片堆的静态样例数据，后续可由工作台接口替换。 */
-const decisionStackItems: DecisionStackItem[] = [
-  {
-    id: 'release-plan',
-    title: '是否调整产品发布计划？',
-    space: '产品路线图讨论组',
-    stage: '讨论中',
-    participantCount: 8,
-    proposalCount: 2,
-    accent: '#ffd653',
-  },
-  {
-    id: 'meeting-summary',
-    title: '会议纪要是否默认由 AI 生成？',
-    space: '协作体验优化组',
-    stage: '投票中',
-    participantCount: 12,
-    proposalCount: 3,
-    accent: '#f4a7ff',
-  },
-  {
-    id: 'data-retention',
-    title: '客户数据保留周期如何调整？',
-    space: '数据治理委员会',
-    stage: '提案征集中',
-    participantCount: 6,
-    proposalCount: 4,
-    accent: '#83e7c2',
-  },
-  {
-    id: 'roadmap-priority',
-    title: '下半年路线图优先投入哪条主线？',
-    space: '年度规划项目空间',
-    stage: '待讨论',
-    participantCount: 15,
-    proposalCount: 5,
-    accent: '#9fc5ff',
-  },
-];
+/** 决策状态在卡片堆中的文案与强调色。 */
+const decisionStatusPresentation = {
+  DRAFT: { label: '草稿中', className: 'bg-muted text-muted-foreground' },
+  DISCUSSING: { label: '讨论中', className: 'bg-decision-accent text-decision-ink' },
+  RESOLVED: { label: '已形成决议', className: 'bg-decision-resolution text-primary-foreground' },
+  CANCELLED: { label: '已取消', className: 'bg-destructive/15 text-destructive' },
+  ARCHIVED: { label: '已归档', className: 'bg-muted text-muted-foreground' },
+} as const;
 
 /** 按当前堆叠位置计算卡片的静止变换参数。 */
 function getStackTransform(stackIndex: number) {
@@ -117,29 +63,22 @@ function clamp(value: number, minimum: number, maximum: number) {
 }
 
 /** 渲染单张决策内容卡片。 */
-function DecisionCard({ item, stackIndex }: { item: DecisionStackItem; stackIndex: number }) {
+function DecisionCard({ item, stackIndex }: { item: DashboardDecisionStackItem; stackIndex: number }) {
+  const status = decisionStatusPresentation[item.status];
+
   return (
     <article
       className="flex h-full flex-col overflow-hidden rounded-[1.4rem] border border-white/12 bg-[#3a3b37] p-4 text-white shadow-[0_22px_45px_rgba(0,0,0,0.34)]"
       aria-hidden={stackIndex !== 0}
     >
       <div className="flex items-start justify-between gap-3">
-        <span
-          className="rounded-full px-2.5 py-1 text-[10px] font-semibold text-[#22231f]"
-          style={{ backgroundColor: item.accent }}
-        >
-          {item.stage}
-        </span>
-        <span className="text-[10px] font-medium tracking-[0.12em] text-white/35 uppercase">
-          0{stackIndex + 1}
-        </span>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${status.className}`}>{status.label}</span>
+        <span className="text-[10px] font-medium tracking-[0.12em] text-white/35 uppercase">0{stackIndex + 1}</span>
       </div>
 
       <div className="flex flex-1 flex-col justify-center py-5">
-        <p className="mb-2 text-[11px] text-white/42">{item.space}</p>
-        <h3 className="text-[1.45rem] leading-[1.15] font-semibold tracking-[-0.045em] text-balance">
-          {item.title}
-        </h3>
+        <p className="mb-2 text-[11px] text-white/42">{item.projectTitle}</p>
+        <h3 className="text-[1.45rem] leading-[1.15] font-semibold tracking-[-0.045em] text-balance">{item.title}</h3>
       </div>
 
       <div className="flex items-center gap-4 border-t border-white/10 pt-3 text-[11px] text-white/48">
@@ -156,10 +95,17 @@ function DecisionCard({ item, stackIndex }: { item: DecisionStackItem; stackInde
   );
 }
 
-/** 渲染支持长按拖拽、回弹和甩动换序的决策卡片堆。 */
-export function DashboardDecisionCardStack() {
-  const [cardOrder, setCardOrder] = useState(() => decisionStackItems.map((item) => item.id));
-  const cardElementsRef = useRef(new Map<string, HTMLDivElement>());
+/** 可拖拽决策卡片堆属性。 */
+type DashboardDecisionCardStackProps = {
+  /** 服务端返回的最近进行中决策。 */
+  items: DashboardDecisionStackItem[];
+};
+
+/** 渲染支持长按拖拽、回弹和甩动换序的真实决策卡片堆。 */
+export function DashboardDecisionCardStack({ items }: DashboardDecisionCardStackProps) {
+  const [cardOrder, setCardOrder] = useState(() => items.map((item) => item.id));
+  const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const cardElementsRef = useRef(new Map<number, HTMLDivElement>());
   const dragSessionRef = useRef<DragSession | null>(null);
   const hasPositionedCardsRef = useRef(false);
   const isAnimatingRef = useRef(false);
@@ -210,7 +156,7 @@ export function DashboardDecisionCardStack() {
   }, [cardOrder]);
 
   /** 记录或清理单张卡片的 DOM 引用。 */
-  function registerCardElement(cardId: string, cardElement: HTMLDivElement | null) {
+  function registerCardElement(cardId: number, cardElement: HTMLDivElement | null) {
     if (cardElement) {
       cardElementsRef.current.set(cardId, cardElement);
       return;
@@ -221,6 +167,7 @@ export function DashboardDecisionCardStack() {
 
   /** 将当前首张卡片移动到数据顺序末尾。 */
   function moveFrontCardToBack() {
+    if (cardOrder.length <= 1) return;
     setCardOrder((currentOrder) => [...currentOrder.slice(1), currentOrder[0]]);
   }
 
@@ -238,12 +185,7 @@ export function DashboardDecisionCardStack() {
   }
 
   /** 播放甩出动画，并在动画完成后更新牌堆顺序。 */
-  function throwFrontCard(
-    cardElement: HTMLDivElement,
-    direction: number,
-    velocityX: number,
-    velocityY: number,
-  ) {
+  function throwFrontCard(cardElement: HTMLDivElement, direction: number, velocityX: number, velocityY: number) {
     const nextCardId = cardOrder[1];
     const nextCardElement = cardElementsRef.current.get(nextCardId);
     const horizontalDestination = direction * (cardElement.offsetWidth + 150);
@@ -289,8 +231,8 @@ export function DashboardDecisionCardStack() {
   }
 
   /** 长按最上层卡片后激活拖拽状态。 */
-  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>, cardId: string) {
-    if (cardId !== cardOrder[0] || isAnimatingRef.current) {
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>, cardId: number) {
+    if (cardOrder.length <= 1 || cardId !== cardOrder[0] || isAnimatingRef.current) {
       return;
     }
 
@@ -315,11 +257,7 @@ export function DashboardDecisionCardStack() {
       lastY: event.clientY,
       lastTime: event.timeStamp,
       pointerId: event.pointerId,
-      setTransform: gsap.quickSetter(cardElement, 'css') as (value: {
-        rotation: number;
-        x: number;
-        y: number;
-      }) => void,
+      setTransform: gsap.quickSetter(cardElement, 'css') as (value: { rotation: number; x: number; y: number }) => void,
       startX: event.clientX,
       startY: event.clientY,
       velocityX: 0,
@@ -428,7 +366,7 @@ export function DashboardDecisionCardStack() {
 
   /** 允许不方便拖拽的用户通过按钮切换下一张卡片。 */
   function handleNextCard() {
-    if (isAnimatingRef.current) {
+    if (isAnimatingRef.current || cardOrder.length <= 1) {
       return;
     }
 
@@ -450,13 +388,10 @@ export function DashboardDecisionCardStack() {
 
       <header className="relative flex items-start justify-between gap-4">
         <div>
-          <p className="mb-1.5 text-[10px] font-semibold tracking-[0.14em] text-[#ffd653] uppercase">
+          <p className="mb-1.5 text-[10px] font-semibold tracking-[0.14em] text-decision-accent uppercase">
             Decision deck · {cardOrder.length}
           </p>
-          <h2
-            id="decision-card-stack-title"
-            className="text-lg font-semibold tracking-[-0.035em] text-white"
-          >
+          <h2 id="decision-card-stack-title" className="text-lg font-semibold tracking-[-0.035em] text-white">
             正在发生的决定
           </h2>
         </div>
@@ -465,6 +400,7 @@ export function DashboardDecisionCardStack() {
           variant="ghost"
           size="icon"
           onClick={handleNextCard}
+          disabled={cardOrder.length <= 1}
           className="size-9 rounded-full border border-white/10 bg-white/[0.05] text-white/60 hover:bg-white/10 hover:text-white"
           aria-label="查看下一项决策"
         >
@@ -472,12 +408,17 @@ export function DashboardDecisionCardStack() {
         </Button>
       </header>
 
-      <div
-        className="relative my-4 min-h-[18rem] flex-1"
-        aria-live="polite"
-      >
+      <div className="relative my-4 min-h-[18rem] flex-1" aria-live="polite">
+        {cardOrder.length === 0 ? (
+          <div className="grid h-full min-h-[18rem] place-items-center rounded-[1.4rem] border border-dashed border-white/15 bg-white/[0.03] p-6 text-center">
+            <div>
+              <p className="text-sm font-medium text-white/75">暂无正在推进的决策</p>
+              <p className="mt-1 text-xs text-white/40">新建或推进决策后会出现在这里。</p>
+            </div>
+          </div>
+        ) : null}
         {cardOrder.map((cardId, stackIndex) => {
-          const item = decisionStackItems.find((candidate) => candidate.id === cardId);
+          const item = itemById.get(cardId);
 
           if (!item) {
             return null;
@@ -505,7 +446,9 @@ export function DashboardDecisionCardStack() {
           长按卡片，拖拽甩动
         </span>
         <span>
-          {decisionStackItems.findIndex((item) => item.id === cardOrder[0]) + 1} / {cardOrder.length}
+          {cardOrder.length === 0
+            ? '0 / 0'
+            : `${items.findIndex((item) => item.id === cardOrder[0]) + 1} / ${cardOrder.length}`}
         </span>
       </footer>
     </section>
