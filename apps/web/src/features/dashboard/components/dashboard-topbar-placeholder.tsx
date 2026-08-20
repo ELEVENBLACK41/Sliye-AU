@@ -28,6 +28,7 @@ const navigationItems = [
   { key: 'dashboard', label: '工作台', href: '/dashboard' },
   { key: 'projects', label: '项目空间', href: '/projects' },
   { key: 'decisions', label: '决策中心', href: '/decisions' },
+  { key: 'ai', label: 'AI 实验室', href: '/ai' },
   { key: 'meetings', label: '会议中心', href: '/meetings' },
   { key: 'graph', label: '关系图谱', href: '/graph' },
   { key: 'members', label: '组织与权限', href: '/members' },
@@ -62,9 +63,11 @@ export function DashboardTopbarPlaceholder({ canAccessOrganization, currentUser 
         ? 'meetings'
         : pathname.startsWith('/decisions')
           ? 'decisions'
-          : pathname.startsWith('/projects')
-            ? 'projects'
-            : 'dashboard';
+          : pathname.startsWith('/ai')
+            ? 'ai'
+            : pathname.startsWith('/projects')
+              ? 'projects'
+              : 'dashboard';
   const activeNavigationRef = useRef<MainNavigationKey>(activeNavigation);
   const hasPositionedIndicatorRef = useRef(false);
 
