@@ -1,4 +1,12 @@
-# Sliye-AU
+<p align="center">
+  <img src="docs/assets/decision-hub-logo.png" alt="Decision Hub" width="220" />
+</p>
+
+<h1 align="center">Decision Hub</h1>
+
+<p align="center">
+  记录一项决策如何从讨论、提案与投票走向正式决议。
+</p>
 
 Next.js + NestJS + Prisma 全栈 Monorepo 项目。
 
@@ -161,3 +169,5 @@ A: 检查 `apps/server/.env` 中 `DATABASE_URL` 的用户名、密码、数据�
 
 **Q: 修改 `.env` 后不生效**  
 A: Next.js 和 NestJS 都需要重启 dev server 才能读取新的环境变量。
+
+# 最后感谢帮助我的老师们，codex 5.6Sol 5.6Terra 5.6luna
