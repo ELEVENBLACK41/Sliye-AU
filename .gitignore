@@ -7,6 +7,7 @@ node_modules
 dist
 coverage
 apps/server/uploads/
+apps/server/src/modules/ai/evaluation/fixtures/private/
 
 # env files
 .env

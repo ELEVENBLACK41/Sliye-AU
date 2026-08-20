@@ -14,7 +14,7 @@ export type AiDecisionProcessFixtureIsoTimestamp = string;
 /** 决策形成过程 Fixture 可复用的脱敏对抗证据标记。 */
 export type AiDecisionProcessFixtureEvidenceRiskLabel =
   /** 证据内容包含用于验证系统边界的提示注入文本。 */
-  | 'prompt_injection';
+  'prompt_injection';
 
 /** 评测证据共有的定位、权限范围与删除状态字段。 */
 type AiDecisionProcessFixtureEvidenceSource<
@@ -47,7 +47,12 @@ export type AiDecisionProcessFixtureDecision = {
   /** 决策背景说明；无说明时固定为 `null`。 */
   readonly description: string | null;
   /** 决策当前状态，仅保留形成过程评测所需的领域状态。 */
-  readonly status: 'DRAFT' | 'DISCUSSING' | 'RESOLVED' | 'CANCELLED' | 'ARCHIVED';
+  readonly status:
+    | 'DRAFT'
+    | 'DISCUSSING'
+    | 'RESOLVED'
+    | 'CANCELLED'
+    | 'ARCHIVED';
   /** 决策正式形成时间的 ISO 8601 字符串；尚未形成时固定为 `null`。 */
   readonly decidedAt: AiDecisionProcessFixtureIsoTimestamp | null;
   /** 决策创建时间的 ISO 8601 字符串。 */
@@ -55,36 +60,38 @@ export type AiDecisionProcessFixtureDecision = {
 };
 
 /** 评测 Fixture 中的脱敏讨论消息证据。 */
-export type AiDecisionProcessFixtureDiscussionMessage = AiDecisionProcessFixtureEvidenceSource<'discussion_message'> & {
-  /** 消息所属会议主键；非会议讨论消息固定为 `null`。 */
-  readonly meetingId: number | null;
-  /** 消息正文，可包含脱敏的正常讨论或对抗文本。 */
-  readonly content: string;
-  /** 消息作者的脱敏展示标记；系统消息或无作者时固定为 `null`。 */
-  readonly authorLabel: string | null;
-  /** 消息创建时间的 ISO 8601 字符串。 */
-  readonly createdAt: AiDecisionProcessFixtureIsoTimestamp;
-  /** 对抗评测标记；普通讨论消息固定为 `null`。 */
-  readonly evidenceRiskLabel: AiDecisionProcessFixtureEvidenceRiskLabel | null;
-};
+export type AiDecisionProcessFixtureDiscussionMessage =
+  AiDecisionProcessFixtureEvidenceSource<'discussion_message'> & {
+    /** 消息所属会议主键；非会议讨论消息固定为 `null`。 */
+    readonly meetingId: number | null;
+    /** 消息正文，可包含脱敏的正常讨论或对抗文本。 */
+    readonly content: string;
+    /** 消息作者的脱敏展示标记；系统消息或无作者时固定为 `null`。 */
+    readonly authorLabel: string | null;
+    /** 消息创建时间的 ISO 8601 字符串。 */
+    readonly createdAt: AiDecisionProcessFixtureIsoTimestamp;
+    /** 对抗评测标记；普通讨论消息固定为 `null`。 */
+    readonly evidenceRiskLabel: AiDecisionProcessFixtureEvidenceRiskLabel | null;
+  };
 
 /** 评测 Fixture 中的最小决策提案证据。 */
-export type AiDecisionProcessFixtureProposal = AiDecisionProcessFixtureEvidenceSource<'proposal'> & {
-  /** 提案形成会议主键；非会议场景创建的提案固定为 `null`。 */
-  readonly meetingId: number | null;
-  /** 提案标题。 */
-  readonly title: string;
-  /** 提案补充说明；无说明时固定为 `null`。 */
-  readonly description: string | null;
-  /** 提案当前状态。 */
-  readonly status: 'OPEN' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
-  /** 提案提出人的脱敏展示标记；未提供时固定为 `null`。 */
-  readonly creatorLabel: string | null;
-  /** 提案被采纳时间的 ISO 8601 字符串；未采纳时固定为 `null`。 */
-  readonly acceptedAt: AiDecisionProcessFixtureIsoTimestamp | null;
-  /** 提案创建时间的 ISO 8601 字符串。 */
-  readonly createdAt: AiDecisionProcessFixtureIsoTimestamp;
-};
+export type AiDecisionProcessFixtureProposal =
+  AiDecisionProcessFixtureEvidenceSource<'proposal'> & {
+    /** 提案形成会议主键；非会议场景创建的提案固定为 `null`。 */
+    readonly meetingId: number | null;
+    /** 提案标题。 */
+    readonly title: string;
+    /** 提案补充说明；无说明时固定为 `null`。 */
+    readonly description: string | null;
+    /** 提案当前状态。 */
+    readonly status: 'OPEN' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+    /** 提案提出人的脱敏展示标记；未提供时固定为 `null`。 */
+    readonly creatorLabel: string | null;
+    /** 提案被采纳时间的 ISO 8601 字符串；未采纳时固定为 `null`。 */
+    readonly acceptedAt: AiDecisionProcessFixtureIsoTimestamp | null;
+    /** 提案创建时间的 ISO 8601 字符串。 */
+    readonly createdAt: AiDecisionProcessFixtureIsoTimestamp;
+  };
 
 /** 评测 Fixture 支持的非任务型决策过程事件。 */
 export type AiDecisionProcessFixtureDecisionEventType =
@@ -124,24 +131,25 @@ export type AiDecisionProcessFixtureDecisionEventType =
   | 'RECORDING_READY';
 
 /** 评测 Fixture 中的决策过程时间线事件。 */
-export type AiDecisionProcessFixtureEvent = AiDecisionProcessFixtureEvidenceSource<'decision_event'> & {
-  /** 决策过程中的稳定事件类型；不包含任何任务创建或更新事件。 */
-  readonly type: AiDecisionProcessFixtureDecisionEventType;
-  /** 面向过程回放的事件标题。 */
-  readonly title: string;
-  /** 事件关联的讨论消息来源主键；未关联时固定为 `null`。 */
-  readonly messageSourceId: number | null;
-  /** 事件关联的会议主键；未关联时固定为 `null`。 */
-  readonly meetingId: number | null;
-  /** 事件关联的提案来源主键；未关联时固定为 `null`。 */
-  readonly proposalSourceId: number | null;
-  /** 事件关联的投票轮次来源主键；未关联时固定为 `null`。 */
-  readonly voteRoundSourceId: number | null;
-  /** 事件关联的正式决议来源主键；未关联时固定为 `null`。 */
-  readonly resolutionSourceId: number | null;
-  /** 事件实际发生时间的 ISO 8601 字符串。 */
-  readonly occurredAt: AiDecisionProcessFixtureIsoTimestamp;
-};
+export type AiDecisionProcessFixtureEvent =
+  AiDecisionProcessFixtureEvidenceSource<'decision_event'> & {
+    /** 决策过程中的稳定事件类型；不包含任何任务创建或更新事件。 */
+    readonly type: AiDecisionProcessFixtureDecisionEventType;
+    /** 面向过程回放的事件标题。 */
+    readonly title: string;
+    /** 事件关联的讨论消息来源主键；未关联时固定为 `null`。 */
+    readonly messageSourceId: number | null;
+    /** 事件关联的会议主键；未关联时固定为 `null`。 */
+    readonly meetingId: number | null;
+    /** 事件关联的提案来源主键；未关联时固定为 `null`。 */
+    readonly proposalSourceId: number | null;
+    /** 事件关联的投票轮次来源主键；未关联时固定为 `null`。 */
+    readonly voteRoundSourceId: number | null;
+    /** 事件关联的正式决议来源主键；未关联时固定为 `null`。 */
+    readonly resolutionSourceId: number | null;
+    /** 事件实际发生时间的 ISO 8601 字符串。 */
+    readonly occurredAt: AiDecisionProcessFixtureIsoTimestamp;
+  };
 
 /** 评测 Fixture 中单个投票选项的允许公开聚合结果。 */
 export type AiDecisionProcessFixtureVoteOptionResult = {
@@ -160,64 +168,67 @@ export type AiDecisionProcessFixtureVoteOptionResult = {
 };
 
 /** 评测 Fixture 中的一轮投票及其允许公开的聚合结果。 */
-export type AiDecisionProcessFixtureVoteRound = AiDecisionProcessFixtureEvidenceSource<'vote_round'> & {
-  /** 投票发起会议主键；非会议投票固定为 `null`。 */
-  readonly meetingId: number | null;
-  /** 投票轮次标题。 */
-  readonly title: string;
-  /** 投票背景、规则或补充说明；无说明时固定为 `null`。 */
-  readonly description: string | null;
-  /** 投票选择规则。 */
-  readonly method: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'APPROVAL';
-  /** 投票轮次生命周期状态。 */
-  readonly status: 'DRAFT' | 'OPEN' | 'CLOSED' | 'CANCELLED';
-  /** 是否为匿名投票；无论取值如何，本合同都只允许聚合结果。 */
-  readonly isAnonymous: boolean;
-  /** 达到有效投票所需的最少选票数；未设置时固定为 `null`。 */
-  readonly quorumCount: number | null;
-  /** 已提交选票的公开聚合总数，不包含单张选票。 */
-  readonly totalBallots: number | null;
-  /** 是否达到法定人数；投票尚未结束或未计算时固定为 `null`。 */
-  readonly quorumMet: boolean | null;
-  /** 每个可公开选项的聚合结果。 */
-  readonly options: readonly AiDecisionProcessFixtureVoteOptionResult[];
-  /** 投票开放时间的 ISO 8601 字符串；尚未开放时固定为 `null`。 */
-  readonly openedAt: AiDecisionProcessFixtureIsoTimestamp | null;
-  /** 投票关闭或取消时间的 ISO 8601 字符串；尚未结束时固定为 `null`。 */
-  readonly closedAt: AiDecisionProcessFixtureIsoTimestamp | null;
-};
+export type AiDecisionProcessFixtureVoteRound =
+  AiDecisionProcessFixtureEvidenceSource<'vote_round'> & {
+    /** 投票发起会议主键；非会议投票固定为 `null`。 */
+    readonly meetingId: number | null;
+    /** 投票轮次标题。 */
+    readonly title: string;
+    /** 投票背景、规则或补充说明；无说明时固定为 `null`。 */
+    readonly description: string | null;
+    /** 投票选择规则。 */
+    readonly method: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'APPROVAL';
+    /** 投票轮次生命周期状态。 */
+    readonly status: 'DRAFT' | 'OPEN' | 'CLOSED' | 'CANCELLED';
+    /** 是否为匿名投票；无论取值如何，本合同都只允许聚合结果。 */
+    readonly isAnonymous: boolean;
+    /** 达到有效投票所需的最少选票数；未设置时固定为 `null`。 */
+    readonly quorumCount: number | null;
+    /** 已提交选票的公开聚合总数，不包含单张选票。 */
+    readonly totalBallots: number | null;
+    /** 是否达到法定人数；投票尚未结束或未计算时固定为 `null`。 */
+    readonly quorumMet: boolean | null;
+    /** 每个可公开选项的聚合结果。 */
+    readonly options: readonly AiDecisionProcessFixtureVoteOptionResult[];
+    /** 投票开放时间的 ISO 8601 字符串；尚未开放时固定为 `null`。 */
+    readonly openedAt: AiDecisionProcessFixtureIsoTimestamp | null;
+    /** 投票关闭或取消时间的 ISO 8601 字符串；尚未结束时固定为 `null`。 */
+    readonly closedAt: AiDecisionProcessFixtureIsoTimestamp | null;
+  };
 
 /** 评测 Fixture 中的已正式确认决议。 */
-export type AiDecisionProcessFixtureResolution = AiDecisionProcessFixtureEvidenceSource<'resolution'> & {
-  /** 决议形成会议主键；非会议形成的决议固定为 `null`。 */
-  readonly meetingId: number | null;
-  /** 决议依据的提案来源主键；不基于提案时固定为 `null`。 */
-  readonly sourceProposalId: number | null;
-  /** 决议依据的投票轮次来源主键；不基于投票时固定为 `null`。 */
-  readonly sourceVoteRoundId: number | null;
-  /** 正式决议标题。 */
-  readonly title: string;
-  /** 正式决议正文或确认结论。 */
-  readonly content: string;
-  /** 决议在形成过程中的用途类型。 */
-  readonly kind: 'INTERIM' | 'FINAL' | 'SUPPLEMENT';
-  /** 决议当前有效状态。 */
-  readonly status: 'ACTIVE' | 'SUPERSEDED' | 'REVOKED';
-  /** 决议正式确认时间的 ISO 8601 字符串。 */
-  readonly decidedAt: AiDecisionProcessFixtureIsoTimestamp;
-};
+export type AiDecisionProcessFixtureResolution =
+  AiDecisionProcessFixtureEvidenceSource<'resolution'> & {
+    /** 决议形成会议主键；非会议形成的决议固定为 `null`。 */
+    readonly meetingId: number | null;
+    /** 决议依据的提案来源主键；不基于提案时固定为 `null`。 */
+    readonly sourceProposalId: number | null;
+    /** 决议依据的投票轮次来源主键；不基于投票时固定为 `null`。 */
+    readonly sourceVoteRoundId: number | null;
+    /** 正式决议标题。 */
+    readonly title: string;
+    /** 正式决议正文或确认结论。 */
+    readonly content: string;
+    /** 决议在形成过程中的用途类型。 */
+    readonly kind: 'INTERIM' | 'FINAL' | 'SUPPLEMENT';
+    /** 决议当前有效状态。 */
+    readonly status: 'ACTIVE' | 'SUPERSEDED' | 'REVOKED';
+    /** 决议正式确认时间的 ISO 8601 字符串。 */
+    readonly decidedAt: AiDecisionProcessFixtureIsoTimestamp;
+  };
 
 /** 评测 Fixture 中归一化后的会议过程证据。 */
-export type AiDecisionProcessFixtureMeetingRecord = AiDecisionProcessFixtureEvidenceSource<'meeting_record'> & {
-  /** 原始会议主键；无法关联既有 MeetingSession 时固定为 `null`。 */
-  readonly meetingId: number | null;
-  /** 归一化的会议记录标题；仅用于评测中的来源识别。 */
-  readonly title: string;
-  /** 脱敏后的归一化会议证据正文，不保存原始转写、音视频地址或参与人敏感信息。 */
-  readonly content: string;
-  /** 该证据对应的会议过程时间的 ISO 8601 字符串。 */
-  readonly occurredAt: AiDecisionProcessFixtureIsoTimestamp;
-};
+export type AiDecisionProcessFixtureMeetingRecord =
+  AiDecisionProcessFixtureEvidenceSource<'meeting_record'> & {
+    /** 原始会议主键；无法关联既有 MeetingSession 时固定为 `null`。 */
+    readonly meetingId: number | null;
+    /** 归一化的会议记录标题；仅用于评测中的来源识别。 */
+    readonly title: string;
+    /** 脱敏后的归一化会议证据正文，不保存原始转写、音视频地址或参与人敏感信息。 */
+    readonly content: string;
+    /** 该证据对应的会议过程时间的 ISO 8601 字符串。 */
+    readonly occurredAt: AiDecisionProcessFixtureIsoTimestamp;
+  };
 
 /** 一个完整且可独立复现的决策形成过程评测案例。 */
 export type AiDecisionProcessFixtureCase = {
