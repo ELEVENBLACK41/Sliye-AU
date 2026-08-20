@@ -23,8 +23,14 @@ function formatDashboardTime(date: Date): string {
   return `${date.getFullYear()}年${padDatePart(date.getMonth() + 1)}月${padDatePart(date.getDate())}日 ${padDatePart(date.getHours())}时${padDatePart(date.getMinutes())}分`;
 }
 
-/** 渲染带占位用户名并按分钟更新的欢迎信息。 */
-export function DashboardWelcomePlaceholder() {
+/** 欢迎信息属性。 */
+type DashboardWelcomePlaceholderProps = {
+  /** 当前用户真实显示名称。 */
+  userName: string;
+};
+
+/** 渲染当前用户名称并按分钟更新欢迎时间。 */
+export function DashboardWelcomePlaceholder({ userName }: DashboardWelcomePlaceholderProps) {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -42,7 +48,7 @@ export function DashboardWelcomePlaceholder() {
   return (
     <div className="space-y-2" aria-label="欢迎信息">
       <h1 className="text-3xl leading-none font-medium tracking-[-0.045em] text-black sm:text-5xl">
-        Welcome in, <span className="text-black ">who who who</span>
+        Welcome in, <span className="text-black">{userName}</span>
       </h1>
       <time className="block text-sm font-medium tracking-wide text-black/45" dateTime={currentTime?.toISOString()}>
         {currentTime ? formatDashboardTime(currentTime) : '正在获取当前时间…'}

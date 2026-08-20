@@ -24,6 +24,7 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { RelationshipGraphModule } from './modules/relationship-graph/relationship-graph.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 // import { AppController } from './app.controller';
 // import { AppService } from './app.service';
 
@@ -43,6 +44,7 @@ import { RelationshipGraphModule } from './modules/relationship-graph/relationsh
     MeetingsModule,
     NotificationsModule,
     RelationshipGraphModule,
+    DashboardModule,
   ],
   providers: [
     {
