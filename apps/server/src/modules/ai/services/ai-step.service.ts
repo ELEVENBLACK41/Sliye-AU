@@ -7,6 +7,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
+import { AiRunStatus } from '../../../generated/prisma';
 import {
   toAiModelStepRecord,
   toPrismaAiLanguageModelRole,
@@ -32,6 +33,33 @@ export class AiStepService {
 
     try {
       const step = await this.prisma.$transaction(async (tx) => {
+        const fenced = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            status: {
+              in: [AiRunStatus.RUNNING, AiRunStatus.CANCELLATION_REQUESTED],
+            },
+            executionLeaseId: command.executionLeaseId,
+            executionLeaseExpiresAt: { gt: new Date() },
+          },
+          data: {
+            modelCallCount: { increment: 1 },
+            inputTokens: { increment: command.inputTokens },
+            outputTokens: { increment: command.outputTokens },
+            totalTokens: { increment: totalTokens },
+            estimatedCostUsd: { increment: command.estimatedCostUsd },
+          },
+        });
+        if (fenced.count !== 1) {
+          const exists = await tx.aiRun.findUnique({
+            where: { id: command.runId },
+            select: { id: true },
+          });
+          if (!exists) {
+            this.throwRunNotFound();
+          }
+          this.throwExecutionLeaseInvalid();
+        }
         const created = await tx.aiStep.create({
           data: {
             runId: command.runId,
@@ -49,16 +77,6 @@ export class AiStepService {
             finishedAt: command.finishedAt,
             durationMs,
             timeToFirstOutputMs: command.timeToFirstOutputMs,
-          },
-        });
-        await tx.aiRun.update({
-          where: { id: command.runId },
-          data: {
-            modelCallCount: { increment: 1 },
-            inputTokens: { increment: command.inputTokens },
-            outputTokens: { increment: command.outputTokens },
-            totalTokens: { increment: totalTokens },
-            estimatedCostUsd: { increment: command.estimatedCostUsd },
           },
         });
         return created;
@@ -99,6 +117,13 @@ export class AiStepService {
       command.outputTokens,
       command.estimatedCostUsd,
     ].some((value) => !Number.isFinite(value) || value < 0);
+
+    if (!UUID_PATTERN.test(command.executionLeaseId)) {
+      this.throwValidationError(
+        'executionLeaseId',
+        'executionLeaseId 必须是有效 UUID',
+      );
+    }
 
     if (!Number.isInteger(command.sequence) || command.sequence <= 0) {
       this.throwValidationError('sequence', '模型 Step 序号必须是正整数');
@@ -148,4 +173,26 @@ export class AiStepService {
       details: [{ field, message, rule: 'AI_MODEL_STEP_VALIDATION' }],
     });
   }
+
+  /** 抛出 Run 不存在的稳定错误。 */
+  private throwRunNotFound(): never {
+    throw new BusinessException({
+      code: API_ERROR_CODES.AI_RUN_NOT_FOUND,
+      message: 'AI 运行不存在',
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+
+  /** 拒绝租约不匹配、已过期或状态不再允许的迟到模型 Step。 */
+  private throwExecutionLeaseInvalid(): never {
+    throw new BusinessException({
+      code: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
+      message: '模型 Step 写入使用的执行租约已经失效',
+      status: HttpStatus.CONFLICT,
+    });
+  }
 }
+
+/** 接受标准 UUID 文本，数据库仍通过 UUID 原生类型执行最终约束。 */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

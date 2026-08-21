@@ -12,6 +12,7 @@ import { PrismaService } from '../../../database/prisma.service';
 import {
   AiMessageRole,
   AiRequestOperation,
+  AiRunStatus,
   AiThreadScopeState,
   type Prisma,
 } from '../../../generated/prisma';
@@ -21,12 +22,14 @@ import {
   toAiMessage,
   toAiRun,
   toAiThread,
+  toAiLanguageModelRole,
   toPrismaAiLanguageModelRole,
 } from '../ai-state.mapper';
 import type {
   AiRunCreationResult,
   CreateInitialAiRunCommand,
   CreateThreadMessageRunCommand,
+  RetryAiRunCommand,
 } from '../types/ai-state-persistence.types';
 
 /** 第一版用户消息允许持久化的最大 Unicode 字符数。 */
@@ -269,6 +272,121 @@ export class AiThreadService {
     }
   }
 
+  /** 对失败或取消 Run 原子创建关联新 Run，并保证网络重放只返回同一个重试。 */
+  async retryRun(command: RetryAiRunCommand): Promise<AiRunCreationResult> {
+    this.assertUuid(command.runId, 'runId');
+    this.assertUuid(command.clientRequestId, 'clientRequestId');
+    const source = await this.prisma.aiRun.findFirst({
+      where: {
+        id: command.runId,
+        thread: { ownerUserId: command.authorization.userId },
+      },
+      include: { userMessage: true },
+    });
+    if (!source) {
+      this.throwRunNotFound();
+    }
+    await this.findAccessibleThread(command.authorization, source.threadId);
+    if (
+      source.status !== AiRunStatus.FAILED &&
+      source.status !== AiRunStatus.CANCELLED
+    ) {
+      this.throwRunNotRetryable();
+    }
+
+    const scopeKey = this.createRunScopeKey(source.id);
+    const modelRole = toAiLanguageModelRole(source.modelRole);
+    const fingerprint = this.createRequestFingerprint({
+      operation: AiRequestOperation.RETRY_RUN,
+      scopeKey,
+      content: source.userMessage.content,
+      modelRole,
+    });
+    const existing = await this.prepareIdempotentRequest({
+      userId: command.authorization.userId,
+      operation: AiRequestOperation.RETRY_RUN,
+      scopeKey,
+      clientRequestId: command.clientRequestId,
+    });
+    if (existing) {
+      return this.resolveIdempotentResult(existing, fingerprint);
+    }
+
+    const runId = randomUUID();
+    const expiresAt = new Date(Date.now() + AI_IDEMPOTENCY_TTL_MILLISECONDS);
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const gate = await tx.aiThread.updateMany({
+          where: {
+            id: source.threadId,
+            ownerUserId: command.authorization.userId,
+            scopeState: AiThreadScopeState.ACTIVE,
+            activeRunId: null,
+          },
+          data: { updatedAt: new Date() },
+        });
+        if (gate.count !== 1) {
+          this.throwThreadRunActive();
+        }
+
+        const retrySource = await tx.aiRun.findFirst({
+          where: {
+            id: source.id,
+            threadId: source.threadId,
+            status: { in: [AiRunStatus.FAILED, AiRunStatus.CANCELLED] },
+          },
+          include: { userMessage: true },
+        });
+        if (!retrySource) {
+          this.throwRunNotRetryable();
+        }
+        const run = await tx.aiRun.create({
+          data: {
+            id: runId,
+            threadId: retrySource.threadId,
+            userMessageId: retrySource.userMessageId,
+            retryOfRunId: retrySource.id,
+            modelRole: retrySource.modelRole,
+          },
+        });
+        const thread = await tx.aiThread.update({
+          where: { id: retrySource.threadId },
+          data: { activeRunId: run.id },
+        });
+        await tx.aiRequestDeduplication.create({
+          data: {
+            userId: command.authorization.userId,
+            operation: AiRequestOperation.RETRY_RUN,
+            scopeKey,
+            clientRequestId: command.clientRequestId,
+            requestFingerprint: fingerprint,
+            threadId: retrySource.threadId,
+            messageId: retrySource.userMessageId,
+            runId: run.id,
+            expiresAt,
+          },
+        });
+
+        return {
+          thread: toAiThread(thread),
+          message: toAiMessage(retrySource.userMessage),
+          run: toAiRun(run),
+          replayed: false,
+        };
+      });
+    } catch (error) {
+      return this.resolveConcurrentIdempotentRequest(
+        error,
+        command.authorization.userId,
+        AiRequestOperation.RETRY_RUN,
+        scopeKey,
+        command.clientRequestId,
+        fingerprint,
+      );
+    }
+  }
+
   /** 查询当前用户仍可访问的 Decision，并由服务端解析真实 projectId。 */
   private async findAccessibleDecision(
     authorization: AuthorizationContext,
@@ -456,6 +574,11 @@ export class AiThreadService {
     return `thread:${threadId}`;
   }
 
+  /** 生成重试请求的服务端旧 Run 范围键。 */
+  private createRunScopeKey(runId: string): string {
+    return `run:${runId}`;
+  }
+
   /** 防御性校验内部命令中的 UUID 字段。 */
   private assertUuid(value: string, field: string): void {
     if (!UUID_PATTERN.test(value)) {
@@ -478,6 +601,24 @@ export class AiThreadService {
     throw new BusinessException({
       code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE,
       message: '当前 AI 会话已有正在处理的请求',
+      status: HttpStatus.CONFLICT,
+    });
+  }
+
+  /** 抛出不存在或不属于当前用户的 Run 错误。 */
+  private throwRunNotFound(): never {
+    throw new BusinessException({
+      code: API_ERROR_CODES.AI_RUN_NOT_FOUND,
+      message: 'AI 运行不存在或当前账号无权访问',
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+
+  /** 拒绝对排队、运行中或已完成 Run 创建普通重试。 */
+  private throwRunNotRetryable(): never {
+    throw new BusinessException({
+      code: API_ERROR_CODES.AI_RUN_NOT_RETRYABLE,
+      message: '只有失败或取消的 AI 运行可以重试',
       status: HttpStatus.CONFLICT,
     });
   }

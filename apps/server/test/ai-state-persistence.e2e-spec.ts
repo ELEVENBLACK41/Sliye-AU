@@ -20,6 +20,7 @@ import {
 } from '../src/generated/prisma';
 import { AiModule } from '../src/modules/ai/ai.module';
 import { AiEventService } from '../src/modules/ai/services/ai-event.service';
+import { AiRunLeaseService } from '../src/modules/ai/services/ai-run-lease.service';
 import { AiStepService } from '../src/modules/ai/services/ai-step.service';
 import { AiThreadService } from '../src/modules/ai/services/ai-thread.service';
 import type { AuthorizationContext } from '../src/modules/auth/types/auth.types';
@@ -101,6 +102,7 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
   let prisma: PrismaService;
   let threadService: AiThreadService;
   let eventService: AiEventService;
+  let runLeaseService: AiRunLeaseService;
   let stepService: AiStepService;
   let fixture: AiStateFixture;
   let authorization: AuthorizationContext;
@@ -119,6 +121,7 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
     prisma = moduleFixture.get(PrismaService);
     threadService = moduleFixture.get(AiThreadService);
     eventService = moduleFixture.get(AiEventService);
+    runLeaseService = moduleFixture.get(AiRunLeaseService);
     stepService = moduleFixture.get(AiStepService);
     await cleanupStaleAiStateFixtures(prisma);
 
@@ -234,10 +237,15 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
       where: { thread: { ownerUserId: fixture.userId } },
       select: { id: true },
     });
+    const lease = await runLeaseService.claim({
+      runId: run.id,
+      leaseDurationMs: 60_000,
+    });
     const events = await Promise.all(
       Array.from({ length: 20 }, (_, index) =>
         eventService.append({
           runId: run.id,
+          executionLeaseId: lease.executionLeaseId,
           type: 'ASSISTANT_TEXT_DELTA',
           data: {
             messageId: randomUUID(),
@@ -251,20 +259,35 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
       .sort((left, right) => left - right);
 
     expect(sequences).toEqual(
-      Array.from({ length: 20 }, (_, index) => index + 1),
+      Array.from({ length: 20 }, (_, index) => index + 2),
     );
-    expect(await prisma.aiEvent.count({ where: { runId: run.id } })).toBe(20);
+    const persistedSequences = (
+      await prisma.aiEvent.findMany({
+        where: { runId: run.id },
+        select: { sequence: true },
+        orderBy: { sequence: 'asc' },
+      })
+    ).map((event) => event.sequence);
+    expect(persistedSequences).toEqual(
+      Array.from({ length: 21 }, (_, index) => index + 1),
+    );
   });
 
   it('应逐次保存模型 Step 并原子累加 Run Token 与成本', async () => {
     const run = await prisma.aiRun.findFirstOrThrow({
-      where: { thread: { ownerUserId: fixture.userId } },
-      select: { id: true },
+      where: {
+        thread: { ownerUserId: fixture.userId },
+        status: AiRunStatus.RUNNING,
+      },
+      select: { id: true, executionLeaseId: true },
     });
+    expect(run.executionLeaseId).not.toBeNull();
+    const executionLeaseId = run.executionLeaseId!;
     const startedAt = new Date('2026-08-21T06:00:00.000Z');
     const [firstStep, secondStep] = await Promise.all([
       stepService.recordModelStep({
         runId: run.id,
+        executionLeaseId,
         sequence: 1,
         modelRole: 'standard',
         resolvedModelId: 'openai/test-model',
@@ -280,6 +303,7 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
       }),
       stepService.recordModelStep({
         runId: run.id,
+        executionLeaseId,
         sequence: 2,
         modelRole: 'standard',
         resolvedModelId: 'openai/test-model',

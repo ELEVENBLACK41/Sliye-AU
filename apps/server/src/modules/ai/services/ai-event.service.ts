@@ -7,7 +7,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
-import { assertAiRunStatusTransition } from '../state/ai-state-transition';
+import { AiRunStatus } from '../../../generated/prisma';
 import type {
   AppendAiEventCommand,
   AppendAiEventResult,
@@ -24,9 +24,28 @@ export class AiEventService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const run = await tx.aiRun.update({
-          where: { id: command.runId },
+        const now = new Date();
+        const fenced = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            status: AiRunStatus.RUNNING,
+            executionLeaseId: command.executionLeaseId,
+            executionLeaseExpiresAt: { gt: now },
+          },
           data: { nextEventSequence: { increment: 1 } },
+        });
+        if (fenced.count !== 1) {
+          const exists = await tx.aiRun.findUnique({
+            where: { id: command.runId },
+            select: { id: true },
+          });
+          if (!exists) {
+            this.throwRunNotFound();
+          }
+          this.throwExecutionLeaseInvalid();
+        }
+        const run = await tx.aiRun.findUniqueOrThrow({
+          where: { id: command.runId },
           select: { nextEventSequence: true },
         });
         const sequence = run.nextEventSequence - 1;
@@ -46,7 +65,7 @@ export class AiEventService {
           type: command.type,
           data: command.data,
           createdAt: event.createdAt.toISOString(),
-        } as AppendAiEventResult;
+        };
       });
     } catch (error) {
       if (
@@ -75,14 +94,13 @@ export class AiEventService {
 
   /** 校验事件负载中当前步骤已经冻结的不变量。 */
   private assertEventPayload(command: AppendAiEventCommand): void {
-    if (command.type === 'RUN_STATUS_CHANGED') {
-      assertAiRunStatusTransition(
-        command.data.fromStatus,
-        command.data.toStatus,
-      );
-      return;
+    if (!UUID_PATTERN.test(command.executionLeaseId)) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
+        message: 'executionLeaseId 必须是有效 UUID',
+        status: HttpStatus.BAD_REQUEST,
+      });
     }
-
     if (!command.data.delta) {
       throw new BusinessException({
         code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
@@ -91,4 +109,26 @@ export class AiEventService {
       });
     }
   }
+
+  /** 抛出 Run 不存在的稳定错误。 */
+  private throwRunNotFound(): never {
+    throw new BusinessException({
+      code: API_ERROR_CODES.AI_RUN_NOT_FOUND,
+      message: 'AI 运行不存在',
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+
+  /** 拒绝租约不匹配、已过期或状态不再允许的迟到事件。 */
+  private throwExecutionLeaseInvalid(): never {
+    throw new BusinessException({
+      code: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
+      message: 'AI 事件写入使用的执行租约已经失效',
+      status: HttpStatus.CONFLICT,
+    });
+  }
 }
+
+/** 接受标准 UUID 文本，数据库仍通过 UUID 原生类型执行最终约束。 */
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

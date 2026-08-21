@@ -1531,7 +1531,7 @@ model AiRun {
   /// Gateway 最终实际执行的供应商模型 ID。
   resolvedModelId String?
 
-  /// 2.3 才会签发和校验的执行租约字段。
+  /// 当前执行器持有的 UUID fencing 租约；所有执行结果写入必须同时匹配该值和过期时间。
   executionLeaseId        String?   @db.Uuid
   executionLeaseExpiresAt DateTime?
 

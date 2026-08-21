@@ -9,9 +9,10 @@ import type {
   AiLanguageModelRole,
   AiMessage,
   AiRun,
-  AiRunStatusChangedEvent,
+  AiRunFailureReason,
   AiThread,
 } from '@workspace/contracts/ai';
+import type { ApiErrorCode } from '@workspace/contracts/common';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 
 /** 原子创建 Decision AI Thread、首条用户消息和首个 Run 的命令。 */
@@ -54,35 +55,119 @@ export type AiRunCreationResult = {
   replayed: boolean;
 };
 
-/** 追加 Run 状态变化事件的命令。 */
-export type AppendAiRunStatusEventCommand = {
-  /** 事件所属 Run UUID。 */
+/** 原子领取排队中 Run 并签发执行租约的命令。 */
+export type ClaimAiRunCommand = {
+  /** 需要由当前执行器领取的 Run UUID。 */
   runId: string;
-  /** 供消费者执行联合类型收窄的事件类型。 */
-  type: 'RUN_STATUS_CHANGED';
-  /** 已通过状态机校验的状态变化负载。 */
-  data: AiRunStatusChangedEvent['data'];
+  /** 当前执行器承诺续租前的租约有效毫秒数。 */
+  leaseDurationMs: number;
+};
+
+/** 成功领取或续租后返回的执行租约快照。 */
+export type AiRunLeaseResult = {
+  /** 已进入运行态的 Run。 */
+  run: AiRun;
+  /** 后续所有执行写入必须携带的 fencing UUID。 */
+  executionLeaseId: string;
+};
+
+/** 续租当前执行租约的命令。 */
+export type RenewAiRunLeaseCommand = {
+  /** 当前执行中的 Run UUID。 */
+  runId: string;
+  /** 领取时签发且不能被其他执行器替代的租约 UUID。 */
+  executionLeaseId: string;
+  /** 从本次续租时间起延长的租约有效毫秒数。 */
+  leaseDurationMs: number;
+};
+
+/** 用户请求停止一次排队中或执行中的 Run。 */
+export type RequestAiRunCancellationCommand = {
+  /** 当前请求实时计算出的认证与授权上下文。 */
+  authorization: AuthorizationContext;
+  /** 需要停止的 Run UUID。 */
+  runId: string;
+};
+
+/** 执行器确认取消已经生效并写入唯一取消终态的命令。 */
+export type ConfirmAiRunCancellationCommand = {
+  /** 当前执行中的 Run UUID。 */
+  runId: string;
+  /** 必须与数据库当前租约匹配的 fencing UUID。 */
+  executionLeaseId: string;
+};
+
+/** 执行器写入助手最终消息并完成 Run 的命令。 */
+export type CompleteAiRunCommand = {
+  /** 当前执行中的 Run UUID。 */
+  runId: string;
+  /** 必须与数据库当前租约匹配的 fencing UUID。 */
+  executionLeaseId: string;
+  /** 流式阶段预先分配并最终固化的助手消息 UUID。 */
+  assistantMessageId: string;
+  /** 已完成且需要作为历史消息保存的助手正文。 */
+  assistantContent: string;
+  /** Gateway 最终实际执行的供应商模型 ID。 */
+  resolvedModelId: string;
+};
+
+/** 执行器把当前 Run 收敛为失败终态的命令。 */
+export type FailAiRunCommand = {
+  /** 当前执行中的 Run UUID。 */
+  runId: string;
+  /** 必须与数据库当前租约匹配的 fencing UUID。 */
+  executionLeaseId: string;
+  /** 可稳定统计的失败原因。 */
+  failureReason: AiRunFailureReason;
+  /** 暴露给调用方做稳定分支判断的业务错误码。 */
+  failureCode: ApiErrorCode;
+};
+
+/** 对账过期执行租约时使用的受控批次命令。 */
+export type ReconcileExpiredAiRunsCommand = {
+  /** 对账基准时间；生产调用通常传当前时间，测试可固定。 */
+  now: Date;
+  /** 单批最多处理的 Run 数，避免一次事务范围无限增长。 */
+  batchSize: number;
+};
+
+/** 一次过期租约对账的确定性结果。 */
+export type ReconcileExpiredAiRunsResult = {
+  /** 本批真正从非终态收敛为失败的 Run UUID。 */
+  reconciledRunIds: string[];
+};
+
+/** 对失败或取消 Run 创建新 Run 的幂等重试命令。 */
+export type RetryAiRunCommand = {
+  /** 当前请求实时计算出的认证与授权上下文。 */
+  authorization: AuthorizationContext;
+  /** 只能指向失败或取消终态的旧 Run UUID。 */
+  runId: string;
+  /** 浏览器为本次重试业务操作生成的 UUID 幂等键。 */
+  clientRequestId: string;
 };
 
 /** 追加助手文本增量事件的命令。 */
 export type AppendAiTextDeltaEventCommand = {
   /** 事件所属 Run UUID。 */
   runId: string;
+  /** 必须与 Run 当前执行租约匹配的 fencing UUID。 */
+  executionLeaseId: string;
   /** 供消费者执行联合类型收窄的事件类型。 */
   type: 'ASSISTANT_TEXT_DELTA';
   /** 需要按事件序号追加的消息和文本增量。 */
   data: AiAssistantTextDeltaEvent['data'];
 };
 
-/** 当前事件持久化服务允许追加的命令联合。 */
-export type AppendAiEventCommand =
-  | AppendAiRunStatusEventCommand
-  | AppendAiTextDeltaEventCommand;
+/** 当前事件持久化服务只接收运行中的助手文本；状态事件由状态事务内部写入。 */
+export type AppendAiEventCommand = AppendAiTextDeltaEventCommand;
 
 /** 持久化一次独立语言模型调用及用量快照的命令。 */
 export type RecordAiModelStepCommand = {
   /** 模型调用所属 Run UUID。 */
   runId: string;
+  /** 必须与 Run 当前执行租约匹配的 fencing UUID。 */
+  executionLeaseId: string;
   /** Run 内从 1 开始的模型 Step 序号。 */
   sequence: number;
   /** 本次模型调用承担的逻辑角色。 */
