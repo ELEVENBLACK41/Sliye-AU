@@ -1,4 +1,5 @@
 /**
+ * @Author: shaoliye  本文件主要是一个ai-gateway的冒烟测试脚本
  * 本文件使用短提示对当前 standard 主模型执行显式 AI Gateway Smoke Test。
  * 缺少 Gateway 凭据时明确输出 SKIP；脚本不读取业务数据，也不打印 Prompt 正文。
  */
