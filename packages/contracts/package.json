@@ -7,6 +7,7 @@
     "./access": "./src/access/index.ts",
     "./auth": "./src/auth/index.ts",
     "./common": "./src/common/index.ts",
+    "./ai": "./src/ai/index.ts",
     "./decisions": "./src/decisions/index.ts",
     "./projects": "./src/projects/index.ts",
     "./meetings": "./src/meetings/index.ts",

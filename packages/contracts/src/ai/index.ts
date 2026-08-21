@@ -2,3 +2,5 @@
  * AI 模块共享契约入口。
  * 本目录只存跨应用共享类型，不承载 AI SDK、Prisma 或业务实现。
  */
+
+export type * from './ai-model.types.ts';

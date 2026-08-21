@@ -81,13 +81,25 @@ apps/web/src/
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 NEST_BASE_URL=http://localhost:3001
 NEST_API_PREFIX=api/v1
+AI_GATEWAY_API_KEY=本地或CI使用的Gateway密钥
+AI_MODEL_STANDARD_ID=openai/gpt-5.4-nano
 ```
+
+Vercel 部署可以使用自动提供的 OIDC 调用 AI Gateway，不需要同时配置静态密钥。模型环境变量只能选择
+`src/features/ai/runtime/ai-model-registry.ts` 已登记且类型匹配的模型；修改后需要重启 Web 服务。
+当前 `standard` 默认使用低成本 Nano，Mini 只在 Gateway 主模型不可用时回退；`deepReview`、
+`embedding` 和 `reranker` 在对应产品阶段开放前只登记能力，不会自行产生调用费用。
 
 ```bash
 pnpm dev
 pnpm lint
 pnpm exec tsc --noEmit
 pnpm build
+pnpm test:ai:model
+pnpm test:ai:gateway:smoke
 ```
+
+`test:ai:model` 只使用 AI SDK Mock，不产生真实费用。`test:ai:gateway:smoke` 使用固定短提示；缺少
+`AI_GATEWAY_API_KEY` 和 `VERCEL_OIDC_TOKEN` 时会明确输出 `SKIP`，不能把跳过视为真实 Gateway 已验收。
 
 生产构建需要 `next/font` 获取已配置的 Geist 字体；离线环境应提供可访问的字体构建缓存或改为项目内本地字体。

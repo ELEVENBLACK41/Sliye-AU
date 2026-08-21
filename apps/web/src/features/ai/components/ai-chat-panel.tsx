@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { useChat } from '@ai-sdk/react';
-import { Bot, Send, UserRound } from 'lucide-react';
+import { Bot, Send, Square, UserRound } from 'lucide-react';
 
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -14,7 +14,8 @@ import { Input } from '@workspace/ui/components/input';
 /** 渲染经过权限保护的流式 AI 对话面板。 */
 export function AiChatPanel() {
   const [input, setInput] = useState('');
-  const { messages, sendMessage } = useChat();
+  const { messages, sendMessage, status, stop, error } = useChat();
+  const isRunning = status === 'submitted' || status === 'streaming';
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
@@ -94,13 +95,34 @@ export function AiChatPanel() {
               value={input}
               aria-label="AI 对话消息"
               placeholder="输入消息……"
+              disabled={isRunning}
               onChange={(event) => setInput(event.currentTarget.value)}
             />
-            <Button type="submit" disabled={!input.trim()}>
+            {isRunning ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  void stop();
+                }}
+              >
+                <Square aria-hidden />
+                停止
+              </Button>
+            ) : null}
+            <Button type="submit" disabled={!input.trim() || isRunning}>
               <Send aria-hidden />
               发送
             </Button>
           </form>
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {error.message || 'AI 对话暂时不可用，请稍后重试'}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
     </main>

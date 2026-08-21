@@ -14,7 +14,14 @@ import {
 import { z } from 'zod';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 
-import { apiError, apiErrorFromUnknown } from '@/app/api/_utils/response';
+import { apiError } from '@/app/api/_utils/response';
+import { normalizeAiModelError } from '@/features/ai/runtime/ai-model-error';
+import { resolveAiLanguageModel } from '@/features/ai/runtime/ai-model.server';
+import {
+  logAiLanguageModelCallEnd,
+  logAiModelAbort,
+  logAiModelStreamError,
+} from '@/features/ai/runtime/ai-model-telemetry.server';
 import { hasSystemPermission } from '@/features/auth/services/auth-server.service';
 import { getAuthenticatedRouteUser } from '@/server/bff/authenticated-nest-proxy';
 
@@ -25,6 +32,7 @@ const chatRequestSchema = z.object({
 
 /** 校验认证与权限后创建 AI SDK 流式响应。 */
 export async function POST(request: Request) {
+  const requestId = crypto.randomUUID();
   const currentUser = await getAuthenticatedRouteUser();
 
   if (!currentUser) {
@@ -32,6 +40,7 @@ export async function POST(request: Request) {
       status: 401,
       message: '登录状态已失效，请重新登录',
       path: '/api/chat',
+      requestId,
     });
   }
 
@@ -40,6 +49,7 @@ export async function POST(request: Request) {
       status: 403,
       message: '当前账号没有使用 AI 对话的权限',
       path: '/api/chat',
+      requestId,
     });
   }
 
@@ -51,12 +61,23 @@ export async function POST(request: Request) {
         status: 400,
         message: 'AI 对话消息格式不正确',
         path: '/api/chat',
+        requestId,
       });
     }
 
+    const resolvedModel = resolveAiLanguageModel('standard', {
+      userId: currentUser.id,
+      feature: 'chat',
+    });
+    const { configuration } = resolvedModel;
     const result = streamText({
-      model: 'openai/gpt-4.1',
+      model: resolvedModel.model,
       messages: await convertToModelMessages(parsed.data.messages),
+      abortSignal: request.signal,
+      timeout: resolvedModel.timeout,
+      maxOutputTokens: configuration.budget.maxOutputTokens,
+      maxRetries: configuration.budget.maxRetries,
+      providerOptions: resolvedModel.providerOptions,
       stopWhen: isStepCount(5),
       tools: {
         weather: tool({
@@ -79,12 +100,38 @@ export async function POST(request: Request) {
           }),
         }),
       },
+      onLanguageModelCallEnd: (event) => {
+        logAiLanguageModelCallEnd({
+          requestId,
+          role: configuration.role,
+          configuredModelId: configuration.primary.modelId,
+          event,
+        });
+      },
+      onError: ({ error }) => {
+        logAiModelStreamError(requestId, configuration.role, error);
+      },
+      onAbort: () => {
+        logAiModelAbort(requestId, configuration.role);
+      },
     });
 
     return createUIMessageStreamResponse({
-      stream: toUIMessageStream({ stream: result.stream }),
+      stream: toUIMessageStream({
+        stream: result.stream,
+        onError: (error) => normalizeAiModelError(error).message,
+      }),
     });
   } catch (error) {
-    return apiErrorFromUnknown(error, 'AI 对话暂时不可用，请稍后重试', 500, '/api/chat');
+    const normalized = normalizeAiModelError(error);
+    logAiModelStreamError(requestId, 'standard', error);
+
+    return apiError({
+      status: normalized.status,
+      code: normalized.code,
+      message: normalized.message,
+      path: '/api/chat',
+      requestId,
+    });
   }
 }

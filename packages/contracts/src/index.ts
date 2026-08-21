@@ -11,3 +11,4 @@ export type * from './meetings/index.ts';
 export type * from './notifications/index.ts';
 export type * from './relationship-graph/index.ts';
 export type * from './dashboard/index.ts';
+export type * from './ai/index.ts';
