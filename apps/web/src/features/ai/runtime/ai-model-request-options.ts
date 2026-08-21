@@ -10,8 +10,6 @@ import type { AiLanguageModelConfiguration } from './ai-model-registry.ts';
 export type AiGatewayRequestContext = {
   /** 当前认证用户的内部主键。 */
   userId: number | string;
-  /** 可选的项目内部主键；当前全局测试对话可以省略。 */
-  projectId?: number | string;
   /** 固定业务功能标签，不能传入用户生成文本。 */
   feature?: 'chat' | 'decision-agent' | 'gateway-smoke';
 };
@@ -24,8 +22,6 @@ export type AiGatewayProviderOptions = {
     models: string[];
     /** Gateway 成本和限流归因使用的内部用户标识。 */
     user: string;
-    /** 可选的项目级额度归因实体。 */
-    quotaEntityId?: string;
     /** 只包含固定分类的低基数标签。 */
     tags: string[];
   };
@@ -40,7 +36,6 @@ export function createAiGatewayProviderOptions(
   const gatewayOptions = {
     models: configuration.fallbacks.map((profile) => profile.modelId),
     user: String(context.userId),
-    ...(context.projectId === undefined ? {} : { quotaEntityId: String(context.projectId) }),
     tags: [
       'app:nextnest-web',
       `feature:${context.feature ?? 'chat'}`,

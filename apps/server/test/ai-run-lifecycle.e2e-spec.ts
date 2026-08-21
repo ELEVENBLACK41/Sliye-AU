@@ -1,5 +1,5 @@
 /**
- * 本文件使用真实 PostgreSQL 验证 AI 2.3 的执行租约、fencing、取消竞争、过期对账和幂等重试。
+ * 本文件使用真实 PostgreSQL 验证 AI 2.3～2.4 的租约、故障收敛、真实只读工具和事件补拉闭环。
  * 测试只操作带唯一前缀的专用 Fixture，并在结束后按主键清理。
  */
 
@@ -26,6 +26,8 @@ import { AiRunReconciliationService } from '../src/modules/ai/services/ai-run-re
 import { AiRunService } from '../src/modules/ai/services/ai-run.service';
 import { AiStepService } from '../src/modules/ai/services/ai-step.service';
 import { AiThreadService } from '../src/modules/ai/services/ai-thread.service';
+import { AiRuntimeQueryService } from '../src/modules/ai/services/ai-runtime-query.service';
+import { AiToolCallService } from '../src/modules/ai/services/ai-tool-call.service';
 import type { AuthorizationContext } from '../src/modules/auth/types/auth.types';
 
 jest.setTimeout(30_000);
@@ -81,6 +83,8 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
   let eventService: AiEventService;
   let stepService: AiStepService;
   let reconciliationService: AiRunReconciliationService;
+  let runtimeQueryService: AiRuntimeQueryService;
+  let toolCallService: AiToolCallService;
   let fixture: AiLifecycleFixture;
   let authorization: AuthorizationContext;
 
@@ -113,6 +117,8 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     eventService = moduleFixture.get(AiEventService);
     stepService = moduleFixture.get(AiStepService);
     reconciliationService = moduleFixture.get(AiRunReconciliationService);
+    runtimeQueryService = moduleFixture.get(AiRuntimeQueryService);
+    toolCallService = moduleFixture.get(AiToolCallService);
 
     const unique = randomUUID();
     const department = await prisma.department.create({
@@ -214,6 +220,28 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     expect(
       new Date(renewed.run.executionLeaseExpiresAt!).getTime(),
     ).toBeGreaterThan(new Date(originalExpiry!).getTime());
+  });
+
+  it('事件补拉只读取排队 Run，不应隐式领取执行租约', async () => {
+    const created = await createQueuedRun('验证恢复读取不启动执行器');
+    const eventPage = await runtimeQueryService.getRunEvents(
+      authorization,
+      created.thread.id,
+      created.run.id,
+      0,
+    );
+
+    expect(eventPage.run).toMatchObject({
+      id: created.run.id,
+      status: 'QUEUED',
+      executionLeaseId: null,
+    });
+    await expect(
+      runLeaseService.claim({
+        runId: created.run.id,
+        leaseDurationMs: 60_000,
+      }),
+    ).resolves.toMatchObject({ run: { status: 'RUNNING' } });
   });
 
   it('进入取消流程后应拒绝内容写入但保留当前租约产生的模型用量审计', async () => {
@@ -479,5 +507,116 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.AI_RUN_NOT_RETRYABLE,
     });
+  });
+
+  it('真实决策上下文工具、Step、事件与完成终态应形成可补拉审计闭环', async () => {
+    const created = await createQueuedRun('这项决策的基础信息是什么');
+    const lease = await runLeaseService.claim({
+      runId: created.run.id,
+      leaseDurationMs: 60_000,
+    });
+    const toolCallId = 'get-decision-context-e2e';
+
+    await toolCallService.start({
+      runId: created.run.id,
+      executionLeaseId: lease.executionLeaseId,
+      toolCallId,
+      sequence: 1,
+      toolName: 'getDecisionContext',
+      input: { decisionId: fixture.decisionId },
+    });
+    const decisionContext = await runtimeQueryService.getDecisionContext(
+      authorization,
+      created.run.id,
+      lease.executionLeaseId,
+      fixture.decisionId,
+    );
+    expect(decisionContext).toMatchObject({
+      decision: { id: fixture.decisionId },
+      project: { id: fixture.projectId },
+      sources: [{ sourceId: `decision:${fixture.decisionId}` }],
+    });
+    await expect(
+      runtimeQueryService.getDecisionContext(
+        { ...authorization, userId: fixture.userId + 999_999 },
+        created.run.id,
+        lease.executionLeaseId,
+        fixture.decisionId,
+      ),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_RUN_NOT_FOUND });
+    await toolCallService.finish({
+      runId: created.run.id,
+      executionLeaseId: lease.executionLeaseId,
+      toolCallId,
+      resultSummary: {
+        decisionId: decisionContext.decision.id,
+        decisionTitle: decisionContext.decision.title,
+        decisionStatus: decisionContext.decision.status,
+        projectTitle: decisionContext.project.title,
+        areaName: decisionContext.area?.name ?? null,
+        participantCount: decisionContext.decision.participantCount,
+        sourceIds: decisionContext.sources.map((source) => source.sourceId),
+      },
+      errorCode: null,
+      durationMs: 12,
+    });
+
+    const assistantMessageId = randomUUID();
+    await eventService.append({
+      runId: created.run.id,
+      executionLeaseId: lease.executionLeaseId,
+      type: 'ASSISTANT_TEXT_DELTA',
+      data: { messageId: assistantMessageId, delta: '已读取真实决策上下文。' },
+    });
+    await stepService.recordModelStep({
+      runId: created.run.id,
+      executionLeaseId: lease.executionLeaseId,
+      sequence: 1,
+      modelRole: 'standard',
+      resolvedModelId: 'mock/decision-agent',
+      provider: 'nextnest.mock',
+      responseId: 'response-e2e',
+      finishReason: 'stop',
+      inputTokens: 21,
+      outputTokens: 8,
+      estimatedCostUsd: 0.00001,
+      startedAt: new Date(Date.now() - 20),
+      finishedAt: new Date(),
+      timeToFirstOutputMs: 10,
+    });
+    const completed = await runService.complete({
+      runId: created.run.id,
+      executionLeaseId: lease.executionLeaseId,
+      assistantMessageId,
+      assistantContent: '已读取真实决策上下文。',
+      resolvedModelId: 'mock/decision-agent',
+    });
+    expect(completed).toMatchObject({
+      status: 'COMPLETED',
+      usage: { inputTokens: 21, outputTokens: 8, totalTokens: 29 },
+    });
+
+    const eventPage = await runtimeQueryService.getRunEvents(
+      authorization,
+      created.thread.id,
+      created.run.id,
+      0,
+    );
+    expect(eventPage.run.status).toBe('COMPLETED');
+    expect(eventPage.events.map((event) => event.sequence)).toEqual([1, 2, 3]);
+    expect(
+      await prisma.aiToolCall.findUnique({
+        where: { runId_toolCallId: { runId: created.run.id, toolCallId } },
+      }),
+    ).toMatchObject({ status: 'COMPLETED', durationMs: 12 });
+
+    await expect(
+      runtimeQueryService.getRunEvents(
+        { ...authorization, userId: fixture.userId + 999_999 },
+        created.thread.id,
+        created.run.id,
+        0,
+      ),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_RUN_NOT_FOUND });
   });
 });

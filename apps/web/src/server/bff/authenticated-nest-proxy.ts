@@ -18,6 +18,14 @@ const refreshFlights = new Map<string, Promise<NestResponse<AuthSession>>>();
 /** 受保护 BFF 请求支持的 HTTP 方法。 */
 type ProxyHttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
+/** 需要在 Next.js 内继续调用 NestJS 的受保护 Route 会话。 */
+export type AuthenticatedRouteSession = {
+  /** 当前已通过 NestJS 校验的用户资料。 */
+  user: AuthUser;
+  /** 仅保留在服务端内存中的当前 Bearer token。 */
+  accessToken: string;
+};
+
 /** 受保护 BFF 转发函数参数。 */
 type AuthenticatedProxyOptions = {
   /** 浏览器发来的原始请求。 */
@@ -165,6 +173,14 @@ export async function proxyAuthenticatedNestAssetRequest(request: Request, nestP
  * Next.js 内部执行权限判断的场景。
  */
 export async function getAuthenticatedRouteUser(): Promise<AuthUser | null> {
+  return (await getAuthenticatedRouteSession())?.user ?? null;
+}
+
+/**
+ * 为 AI Runtime 等服务端编排读取经过刷新和 profile 复核的用户与 Bearer token。
+ * token 不得进入浏览器响应、日志、事件负载或持久化字段。
+ */
+export async function getAuthenticatedRouteSession(): Promise<AuthenticatedRouteSession | null> {
   const cookieStore = await cookies();
   let accessToken = cookieStore.get(AUTH_ACCESS_COOKIE_NAME)?.value;
 
@@ -182,11 +198,12 @@ export async function getAuthenticatedRouteUser(): Promise<AuthUser | null> {
     const refreshedAccessToken = await refreshAccessTokenFromCookie();
 
     if (refreshedAccessToken) {
+      accessToken = refreshedAccessToken;
       profile = await requestProfileFromNest(refreshedAccessToken);
     }
   }
 
-  return profile.body.success ? profile.body.data : null;
+  return profile.body.success ? { user: profile.body.data, accessToken } : null;
 }
 
 /** 向 NestJS 发出携带 Bearer token 的业务请求。 */

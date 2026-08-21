@@ -26,7 +26,7 @@ flowchart LR
 | `/dashboard/pending-access` | 新用户尚无部门或角色时展示待授权说明                     |
 | `/dashboard/forbidden`      | 中文 403 页面                                            |
 | `/dashboard/users`          | 部门树、用户调动/状态、角色、范围授权、直接授权和审计    |
-| `/dashboard/profile`        | 本人头像上传、移除、显示名称修改和只读账号信息          |
+| `/dashboard/profile`        | 本人头像上传、移除、显示名称修改和只读账号信息           |
 | `/dashboard/decisions`      | 真实决策列表、空状态和创建入口                           |
 | `/dashboard/decisions/:id`  | 真实决策详情与参与者；后端防 IDOR                        |
 | `/dashboard/ai`             | 需要 `ai:chat:use` 的流式 AI 对话                        |
@@ -83,12 +83,15 @@ NEST_BASE_URL=http://localhost:3001
 NEST_API_PREFIX=api/v1
 AI_GATEWAY_API_KEY=本地或CI使用的Gateway密钥
 AI_MODEL_STANDARD_ID=openai/gpt-5.4-nano
+AI_RUNTIME_SERVICE_SECRET=与NestJS一致的高熵内部服务密钥
 ```
 
 Vercel 部署可以使用自动提供的 OIDC 调用 AI Gateway，不需要同时配置静态密钥。模型环境变量只能选择
 `src/features/ai/runtime/ai-model-registry.ts` 已登记且类型匹配的模型；修改后需要重启 Web 服务。
 当前 `standard` 默认使用低成本 Nano，Mini 只在 Gateway 主模型不可用时回退；`deepReview`、
 `embedding` 和 `reranker` 在对应产品阶段开放前只登记能力，不会自行产生调用费用。
+`AI_RUNTIME_SERVICE_SECRET` 仅供 Web BFF 服务端调用 NestJS 内部执行接口，不能使用
+`NEXT_PUBLIC_` 前缀；修改后需要同时重启 Web 与 NestJS 服务。
 
 ```bash
 pnpm dev

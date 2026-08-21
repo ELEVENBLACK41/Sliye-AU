@@ -132,6 +132,10 @@ HTTP 状态继续表达传输结果，字符串业务码用于稳定分支。全
 
 ## 迁移、同步与启动
 
+AI Agent 的内部执行接口除用户 Bearer Token 外，还要求 Web BFF 与 NestJS 共享
+`AI_RUNTIME_SERVICE_SECRET`。生产环境必须显式配置同一个高熵值；本地开发和测试可以使用代码中的受限回退值。
+修改该变量后需要同时重启 Web 与 NestJS 服务，且不得把它暴露给浏览器或写入运行日志。
+
 ```bash
 # 在 apps/server 下执行
 pnpm prisma migrate deploy

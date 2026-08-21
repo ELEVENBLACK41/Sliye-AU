@@ -1,20 +1,18 @@
-/*
- * @Author: shaoliye elevenblack41@gmail.com
- * @Date: 2026-08-20 15:03:41
- * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-08-21 10:31:57
- * @FilePath: \NextNest\apps\web\src\app\(ai)\ai\page.tsx
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+/**
+ * 本文件提供第 2.4 阶段绑定单项决策的真实 AI Agent 测试入口。
  */
-import React from 'react'
-import { AiChatPanel } from '@/features/ai/components/ai-chat-panel'
-const Ai = () => {
-  return (
-    <div>
-      用来测试AI页面
-      <AiChatPanel />
-    </div>
-  )
-}
 
-export default Ai
+import { AiChatPanel } from '@/features/ai/components/ai-chat-panel';
+
+/** 渲染 Decision Agent 页面，并允许通过查询参数预填 decisionId。 */
+export default async function AiPage({ searchParams }: { searchParams: Promise<{ decisionId?: string }> }) {
+  const params = await searchParams;
+  const parsedDecisionId = Number(params.decisionId);
+  const initialDecisionId = Number.isInteger(parsedDecisionId) && parsedDecisionId > 0 ? parsedDecisionId : undefined;
+
+  return (
+    <div className="flex min-h-0 flex-1 p-4 md:p-6">
+      <AiChatPanel initialDecisionId={initialDecisionId} />
+    </div>
+  );
+}

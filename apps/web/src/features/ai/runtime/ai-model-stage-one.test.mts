@@ -72,13 +72,12 @@ test('环境变量只能切换到已登记且类型匹配的模型', () => {
   );
 });
 
-test('Gateway 参数应包含受控回退、用户归因和固定低基数标签', () => {
+test('Gateway 参数应包含受控回退和安全归因，且不得把内部项目 ID 当成 Quota Entity', () => {
   const configuration = getAiLanguageModelConfiguration('standard', {});
   const options = createAiGatewayProviderOptions(
     configuration,
     {
       userId: 42,
-      projectId: 7,
       feature: 'decision-agent',
     },
     'staging',
@@ -86,7 +85,7 @@ test('Gateway 参数应包含受控回退、用户归因和固定低基数标签
 
   assert.deepEqual(options.gateway.models, ['openai/gpt-5.4-mini']);
   assert.equal(options.gateway.user, '42');
-  assert.equal(options.gateway.quotaEntityId, '7');
+  assert.equal(Object.hasOwn(options.gateway, 'quotaEntityId'), false);
   assert.deepEqual(options.gateway.tags, [
     'app:nextnest-web',
     'feature:decision-agent',

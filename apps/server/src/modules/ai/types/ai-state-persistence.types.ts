@@ -7,10 +7,12 @@ import type {
   AiAssistantTextDeltaEvent,
   AiEvent,
   AiLanguageModelRole,
-  AiMessage,
   AiRun,
+  AiRunCreation,
   AiRunFailureReason,
-  AiThread,
+  AiToolCall,
+  FinishAiToolCallRequest,
+  StartAiToolCallRequest,
 } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
@@ -44,16 +46,7 @@ export type CreateThreadMessageRunCommand = {
 };
 
 /** 一次原子消息提交返回的 Thread、Message 和 Run 快照。 */
-export type AiRunCreationResult = {
-  /** 创建或幂等重放命中的 Thread。 */
-  thread: AiThread;
-  /** 创建或幂等重放命中的用户消息。 */
-  message: AiMessage;
-  /** 创建或幂等重放命中的 Run。 */
-  run: AiRun;
-  /** 当前结果是否来自已存在的幂等记录。 */
-  replayed: boolean;
-};
+export type AiRunCreationResult = AiRunCreation;
 
 /** 原子领取排队中 Run 并签发执行租约的命令。 */
 export type ClaimAiRunCommand = {
@@ -234,3 +227,18 @@ export type AiModelStepRecord = {
 
 /** 事件追加服务返回的共享事件联合。 */
 export type AppendAiEventResult = AiEvent;
+
+/** 创建工具调用审计记录的内部命令。 */
+export type StartAiToolCallCommand = StartAiToolCallRequest & {
+  /** 工具调用所属 Run UUID。 */
+  runId: string;
+};
+
+/** 完成工具调用审计记录的内部命令。 */
+export type FinishAiToolCallCommand = FinishAiToolCallRequest & {
+  /** 工具调用所属 Run UUID。 */
+  runId: string;
+};
+
+/** 工具调用持久化服务返回的共享审计快照。 */
+export type AiToolCallRecord = AiToolCall;

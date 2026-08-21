@@ -22,6 +22,7 @@ export interface ServerEnvConfig {
   CHAT_SOCKET_TICKET_TTL_SECONDS: number;
   NOTIFICATION_SOCKET_TICKET_SECRET?: string;
   NOTIFICATION_SOCKET_TICKET_TTL_SECONDS: number;
+  AI_RUNTIME_SERVICE_SECRET?: string;
   LIVEKIT_URL?: string;
   LIVEKIT_API_KEY?: string;
   LIVEKIT_API_SECRET?: string;
@@ -70,6 +71,12 @@ export function validateEnvConfig(
   const notificationSocketTicketSecret = readOptionalSecret(
     config.NOTIFICATION_SOCKET_TICKET_SECRET,
     'NOTIFICATION_SOCKET_TICKET_SECRET',
+    nodeEnv,
+    errors,
+  );
+  const aiRuntimeServiceSecret = readOptionalSecret(
+    config.AI_RUNTIME_SERVICE_SECRET,
+    'AI_RUNTIME_SERVICE_SECRET',
     nodeEnv,
     errors,
   );
@@ -136,6 +143,7 @@ export function validateEnvConfig(
       DEFAULT_NOTIFICATION_SOCKET_TICKET_TTL_SECONDS,
       errors,
     ),
+    AI_RUNTIME_SERVICE_SECRET: aiRuntimeServiceSecret,
     LIVEKIT_URL: readOptionalValue(config.LIVEKIT_URL, 'LIVEKIT_URL', errors),
     LIVEKIT_API_KEY: readOptionalValue(
       config.LIVEKIT_API_KEY,
