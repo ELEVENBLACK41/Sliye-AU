@@ -4,11 +4,7 @@
 import type { DecisionEventTimelineItem, DecisionSummary } from '@workspace/contracts/decisions';
 import type { DiscussionAreaSummary } from '@workspace/contracts/projects';
 
-import type {
-  DecisionReplayEvent,
-  DecisionTreeNode,
-  DecisionTreeRouteStatus,
-} from '../types/project-space.type';
+import type { DecisionReplayEvent, DecisionTreeNode, DecisionTreeRouteStatus } from '../types/project-space.type';
 import {
   buildDecisionEntityTree,
   countDecisionEntityNodes,
@@ -99,7 +95,9 @@ export function buildProjectDecisionReplayModel(
       children: entityNodes,
     };
   });
-  const projectDecisionNodes = decisionNodes.filter((_, index) => normalizedSources[index]?.decision.scope === 'PROJECT');
+  const projectDecisionNodes = decisionNodes.filter(
+    (_, index) => normalizedSources[index]?.decision.scope === 'PROJECT',
+  );
   const areaDecisionGroups = buildAreaDecisionGroups(areas, normalizedSources, decisionNodes);
 
   return {
@@ -211,10 +209,13 @@ function buildEntityLabels(events: DecisionEventTimelineItem[]): DecisionEntityL
   const labels: DecisionEntityLabels = { proposals: new Map(), votes: new Map(), resolutions: new Map() };
   events.forEach((event) => {
     if (event.proposalId && event.type === 'PROPOSAL_CREATED') {
-      labels.proposals.set(event.proposalId, readString(event.after, 'title') || '未命名提案');
+      labels.proposals.set(
+        event.proposalId,
+        readString(event.after, 'title') || readCreatedEntityTitle(event.title, '创建提案') || '未命名提案',
+      );
     }
     if (event.resolutionId && event.type === 'RESOLUTION_CREATED') {
-      labels.resolutions.set(event.resolutionId, readString(event.after, 'title') || '正式决议');
+      labels.resolutions.set(event.resolutionId, readString(event.after, 'title') || event.title || '正式决议');
     }
   });
   buildVoteLabels(events, labels);
@@ -342,16 +343,27 @@ function readNumber(record: Record<string, unknown> | null | undefined, key: str
 }
 
 /** 从安全记录中读取嵌套对象字段。 */
-function readRecord(record: Record<string, unknown> | null | undefined, key: string): Record<string, unknown> | undefined {
+function readRecord(
+  record: Record<string, unknown> | null | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
   const value = record?.[key];
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
+/** 从旧事件的“动作：实体标题”文本中恢复缺失的实体名称。 */
+function readCreatedEntityTitle(eventTitle: string, action: string): string | undefined {
+  const prefix = `${action}：`;
+  return eventTitle.startsWith(prefix) ? eventTitle.slice(prefix.length).trim() || undefined : undefined;
+}
+
 /** 返回投票统计结论的中文说明。 */
 function getVoteOutcomeText(outcome: string | undefined): string {
-  return { APPROVED: '投票通过', REJECTED: '投票未通过', TIED: '投票平票', QUORUM_NOT_MET: '未达到法定人数' }[
-    outcome || ''
-  ] || '结果已固化';
+  return (
+    { APPROVED: '投票通过', REJECTED: '投票未通过', TIED: '投票平票', QUORUM_NOT_MET: '未达到法定人数' }[
+      outcome || ''
+    ] || '结果已固化'
+  );
 }
 
 /** 格式化回放轨道使用的事件时间。 */
@@ -367,7 +379,5 @@ function formatEventTime(value: string): string {
 
 /** 返回决策当前状态的中文说明。 */
 function getDecisionStatusText(status: DecisionSummary['status']): string {
-  return { DRAFT: '草稿', DISCUSSING: '讨论中', RESOLVED: '已决议', CANCELLED: '已取消', ARCHIVED: '已归档' }[
-    status
-  ];
+  return { DRAFT: '草稿', DISCUSSING: '讨论中', RESOLVED: '已决议', CANCELLED: '已取消', ARCHIVED: '已归档' }[status];
 }

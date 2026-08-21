@@ -77,7 +77,10 @@ function buildProposalNodes(events: DecisionEventTimelineItem[]): Map<number, Ti
       const createdEvent = groupedEvents.find((event) => event.type === 'PROPOSAL_CREATED') ?? groupedEvents[0]!;
       const statusEvent = groupedEvents.findLast((event) => event.type === 'PROPOSAL_UPDATED');
       const status = readString(statusEvent?.after, 'status') || readString(createdEvent.after, 'status') || 'OPEN';
-      const title = readString(createdEvent.after, 'title') || '未命名提案';
+      const title =
+        readString(createdEvent.after, 'title') ||
+        readCreatedEntityTitle(createdEvent.title, '创建提案') ||
+        '未命名提案';
       const statusReplayEventId = statusEvent ? getReplayStatusEventId(events, statusEvent) : undefined;
       return [
         proposalId,
@@ -135,16 +138,11 @@ function buildVoteNodes(
             node: {
               id: createReplayEventId(displayEvent.id),
               type: 'vote',
-              title: buildVoteTitle(
-                proposalTitle,
-                voteCountByProposal.get(proposalId) ?? 1,
-                voteSequence,
-              ),
+              title: buildVoteTitle(proposalTitle, voteCountByProposal.get(proposalId) ?? 1, voteSequence),
               subtitle: buildVoteSubtitle(openedEvent, closedEvent, ballotCount),
               routeStatus,
               detailEventId: createReplayEventId(displayEvent.id),
-              completionEventId:
-                routeStatus === 'abandoned' && statusReplayEventId ? statusReplayEventId : undefined,
+              completionEventId: routeStatus === 'abandoned' && statusReplayEventId ? statusReplayEventId : undefined,
               statusEventId: statusReplayEventId,
             },
           },
@@ -165,10 +163,7 @@ function countVotesByProposal(voteEvents: Map<number, DecisionEventTimelineItem[
 }
 
 /** 将决议形成时的自动关闭状态映射到正式决议事件，使相关节点同时完成状态动画。 */
-function getReplayStatusEventId(
-  events: DecisionEventTimelineItem[],
-  statusEvent: DecisionEventTimelineItem,
-): string {
+function getReplayStatusEventId(events: DecisionEventTimelineItem[], statusEvent: DecisionEventTimelineItem): string {
   if (!isResolutionCleanupEvent(statusEvent)) return createReplayEventId(statusEvent.id);
   const resolutionEvent = events
     .filter((event) => event.type === 'RESOLUTION_CREATED' && event.id > statusEvent.id)
@@ -209,18 +204,16 @@ function buildResolutionNodes(
           : 'resolved';
     return [
       {
-        sourceProposalId:
-          readNumber(createdEvent.payload, 'sourceProposalId') ?? createdEvent.proposalId ?? null,
-        sourceVoteRoundId:
-          readNumber(createdEvent.payload, 'sourceVoteRoundId') ?? createdEvent.voteRoundId ?? null,
+        sourceProposalId: readNumber(createdEvent.payload, 'sourceProposalId') ?? createdEvent.proposalId ?? null,
+        sourceVoteRoundId: readNumber(createdEvent.payload, 'sourceVoteRoundId') ?? createdEvent.voteRoundId ?? null,
         treeNode: {
           occurredAt: createdEvent.occurredAt,
           children: [],
           node: {
             id: createReplayEventId(createdEvent.id),
             type: 'resolution',
-            title: readString(createdEvent.after, 'title') || '正式决议',
-            subtitle: `${getResolutionStatusText(routeStatus)} · ${formatEventTime(createdEvent.occurredAt)}`,
+            title: readString(createdEvent.after, 'title') || createdEvent.title || '正式决议',
+            subtitle: `${getResolutionKindText(readString(createdEvent.after, 'kind'))} · ${getResolutionStatusText(routeStatus)} · ${formatEventTime(createdEvent.occurredAt)}`,
             routeStatus,
             detailEventId: createReplayEventId((statusEvent ?? createdEvent).id),
             completionEventId: createReplayEventId(createdEvent.id),
@@ -336,11 +329,18 @@ function getResolutionStatusText(status: DecisionTreeRouteStatus): string {
   return '状态未知';
 }
 
+/** 返回决议用途类型，避免把阶段性结论误认为最终决议。 */
+function getResolutionKindText(kind: string | undefined): string {
+  return { INTERIM: '阶段性决议', FINAL: '最终决议', SUPPLEMENT: '补充决议' }[kind || ''] || '正式决议';
+}
+
 /** 返回投票统计结论中文说明。 */
 function getVoteOutcomeText(outcome: string | undefined): string {
-  return { APPROVED: '投票通过', REJECTED: '投票未通过', TIED: '投票平票', QUORUM_NOT_MET: '未达到法定人数' }[
-    outcome || ''
-  ] || '结果已固化';
+  return (
+    { APPROVED: '投票通过', REJECTED: '投票未通过', TIED: '投票平票', QUORUM_NOT_MET: '未达到法定人数' }[
+      outcome || ''
+    ] || '结果已固化'
+  );
 }
 
 /** 读取安全记录中的字符串字段。 */
@@ -356,9 +356,18 @@ function readNumber(record: Record<string, unknown> | null | undefined, key: str
 }
 
 /** 读取安全记录中的嵌套对象字段。 */
-function readRecord(record: Record<string, unknown> | null | undefined, key: string): Record<string, unknown> | undefined {
+function readRecord(
+  record: Record<string, unknown> | null | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
   const value = record?.[key];
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+/** 从旧事件的“动作：实体标题”文本中恢复缺失的实体名称。 */
+function readCreatedEntityTitle(eventTitle: string, action: string): string | undefined {
+  const prefix = `${action}：`;
+  return eventTitle.startsWith(prefix) ? eventTitle.slice(prefix.length).trim() || undefined : undefined;
 }
 
 /** 为事件生成与回放轨道一致的稳定节点标识。 */
@@ -368,7 +377,10 @@ function createReplayEventId(eventId: number): string {
 
 /** 格式化实体节点时间。 */
 function formatEventTime(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(
-    new Date(value),
-  );
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }

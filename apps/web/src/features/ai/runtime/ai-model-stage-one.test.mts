@@ -35,7 +35,7 @@ const MOCK_V4_USAGE = {
   },
 };
 
-test('五种角色应完整登记，standard 默认使用低成本 Nano 并只向 Mini 回退', () => {
+test('五种角色应完整登记，standard 默认使用低成本 Nano 并向gemini回退', () => {
   const snapshot = getAiModelRegistrySnapshot({});
   const standard = getAiLanguageModelConfiguration('standard', {});
 
@@ -43,7 +43,7 @@ test('五种角色应完整登记，standard 默认使用低成本 Nano 并只�
   assert.equal(standard.primary.modelId, 'openai/gpt-5.4-nano');
   assert.deepEqual(
     standard.fallbacks.map((profile) => profile.modelId),
-    ['openai/gpt-5.4-mini'],
+    ['alibaba/qwen-3-32b'],
   );
   assert.equal(standard.primary.supportsTools, true);
   assert.equal(standard.budget.maxOutputTokens, 2_048);
@@ -55,7 +55,7 @@ test('环境变量只能切换到已登记且类型匹配的模型', () => {
   });
 
   assert.equal(standard.primary.modelId, 'openai/gpt-5.4-mini');
-  assert.deepEqual(standard.fallbacks, []);
+  assert.deepEqual(standard.fallbacks.map((profile) => profile.modelId), ['alibaba/qwen-3-32b']);
   assert.throws(
     () =>
       getAiEmbeddingModelConfiguration({
@@ -83,7 +83,7 @@ test('Gateway 参数应包含受控回退和安全归因，且不得把内部项
     'staging',
   );
 
-  assert.deepEqual(options.gateway.models, ['openai/gpt-5.4-mini']);
+  assert.deepEqual(options.gateway.models, ['alibaba/qwen-3-32b']);
   assert.equal(options.gateway.user, '42');
   assert.equal(Object.hasOwn(options.gateway, 'quotaEntityId'), false);
   assert.deepEqual(options.gateway.tags, [

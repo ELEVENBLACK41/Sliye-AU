@@ -144,7 +144,7 @@ export const AI_REMOTE_MODEL_CATALOG: Readonly<Record<string, AiRemoteModelProfi
     supportsStructuredOutput: true,
     pricing: createTokenPriceSnapshot(0.2, 1.25, 0.02),
   },
-  'openai/gpt-5.4-mini': {
+  'openai/gpt-5.4-mini': {//总被vercel429限流不知道为什么
     kind: 'language',
     modelId: 'openai/gpt-5.4-mini',
     contextWindowTokens: 400_000,
@@ -153,7 +153,7 @@ export const AI_REMOTE_MODEL_CATALOG: Readonly<Record<string, AiRemoteModelProfi
     supportsStructuredOutput: true,
     pricing: createTokenPriceSnapshot(0.75, 4.5, 0.075),
   },
-  'openai/gpt-5.4': {
+  'openai/gpt-5.4': {  
     kind: 'language',
     modelId: 'openai/gpt-5.4',
     contextWindowTokens: 1_050_000,
@@ -161,6 +161,15 @@ export const AI_REMOTE_MODEL_CATALOG: Readonly<Record<string, AiRemoteModelProfi
     supportsTools: true,
     supportsStructuredOutput: true,
     pricing: createTokenPriceSnapshot(2.5, 15, 0.25),
+  },
+  'alibaba/qwen-3-32b': {
+    kind: 'language',
+    modelId: 'alibaba/qwen-3-32b',
+    contextWindowTokens: 128_000,
+    providerMaxOutputTokens: 8_000,
+    supportsTools: true,
+    supportsStructuredOutput: false,
+    pricing: createTokenPriceSnapshot(0.15, 0.6, null),
   },
   'anthropic/claude-sonnet-4.6': {
     kind: 'language',
@@ -201,7 +210,7 @@ const AI_LANGUAGE_ROLE_POLICIES: Record<
   standard: {
     envName: 'AI_MODEL_STANDARD_ID',
     defaultModelId: 'openai/gpt-5.4-nano',
-    fallbackModelIds: ['openai/gpt-5.4-mini'],
+    fallbackModelIds: ['alibaba/qwen-3-32b'],
     budget: {
       totalMs: 45_000,
       stepMs: 20_000,

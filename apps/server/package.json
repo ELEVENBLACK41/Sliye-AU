@@ -17,6 +17,8 @@
     "access-control:check": "ts-node --skipIgnore --project tsconfig.script.json prisma/access-control.sync.ts --check",
     "collaboration-data:check": "ts-node --skipIgnore --project tsconfig.script.json prisma/reset-collaboration-data.ts --check",
     "collaboration-data:reset": "ts-node --skipIgnore --project tsconfig.script.json prisma/reset-collaboration-data.ts --reset --confirm=RESET_DECISION_COLLABORATION",
+    "decision-demo:check": "ts-node --skipIgnore --project tsconfig.script.json prisma/seed-decision-lifecycle-demo.ts --check",
+    "decision-demo:seed": "ts-node --skipIgnore --project tsconfig.script.json prisma/seed-decision-lifecycle-demo.ts --apply --confirm=SEED_DECISION_LIFECYCLE_DEMO",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
