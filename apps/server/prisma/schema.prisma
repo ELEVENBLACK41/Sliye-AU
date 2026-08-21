@@ -270,6 +270,67 @@ enum DecisionEventType {
   AI_SUMMARY_CREATED
 }
 
+/// AI Thread 是否仍处于创建用户可读取的业务权限范围内。
+enum AiThreadScopeState {
+  ACTIVE
+  LOCKED
+}
+
+/// 第一版 AI Thread 被锁定的稳定原因。
+enum AiThreadLockReason {
+  SCOPE_CHANGED
+}
+
+/// AI 会话中持久化消息的发送方角色。
+enum AiMessageRole {
+  USER
+  ASSISTANT
+}
+
+/// 一次 AI Run 从排队到唯一终态的稳定生命周期状态。
+enum AiRunStatus {
+  QUEUED
+  RUNNING
+  WAITING_APPROVAL
+  CANCELLATION_REQUESTED
+  CANCELLED
+  COMPLETED
+  FAILED
+}
+
+/// 当前允许承担一次 AI Run 的逻辑语言模型角色。
+enum AiLanguageModelRole {
+  STANDARD
+  DEEP_REVIEW
+}
+
+/// AI Run 进入取消流程时保存的稳定原因。
+enum AiRunCancellationReason {
+  USER_REQUESTED
+  SCOPE_CHANGED
+}
+
+/// AI Run 进入失败终态时保存的稳定原因。
+enum AiRunFailureReason {
+  MODEL_ERROR
+  TOOL_ERROR
+  EXECUTION_LEASE_EXPIRED
+  INTERNAL_ERROR
+}
+
+/// 当前已经冻结负载结构并允许持久化的 AI 流事件类型。
+enum AiEventType {
+  RUN_STATUS_CHANGED
+  ASSISTANT_TEXT_DELTA
+}
+
+/// AI 幂等请求所属的业务操作，避免相同客户端标识跨接口误去重。
+enum AiRequestOperation {
+  CREATE_THREAD
+  SEND_MESSAGE
+  RETRY_RUN
+}
+
 model User {
   id    Int     @id @default(autoincrement())
   email String  @unique
@@ -305,26 +366,29 @@ model User {
 
   posts Post[]
 
-  projectsCreated            Project[]              @relation("ProjectCreator")
-  projectsOwned              Project[]              @relation("ProjectOwner")
+  projectsCreated            Project[]                @relation("ProjectCreator")
+  projectsOwned              Project[]                @relation("ProjectOwner")
   projectMemberships         ProjectMember[]
-  discussionAreasCreated     DiscussionArea[]       @relation("DiscussionAreaCreator")
+  discussionAreasCreated     DiscussionArea[]         @relation("DiscussionAreaCreator")
   discussionAreaMemberships  DiscussionAreaMember[]
-  createdDecisions           Decision[]             @relation("DecisionCreator")
-  ownedDecisions             Decision[]             @relation("DecisionOwner")
+  createdDecisions           Decision[]               @relation("DecisionCreator")
+  ownedDecisions             Decision[]               @relation("DecisionOwner")
   decisionParticipants       DecisionParticipant[]
-  proposalsCreated           DecisionProposal[]     @relation("ProposalCreator")
-  voteRoundsCreated          DecisionVoteRound[]    @relation("DecisionVoteRoundCreator")
+  proposalsCreated           DecisionProposal[]       @relation("ProposalCreator")
+  voteRoundsCreated          DecisionVoteRound[]      @relation("DecisionVoteRoundCreator")
   decisionBallots            DecisionBallot[]
-  resolutionsDecided         DecisionResolution[]   @relation("DecisionResolutionDecider")
-  assignedTasks              DecisionTask[]         @relation("TaskAssignee")
-  createdTasks               DecisionTask[]         @relation("TaskCreator")
-  decisionEvents             DecisionEvent[]        @relation("DecisionEventActor")
-  discussionMessagesAuthored DiscussionMessage[]    @relation("DiscussionMessageAuthor")
-  discussionMessagesPinned   DiscussionMessage[]    @relation("DiscussionMessagePinner")
-  meetingsCreated            MeetingSession[]       @relation("MeetingSessionCreator")
+  resolutionsDecided         DecisionResolution[]     @relation("DecisionResolutionDecider")
+  assignedTasks              DecisionTask[]           @relation("TaskAssignee")
+  createdTasks               DecisionTask[]           @relation("TaskCreator")
+  decisionEvents             DecisionEvent[]          @relation("DecisionEventActor")
+  discussionMessagesAuthored DiscussionMessage[]      @relation("DiscussionMessageAuthor")
+  discussionMessagesPinned   DiscussionMessage[]      @relation("DiscussionMessagePinner")
+  meetingsCreated            MeetingSession[]         @relation("MeetingSessionCreator")
   meetingParticipants        MeetingParticipant[]
   meetingPresenceEvents      MeetingPresenceEvent[]
+  aiThreads                  AiThread[]
+  aiMessages                 AiMessage[]
+  aiRequestDeduplications    AiRequestDeduplication[]
 
   @@index([deptId])
   @@index([status])
@@ -732,6 +796,7 @@ model Project {
   areas     DiscussionArea[]
   decisions Decision[]
   auditLogs CollaborationAuditLog[]
+  aiThreads AiThread[]
 
   @@index([createdById])
   @@index([ownerId])
@@ -921,6 +986,7 @@ model Decision {
   events       DecisionEvent[]
   messages     DiscussionMessage[]
   meetingLinks MeetingDecision[]
+  aiThreads    AiThread[]
 
   @@index([projectId])
   @@index([areaId])
@@ -1381,4 +1447,205 @@ model DecisionEvent {
   @@index([taskId])
   @@index([type])
   @@index([occurredAt])
+}
+
+/// 一条绑定单项 Decision、归属于创建用户的持久化 AI 会话容器。
+model AiThread {
+  /// 对外稳定且不可推断业务数量的 UUID。
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Thread 创建者和第一版唯一拥有者。
+  ownerUserId Int
+  /// 由服务端根据 Decision 解析并固化的项目主键。
+  projectId   Int
+  /// 第一版 Thread 唯一绑定且不可在会话内切换的决策主键。
+  decisionId  Int
+  /// 默认由首条用户消息截断生成、允许后续修改的标题。
+  title       String
+
+  /// 当前非终态 Run；没有运行时为空。
+  activeRunId String?             @unique @db.Uuid
+  /// 当前 Thread 是否仍处于创建用户可读取的业务范围内。
+  scopeState  AiThreadScopeState  @default(ACTIVE)
+  /// Thread 被锁定的稳定原因；正常可读时为空。
+  lockReason  AiThreadLockReason?
+
+  scopeChangedAt DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  ownerUser User     @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  decision  Decision @relation(fields: [decisionId], references: [id], onDelete: Restrict)
+
+  activeRun             AiRun?                   @relation("AiThreadActiveRun", fields: [activeRunId], references: [id], onDelete: SetNull)
+  runs                  AiRun[]                  @relation("AiThreadRuns")
+  messages              AiMessage[]
+  requestDeduplications AiRequestDeduplication[]
+
+  @@index([ownerUserId, archivedAt, updatedAt])
+  @@index([projectId])
+  @@index([decisionId, updatedAt])
+  @@index([scopeState])
+}
+
+/// AI Thread 中用于展示和审计的一条用户或助手消息。
+model AiMessage {
+  /// 对外稳定的消息 UUID。
+  id String @id @default(uuid()) @db.Uuid
+
+  threadId     String  @db.Uuid
+  /// 仅助手消息关联生成它的 Run；用户消息为空。
+  runId        String? @unique @db.Uuid
+  /// 用户消息的作者；助手消息为空。
+  authorUserId Int?
+
+  role    AiMessageRole
+  content String        @db.Text
+
+  createdAt DateTime @default(now())
+
+  thread     AiThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorUser User?    @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  generatedByRun        AiRun?                   @relation("AiRunAssistantMessage", fields: [runId], references: [id], onDelete: SetNull)
+  answerRuns            AiRun[]                  @relation("AiRunUserMessage")
+  requestDeduplications AiRequestDeduplication[]
+
+  @@index([threadId, createdAt])
+  @@index([authorUserId])
+}
+
+/// 一次针对用户消息执行、进入终态后不可回退的 AI 运行。
+model AiRun {
+  /// 对外稳定的 Run UUID。
+  id String @id @default(uuid()) @db.Uuid
+
+  threadId      String  @db.Uuid
+  userMessageId String  @db.Uuid
+  retryOfRunId  String? @db.Uuid
+
+  status          AiRunStatus         @default(QUEUED)
+  modelRole       AiLanguageModelRole
+  /// Gateway 最终实际执行的供应商模型 ID。
+  resolvedModelId String?
+
+  /// 2.3 才会签发和校验的执行租约字段。
+  executionLeaseId        String?   @db.Uuid
+  executionLeaseExpiresAt DateTime?
+
+  cancellationReason AiRunCancellationReason?
+  failureReason      AiRunFailureReason?
+  failureCode        String?
+
+  /// 已持久化模型 Step 数；为零时 Run 尚无模型用量。
+  modelCallCount   Int     @default(0)
+  inputTokens      Int     @default(0)
+  outputTokens     Int     @default(0)
+  totalTokens      Int     @default(0)
+  estimatedCostUsd Decimal @default(0) @db.Decimal(18, 8)
+
+  /// 下一条事件将使用的序号；事务递增后取旧值，保证 Run 内无重复。
+  nextEventSequence Int @default(1)
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
+
+  thread      AiThread  @relation("AiThreadRuns", fields: [threadId], references: [id], onDelete: Cascade)
+  userMessage AiMessage @relation("AiRunUserMessage", fields: [userMessageId], references: [id], onDelete: Restrict)
+
+  activeForThread      AiThread?               @relation("AiThreadActiveRun")
+  assistantMessage     AiMessage?              @relation("AiRunAssistantMessage")
+  retryOf              AiRun?                  @relation("AiRunRetries", fields: [retryOfRunId], references: [id], onDelete: SetNull)
+  retryAttempts        AiRun[]                 @relation("AiRunRetries")
+  steps                AiStep[]
+  events               AiEvent[]
+  requestDeduplication AiRequestDeduplication?
+
+  @@index([threadId, createdAt])
+  @@index([threadId, status])
+  @@index([retryOfRunId])
+  @@index([status, executionLeaseExpiresAt])
+}
+
+/// 一次 Run 中的一次独立语言模型调用及其 Token、成本和性能快照。
+model AiStep {
+  id String @id @default(uuid()) @db.Uuid
+
+  runId    String @db.Uuid
+  sequence Int
+
+  modelRole       AiLanguageModelRole
+  resolvedModelId String
+  provider        String
+  responseId      String?
+  finishReason    String
+
+  inputTokens      Int
+  outputTokens     Int
+  totalTokens      Int
+  estimatedCostUsd Decimal @default(0) @db.Decimal(18, 8)
+
+  startedAt           DateTime
+  finishedAt          DateTime
+  durationMs          Int
+  timeToFirstOutputMs Int?
+  createdAt           DateTime @default(now())
+
+  run AiRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sequence])
+  @@index([resolvedModelId])
+  @@index([createdAt])
+}
+
+/// Run 内按单调序号追加的可恢复流事件。
+model AiEvent {
+  id String @id @default(uuid()) @db.Uuid
+
+  runId    String      @db.Uuid
+  sequence Int
+  type     AiEventType
+  payload  Json
+
+  createdAt DateTime @default(now())
+
+  run AiRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sequence])
+  @@index([runId, createdAt])
+  @@index([type])
+}
+
+/// 浏览器重放保护记录；过期后可以清理，不承担 Run 审计职责。
+model AiRequestDeduplication {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId             Int
+  operation          AiRequestOperation
+  /// 由服务端生成的 `decision:<id>`、`thread:<id>` 或 `run:<id>` 业务范围键。
+  scopeKey           String             @db.VarChar(96)
+  clientRequestId    String             @db.Uuid
+  /// 规范化请求载荷的 SHA-256，用于拒绝同键不同载荷。
+  requestFingerprint String             @db.Char(64)
+
+  threadId  String @db.Uuid
+  messageId String @db.Uuid
+  runId     String @unique @db.Uuid
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user    User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  thread  AiThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  message AiMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  run     AiRun     @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, operation, scopeKey, clientRequestId])
+  @@index([expiresAt])
+  @@index([threadId])
+  @@index([messageId])
 }
