@@ -4,3 +4,7 @@
  */
 
 export type * from './ai-model.types.ts';
+export * from './ai-thread.types.ts';
+export * from './ai-message.types.ts';
+export * from './ai-run.types.ts';
+export * from './ai-event.types.ts';
