@@ -22,7 +22,6 @@ import {
 import { AiRuntimeServiceGuard } from '../guards/ai-runtime-service.guard';
 import { AiEventService } from '../services/ai-event.service';
 import { AiRunLeaseService } from '../services/ai-run-lease.service';
-import { AiRuntimeQueryService } from '../services/ai-runtime-query.service';
 import { AiRunService } from '../services/ai-run.service';
 import { AiStepService } from '../services/ai-step.service';
 import { AiThreadService } from '../services/ai-thread.service';
@@ -39,7 +38,6 @@ export class AiRunController {
     private readonly aiRunService: AiRunService,
     private readonly aiEventService: AiEventService,
     private readonly aiStepService: AiStepService,
-    private readonly aiRuntimeQueryService: AiRuntimeQueryService,
     private readonly aiToolCallService: AiToolCallService,
   ) {}
 
@@ -80,8 +78,8 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: ClaimAiRunExecutionDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
     return this.aiRunLeaseService.claim({
+      authorization,
       runId,
       leaseDurationMs: body.leaseDurationMs,
     });
@@ -97,8 +95,7 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: RenewAiRunExecutionDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
-    return this.aiRunLeaseService.renewLease({ runId, ...body });
+    return this.aiRunLeaseService.renewLease({ authorization, runId, ...body });
   }
 
   /** BFF 执行器在租约保护下追加助手文本事件。 */
@@ -111,8 +108,8 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: AppendAiTextDeltaDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
     return this.aiEventService.append({
+      authorization,
       runId,
       executionLeaseId: body.executionLeaseId,
       type: 'ASSISTANT_TEXT_DELTA',
@@ -130,8 +127,8 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: RecordAiModelStepDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
     return this.aiStepService.recordModelStep({
+      authorization,
       ...body,
       runId,
       startedAt: new Date(body.startedAt),
@@ -149,8 +146,7 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: CompleteAiRunExecutionDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
-    return this.aiRunService.complete({ runId, ...body });
+    return this.aiRunService.complete({ authorization, runId, ...body });
   }
 
   /** BFF 执行器把运行中 Run 收敛为失败终态。 */
@@ -163,8 +159,7 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: FailAiRunExecutionDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
-    return this.aiRunService.fail({ runId, ...body });
+    return this.aiRunService.fail({ authorization, runId, ...body });
   }
 
   /** BFF 执行器确认 Abort 已生效并写入取消终态。 */
@@ -177,8 +172,11 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: ConfirmAiRunCancellationDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
-    return this.aiRunService.confirmCancellation({ runId, ...body });
+    return this.aiRunService.confirmCancellation({
+      authorization,
+      runId,
+      ...body,
+    });
   }
 
   /** BFF 执行器在真正调用工具前写入安全输入审计。 */
@@ -191,8 +189,7 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: StartAiToolCallDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
-    return this.aiToolCallService.start({ runId, ...body });
+    return this.aiToolCallService.start({ authorization, runId, ...body });
   }
 
   /** BFF 执行器在工具结束后写入结果摘要或稳定错误。 */
@@ -205,7 +202,6 @@ export class AiRunController {
     @Param('runId') runId: string,
     @Body() body: FinishAiToolCallDto,
   ) {
-    await this.aiRuntimeQueryService.assertAccessibleRun(authorization, runId);
-    return this.aiToolCallService.finish({ runId, ...body });
+    return this.aiToolCallService.finish({ authorization, runId, ...body });
   }
 }

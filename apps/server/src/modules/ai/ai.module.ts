@@ -15,6 +15,7 @@ import { AiRunService } from './services/ai-run.service';
 import { AiRuntimeQueryService } from './services/ai-runtime-query.service';
 import { AiStepService } from './services/ai-step.service';
 import { AiThreadHistoryQueryService } from './services/ai-thread-history-query.service';
+import { AiThreadScopeService } from './services/ai-thread-scope.service';
 import { AiThreadService } from './services/ai-thread.service';
 import { AiToolCallService } from './services/ai-tool-call.service';
 
@@ -29,6 +30,7 @@ import { AiToolCallService } from './services/ai-tool-call.service';
     AiEventService,
     AiStepService,
     AiThreadHistoryQueryService,
+    AiThreadScopeService,
     AiRuntimeQueryService,
     AiRuntimeServiceGuard,
     AiToolCallService,
@@ -41,6 +43,7 @@ import { AiToolCallService } from './services/ai-tool-call.service';
     AiEventService,
     AiStepService,
     AiThreadHistoryQueryService,
+    AiThreadScopeService,
     AiRuntimeQueryService,
     AiToolCallService,
   ],

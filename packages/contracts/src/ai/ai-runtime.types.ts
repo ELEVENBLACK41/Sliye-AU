@@ -7,7 +7,7 @@ import type { ApiErrorCode } from '../common/api-response.ts';
 import type { AiEvent } from './ai-event.types.ts';
 import type { AiMessage } from './ai-message.types.ts';
 import type { AiLanguageModelRole } from './ai-model.types.ts';
-import type { AiRun, AiRunFailureReason } from './ai-run.types.ts';
+import type { AiRun, AiRunFailureReason, AiRunPublicSummary } from './ai-run.types.ts';
 import type { AiThread } from './ai-thread.types.ts';
 import type { GetDecisionContextToolInput, GetDecisionContextToolResultSummary } from './ai-tool.types.ts';
 
@@ -46,7 +46,7 @@ export type AiRunCreation = {
   /** 创建或幂等重放命中的用户消息。 */
   message: AiMessage;
   /** 创建或幂等重放命中的 Run。 */
-  run: AiRun;
+  run: AiRunPublicSummary;
   /** 当前结果是否来自已存在的幂等记录。 */
   replayed: boolean;
 };
@@ -68,11 +68,13 @@ export type AiRunEventPage = {
   /** 已重新鉴权的 Thread UUID。 */
   threadId: string;
   /** 指定 Run 的最新状态快照。 */
-  run: AiRun;
+  run: AiRunPublicSummary;
   /** 严格按 sequence 升序返回的增量事件。 */
   events: AiEvent[];
   /** 本页最后一个事件序号；没有事件时等于请求的 afterSequence。 */
   lastSequence: number;
+  /** 当前 Run 在本页之后是否仍有已持久化事件需要继续补拉。 */
+  hasMore: boolean;
 };
 
 /** BFF 执行器领取排队 Run 的内部请求。 */
@@ -147,6 +149,8 @@ export type CompleteAiRunExecutionRequest = {
   assistantContent: string;
   /** Gateway 最终实际执行的模型 ID。 */
   resolvedModelId: string;
+  /** 助手最终回答实际引用并已由服务端校验的稳定来源 ID。 */
+  sourceIds: string[];
 };
 
 /** BFF 执行器写入失败终态的内部请求。 */
@@ -173,6 +177,8 @@ export type StartAiToolCallRequest = {
   toolCallId: string;
   /** Run 内从 1 开始的工具调用序号。 */
   sequence: number;
+  /** 本次幂等写入希望确认的等待或运行状态。 */
+  status: 'WAITING' | 'RUNNING';
   /** 当前唯一开放的真实工具。 */
   toolName: 'getDecisionContext';
   /** 已经过 Zod 校验的安全工具输入。 */

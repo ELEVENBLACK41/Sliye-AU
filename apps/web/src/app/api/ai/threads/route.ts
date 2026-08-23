@@ -52,16 +52,23 @@ export async function POST(request: Request): Promise<Response> {
     return authentication.response;
   }
 
-  let createdRunId: string | null = null;
+  let body: unknown;
 
   try {
-    const parsed = aiChatStreamRequestSchema.safeParse(await request.json());
-    const content = parsed.success ? getLatestUserMessageText(parsed.data.messages) : null;
+    body = await request.json();
+  } catch {
+    return apiError({ status: 400, message: 'AI 消息格式不正确', path });
+  }
 
-    if (!parsed.success || !content) {
-      return apiError({ status: 400, message: 'AI 消息格式不正确', path });
-    }
+  const parsed = aiChatStreamRequestSchema.safeParse(body);
+  const content = parsed.success ? getLatestUserMessageText(parsed.data.messages) : null;
 
+  if (!parsed.success || !content) {
+    return apiError({ status: 400, message: 'AI 消息格式不正确', path });
+  }
+
+  let createdRunId: string | null = null;
+  try {
     const creation = await createInitialAiRun(authentication.identity, {
       decisionId: parsed.data.decisionId,
       content,
@@ -73,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
     return await startAiRunExecution({
       identity: authentication.identity,
       creation,
-      uiMessages: parsed.data.messages,
+      contextSource: 'created-message',
     });
   } catch (error) {
     if (createdRunId) {

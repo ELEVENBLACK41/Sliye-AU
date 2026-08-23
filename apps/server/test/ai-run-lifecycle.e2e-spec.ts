@@ -16,6 +16,9 @@ import { PrismaService } from '../src/database/prisma.service';
 import {
   AiRunFailureReason,
   AiRunStatus,
+  AiSourceDependencyUsage,
+  DiscussionAreaMemberRole,
+  DiscussionAreaType,
   ProjectMemberRole,
   UserStatus,
 } from '../src/generated/prisma';
@@ -187,6 +190,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     const settled = await Promise.allSettled(
       Array.from({ length: 8 }, () =>
         runLeaseService.claim({
+          authorization,
           runId: created.run.id,
           leaseDurationMs: 60_000,
         }),
@@ -212,6 +216,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
 
     const originalExpiry = fulfilled[0].value.run.executionLeaseExpiresAt;
     const renewed = await runLeaseService.renewLease({
+      authorization,
       runId: created.run.id,
       executionLeaseId: fulfilled[0].value.executionLeaseId,
       leaseDurationMs: 120_000,
@@ -234,23 +239,87 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     expect(eventPage.run).toMatchObject({
       id: created.run.id,
       status: 'QUEUED',
-      executionLeaseId: null,
     });
+    expect(eventPage.run).not.toHaveProperty('executionLeaseId');
+    expect(eventPage.run).not.toHaveProperty('executionLeaseExpiresAt');
     await expect(
       runLeaseService.claim({
+        authorization,
         runId: created.run.id,
         leaseDurationMs: 60_000,
       }),
     ).resolves.toMatchObject({ run: { status: 'RUNNING' } });
   });
 
+  it('终态 Run 超过单页事件上限时应通过游标完整补拉且不重不漏', async () => {
+    const created = await createQueuedRun('验证终态 Run 的多页事件补拉');
+    const assistantMessageId = randomUUID();
+    const eventCount = 501;
+
+    await prisma.$transaction([
+      prisma.aiEvent.createMany({
+        data: Array.from({ length: eventCount }, (_, index) => ({
+          runId: created.run.id,
+          sequence: index + 1,
+          type: 'ASSISTANT_TEXT_DELTA' as const,
+          payload: {
+            messageId: assistantMessageId,
+            delta: `片段-${index + 1}`,
+          },
+        })),
+      }),
+      prisma.aiRun.update({
+        where: { id: created.run.id },
+        data: {
+          status: AiRunStatus.COMPLETED,
+          nextEventSequence: eventCount + 1,
+          finishedAt: new Date(),
+        },
+      }),
+      prisma.aiThread.update({
+        where: { id: created.thread.id },
+        data: { activeRunId: null },
+      }),
+    ]);
+
+    const recoveredSequences: number[] = [];
+    let afterSequence = 0;
+    let pageCount = 0;
+
+    for (;;) {
+      const page = await runtimeQueryService.getRunEvents(
+        authorization,
+        created.thread.id,
+        created.run.id,
+        afterSequence,
+      );
+      pageCount += 1;
+      recoveredSequences.push(...page.events.map((event) => event.sequence));
+      expect(page.lastSequence).toBeGreaterThan(afterSequence);
+      afterSequence = page.lastSequence;
+
+      if (!page.hasMore) {
+        expect(page.run.status).toBe('COMPLETED');
+        break;
+      }
+    }
+
+    expect(pageCount).toBe(2);
+    expect(recoveredSequences).toEqual(
+      Array.from({ length: eventCount }, (_, index) => index + 1),
+    );
+    expect(new Set(recoveredSequences).size).toBe(eventCount);
+  });
+
   it('进入取消流程后应拒绝内容写入但保留当前租约产生的模型用量审计', async () => {
     const created = await createQueuedRun('验证取消后的 fencing');
     const lease = await runLeaseService.claim({
+      authorization,
       runId: created.run.id,
       leaseDurationMs: 60_000,
     });
     await eventService.append({
+      authorization,
       runId: created.run.id,
       executionLeaseId: lease.executionLeaseId,
       type: 'ASSISTANT_TEXT_DELTA',
@@ -265,12 +334,14 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     const startedAt = new Date();
     const staleWrites = await Promise.allSettled([
       eventService.append({
+        authorization,
         runId: created.run.id,
         executionLeaseId: lease.executionLeaseId,
         type: 'ASSISTANT_TEXT_DELTA',
         data: { messageId: randomUUID(), delta: '迟到片段' },
       }),
       stepService.recordModelStep({
+        authorization,
         runId: created.run.id,
         executionLeaseId: lease.executionLeaseId,
         sequence: 1,
@@ -287,11 +358,13 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
         timeToFirstOutputMs: 10,
       }),
       runService.complete({
+        authorization,
         runId: created.run.id,
         executionLeaseId: lease.executionLeaseId,
         assistantMessageId: randomUUID(),
         assistantContent: '迟到完成消息',
         resolvedModelId: 'openai/test-model',
+        sourceIds: [],
       }),
     ]);
     [staleWrites[0], staleWrites[2]].forEach((result) => {
@@ -307,6 +380,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     expect(staleWrites[1].status).toBe('fulfilled');
 
     const cancelled = await runService.confirmCancellation({
+      authorization,
       runId: created.run.id,
       executionLeaseId: lease.executionLeaseId,
     });
@@ -333,6 +407,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     ).toEqual({ modelCallCount: 1, totalTokens: 15 });
     await expect(
       stepService.recordModelStep({
+        authorization,
         runId: created.run.id,
         executionLeaseId: lease.executionLeaseId,
         sequence: 2,
@@ -356,6 +431,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
   it('取消与完成并发竞争时应只形成一个终态并正确释放门禁', async () => {
     const created = await createQueuedRun('验证取消与完成竞争');
     const lease = await runLeaseService.claim({
+      authorization,
       runId: created.run.id,
       leaseDurationMs: 60_000,
     });
@@ -365,11 +441,13 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
         runId: created.run.id,
       }),
       runService.complete({
+        authorization,
         runId: created.run.id,
         executionLeaseId: lease.executionLeaseId,
         assistantMessageId: randomUUID(),
         assistantContent: '竞争中的最终消息',
         resolvedModelId: 'openai/test-model',
+        sourceIds: [],
       }),
     ]);
     let run = await prisma.aiRun.findUniqueOrThrow({
@@ -377,6 +455,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     });
     if (run.status === AiRunStatus.CANCELLATION_REQUESTED) {
       await runService.confirmCancellation({
+        authorization,
         runId: run.id,
         executionLeaseId: lease.executionLeaseId,
       });
@@ -415,6 +494,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
   it('过期租约并发对账时应只失败一次并拒绝旧执行器继续写入', async () => {
     const created = await createQueuedRun('验证过期租约对账');
     const lease = await runLeaseService.claim({
+      authorization,
       runId: created.run.id,
       leaseDurationMs: 60_000,
     });
@@ -456,6 +536,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
 
     await expect(
       eventService.append({
+        authorization,
         runId: run.id,
         executionLeaseId: lease.executionLeaseId,
         type: 'ASSISTANT_TEXT_DELTA',
@@ -512,18 +593,62 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
   it('真实决策上下文工具、Step、事件与完成终态应形成可补拉审计闭环', async () => {
     const created = await createQueuedRun('这项决策的基础信息是什么');
     const lease = await runLeaseService.claim({
+      authorization,
       runId: created.run.id,
       leaseDurationMs: 60_000,
     });
     const toolCallId = 'get-decision-context-e2e';
 
-    await toolCallService.start({
+    const waitingTool = await toolCallService.start({
+      authorization,
       runId: created.run.id,
       executionLeaseId: lease.executionLeaseId,
       toolCallId,
       sequence: 1,
+      status: 'WAITING',
       toolName: 'getDecisionContext',
       input: { decisionId: fixture.decisionId },
+    });
+    const repeatedWaitingTool = await toolCallService.start({
+      authorization,
+      runId: created.run.id,
+      executionLeaseId: lease.executionLeaseId,
+      toolCallId,
+      sequence: 1,
+      status: 'WAITING',
+      toolName: 'getDecisionContext',
+      input: { decisionId: fixture.decisionId },
+    });
+    const runningTool = await toolCallService.start({
+      authorization,
+      runId: created.run.id,
+      executionLeaseId: lease.executionLeaseId,
+      toolCallId,
+      sequence: 1,
+      status: 'RUNNING',
+      toolName: 'getDecisionContext',
+      input: { decisionId: fixture.decisionId },
+    });
+    const lateWaitingTool = await toolCallService.start({
+      authorization,
+      runId: created.run.id,
+      executionLeaseId: lease.executionLeaseId,
+      toolCallId,
+      sequence: 1,
+      status: 'WAITING',
+      toolName: 'getDecisionContext',
+      input: { decisionId: fixture.decisionId },
+    });
+    expect(waitingTool).toMatchObject({ status: 'WAITING', startedAt: null });
+    expect(repeatedWaitingTool.id).toBe(waitingTool.id);
+    expect(runningTool).toMatchObject({
+      id: waitingTool.id,
+      status: 'RUNNING',
+    });
+    expect(runningTool.startedAt).not.toBeNull();
+    expect(lateWaitingTool).toMatchObject({
+      id: waitingTool.id,
+      status: 'RUNNING',
     });
     const decisionContext = await runtimeQueryService.getDecisionContext(
       authorization,
@@ -558,6 +683,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
       ),
     ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_RUN_NOT_FOUND });
     await toolCallService.finish({
+      authorization,
       runId: created.run.id,
       executionLeaseId: lease.executionLeaseId,
       toolCallId,
@@ -576,12 +702,14 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
 
     const assistantMessageId = randomUUID();
     await eventService.append({
+      authorization,
       runId: created.run.id,
       executionLeaseId: lease.executionLeaseId,
       type: 'ASSISTANT_TEXT_DELTA',
       data: { messageId: assistantMessageId, delta: '已读取真实决策上下文。' },
     });
     await stepService.recordModelStep({
+      authorization,
       runId: created.run.id,
       executionLeaseId: lease.executionLeaseId,
       sequence: 1,
@@ -598,11 +726,13 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
       timeToFirstOutputMs: 10,
     });
     const completed = await runService.complete({
+      authorization,
       runId: created.run.id,
       executionLeaseId: lease.executionLeaseId,
       assistantMessageId,
       assistantContent: '已读取真实决策上下文。',
       resolvedModelId: 'mock/decision-agent',
+      sourceIds: [`decision:${fixture.decisionId}`],
     });
     expect(completed).toMatchObject({
       status: 'COMPLETED',
@@ -631,5 +761,201 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
         0,
       ),
     ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_RUN_NOT_FOUND });
+  });
+
+  it('流中撤权应原子锁定并拒绝部分恢复与迟到租约写入', async () => {
+    const unique = randomUUID();
+    const privateArea = await prisma.discussionArea.create({
+      data: {
+        projectId: fixture.projectId,
+        createdById: fixture.userId,
+        name: `AI 来源依赖私有区-${unique}`,
+        type: DiscussionAreaType.PRIVATE,
+        members: {
+          create: {
+            userId: fixture.userId,
+            role: DiscussionAreaMemberRole.MEMBER,
+          },
+        },
+      },
+    });
+    const dependentDecision = await prisma.decision.create({
+      data: {
+        title: `AI 来源依赖决策-${unique}`,
+        projectId: fixture.projectId,
+        areaId: privateArea.id,
+        creatorId: fixture.userId,
+        ownerId: fixture.userId,
+        deptId: fixture.departmentId,
+      },
+    });
+    const dependentSourceId = `decision:${dependentDecision.id}`;
+
+    try {
+      const initialRequestId = randomUUID();
+      const initialContent = '验证流中权限变化';
+      const created = await threadService.createInitialRun({
+        authorization,
+        decisionId: fixture.decisionId,
+        content: initialContent,
+        clientRequestId: initialRequestId,
+        modelRole: 'standard',
+      });
+      const lease = await runLeaseService.claim({
+        authorization,
+        runId: created.run.id,
+        leaseDurationMs: 60_000,
+      });
+      await runtimeQueryService.getDecisionContext(
+        authorization,
+        created.run.id,
+        lease.executionLeaseId,
+        fixture.decisionId,
+      );
+      await prisma.aiSourceDependency.create({
+        data: {
+          runId: created.run.id,
+          sourceId: dependentSourceId,
+          usage: AiSourceDependencyUsage.TOOL_READ,
+        },
+      });
+      await prisma.$transaction([
+        prisma.discussionAreaMember.delete({
+          where: {
+            areaId_userId: {
+              areaId: privateArea.id,
+              userId: fixture.userId,
+            },
+          },
+        }),
+        prisma.projectMember.delete({
+          where: {
+            projectId_userId: {
+              projectId: fixture.projectId,
+              userId: fixture.userId,
+            },
+          },
+        }),
+      ]);
+
+      await expect(
+        eventService.append({
+          authorization,
+          runId: created.run.id,
+          executionLeaseId: lease.executionLeaseId,
+          type: 'ASSISTANT_TEXT_DELTA',
+          data: { messageId: randomUUID(), delta: '撤权后的迟到片段' },
+        }),
+      ).rejects.toMatchObject({
+        code: API_ERROR_CODES.AI_THREAD_SCOPE_CHANGED,
+      });
+      expect(
+        await prisma.aiThread.findUniqueOrThrow({
+          where: { id: created.thread.id },
+          select: { scopeState: true, lockReason: true, activeRunId: true },
+        }),
+      ).toEqual({
+        scopeState: 'LOCKED',
+        lockReason: 'SCOPE_CHANGED',
+        activeRunId: null,
+      });
+      expect(
+        await prisma.aiRun.findUniqueOrThrow({
+          where: { id: created.run.id },
+          select: {
+            status: true,
+            cancellationReason: true,
+            executionLeaseId: true,
+            executionLeaseExpiresAt: true,
+          },
+        }),
+      ).toEqual({
+        status: 'CANCELLED',
+        cancellationReason: 'SCOPE_CHANGED',
+        executionLeaseId: null,
+        executionLeaseExpiresAt: null,
+      });
+
+      await prisma.projectMember.create({
+        data: {
+          projectId: fixture.projectId,
+          userId: fixture.userId,
+          role: ProjectMemberRole.OWNER,
+        },
+      });
+      await expect(
+        threadService.createInitialRun({
+          authorization,
+          decisionId: fixture.decisionId,
+          content: initialContent,
+          clientRequestId: initialRequestId,
+          modelRole: 'standard',
+        }),
+      ).rejects.toMatchObject({
+        code: API_ERROR_CODES.AI_THREAD_SCOPE_CHANGED,
+      });
+      await expect(
+        runtimeQueryService.assertAccessibleRun(authorization, created.run.id),
+      ).rejects.toMatchObject({
+        code: API_ERROR_CODES.AI_THREAD_SCOPE_CHANGED,
+      });
+
+      await prisma.discussionAreaMember.create({
+        data: {
+          areaId: privateArea.id,
+          userId: fixture.userId,
+          role: DiscussionAreaMemberRole.MEMBER,
+        },
+      });
+      await expect(
+        runtimeQueryService.assertAccessibleRun(authorization, created.run.id),
+      ).resolves.toMatchObject({ threadId: created.thread.id });
+      expect(
+        await prisma.aiThread.findUniqueOrThrow({
+          where: { id: created.thread.id },
+          select: { scopeState: true, lockReason: true },
+        }),
+      ).toEqual({ scopeState: 'ACTIVE', lockReason: null });
+      await expect(
+        eventService.append({
+          authorization,
+          runId: created.run.id,
+          executionLeaseId: lease.executionLeaseId,
+          type: 'ASSISTANT_TEXT_DELTA',
+          data: { messageId: randomUUID(), delta: '废租约不得复活' },
+        }),
+      ).rejects.toMatchObject({
+        code: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
+      });
+      expect(
+        await prisma.aiEvent.findFirst({
+          where: {
+            runId: created.run.id,
+            type: 'RUN_STATUS_CHANGED',
+            payload: { path: ['cancellationReason'], equals: 'SCOPE_CHANGED' },
+          },
+        }),
+      ).not.toBeNull();
+    } finally {
+      await prisma.projectMember.upsert({
+        where: {
+          projectId_userId: {
+            projectId: fixture.projectId,
+            userId: fixture.userId,
+          },
+        },
+        create: {
+          projectId: fixture.projectId,
+          userId: fixture.userId,
+          role: ProjectMemberRole.OWNER,
+        },
+        update: { role: ProjectMemberRole.OWNER },
+      });
+      await prisma.aiSourceDependency.deleteMany({
+        where: { sourceId: dependentSourceId },
+      });
+      await prisma.decision.delete({ where: { id: dependentDecision.id } });
+      await prisma.discussionArea.delete({ where: { id: privateArea.id } });
+    }
   });
 });

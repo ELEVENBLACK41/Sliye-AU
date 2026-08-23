@@ -47,6 +47,40 @@ export type AiRunUsage = {
   estimatedCostUsd: number | null;
 };
 
+/** 浏览器历史、恢复和用户操作接口允许读取的 Run 安全摘要。 */
+export type AiRunPublicSummary = {
+  /** 对外稳定的 Run 标识。 */
+  id: string;
+  /** Run 所属 Thread 标识。 */
+  threadId: string;
+  /** 本次执行回答的原始用户消息标识；重试继续引用同一消息。 */
+  userMessageId: string;
+  /** 被本次重试替代的旧 Run 标识；首次执行时为 `null`。 */
+  retryOfRunId: string | null;
+  /** Run 当前生命周期状态。 */
+  status: AiRunStatus;
+  /** 本次运行请求的逻辑语言模型角色。 */
+  modelRole: AiLanguageModelRole;
+  /** Gateway 最终实际执行的供应商模型标识；尚未调用模型时为 `null`。 */
+  resolvedModelId: string | null;
+  /** 取消终态或取消请求对应的稳定原因；其他状态为 `null`。 */
+  cancellationReason: AiRunCancellationReason | null;
+  /** 失败终态对应的稳定原因；其他状态为 `null`。 */
+  failureReason: AiRunFailureReason | null;
+  /** 失败时可供调用方稳定分支判断的业务错误码；非失败状态为 `null`。 */
+  failureCode: ApiErrorCode | null;
+  /** Run 完成后聚合的模型用量；执行结束前或未调用模型时为 `null`。 */
+  usage: AiRunUsage | null;
+  /** Run 首次进入 `RUNNING` 的时间；尚未领取时为 `null`。 */
+  startedAt: string | null;
+  /** Run 进入任一终态的时间；非终态时为 `null`。 */
+  finishedAt: string | null;
+  /** Run 创建时间，使用 ISO 8601 字符串。 */
+  createdAt: string;
+  /** Run 最后一次状态或审计字段变化时间，使用 ISO 8601 字符串。 */
+  updatedAt: string;
+};
+
 /** 一次针对用户消息执行的可审计 AI 运行。 */
 export type AiRun = {
   /** 对外稳定的 Run 标识。 */

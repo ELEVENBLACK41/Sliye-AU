@@ -6,7 +6,6 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
 import { AiRunStatus } from '../../../generated/prisma';
 import {
   toAiModelStepRecord,
@@ -16,11 +15,12 @@ import type {
   AiModelStepRecord,
   RecordAiModelStepCommand,
 } from '../types/ai-state-persistence.types';
+import { AiThreadScopeService } from './ai-thread-scope.service';
 
 @Injectable()
 export class AiStepService {
-  /** 注入数据库以原子保存 Step 并更新 Run 汇总。 */
-  constructor(private readonly prisma: PrismaService) {}
+  /** 注入 Thread 范围服务以在同一事务中复核来源并保存 Step。 */
+  constructor(private readonly threadScopeService: AiThreadScopeService) {}
 
   /** 持久化一次模型调用，并把本次 Token 和成本累加到所属 Run。 */
   async recordModelStep(
@@ -32,55 +32,60 @@ export class AiStepService {
       command.finishedAt.getTime() - command.startedAt.getTime();
 
     try {
-      const step = await this.prisma.$transaction(async (tx) => {
-        const fenced = await tx.aiRun.updateMany({
-          where: {
-            id: command.runId,
-            status: {
-              in: [AiRunStatus.RUNNING, AiRunStatus.CANCELLATION_REQUESTED],
+      const step = await this.threadScopeService.withAccessibleRun(
+        command.authorization,
+        command.runId,
+        [],
+        async (tx) => {
+          const fenced = await tx.aiRun.updateMany({
+            where: {
+              id: command.runId,
+              status: {
+                in: [AiRunStatus.RUNNING, AiRunStatus.CANCELLATION_REQUESTED],
+              },
+              executionLeaseId: command.executionLeaseId,
+              executionLeaseExpiresAt: { gt: new Date() },
             },
-            executionLeaseId: command.executionLeaseId,
-            executionLeaseExpiresAt: { gt: new Date() },
-          },
-          data: {
-            modelCallCount: { increment: 1 },
-            inputTokens: { increment: command.inputTokens },
-            outputTokens: { increment: command.outputTokens },
-            totalTokens: { increment: totalTokens },
-            estimatedCostUsd: { increment: command.estimatedCostUsd },
-          },
-        });
-        if (fenced.count !== 1) {
-          const exists = await tx.aiRun.findUnique({
-            where: { id: command.runId },
-            select: { id: true },
+            data: {
+              modelCallCount: { increment: 1 },
+              inputTokens: { increment: command.inputTokens },
+              outputTokens: { increment: command.outputTokens },
+              totalTokens: { increment: totalTokens },
+              estimatedCostUsd: { increment: command.estimatedCostUsd },
+            },
           });
-          if (!exists) {
-            this.throwRunNotFound();
+          if (fenced.count !== 1) {
+            const exists = await tx.aiRun.findUnique({
+              where: { id: command.runId },
+              select: { id: true },
+            });
+            if (!exists) {
+              this.throwRunNotFound();
+            }
+            this.throwExecutionLeaseInvalid();
           }
-          this.throwExecutionLeaseInvalid();
-        }
-        const created = await tx.aiStep.create({
-          data: {
-            runId: command.runId,
-            sequence: command.sequence,
-            modelRole: toPrismaAiLanguageModelRole(command.modelRole),
-            resolvedModelId: command.resolvedModelId,
-            provider: command.provider,
-            responseId: command.responseId,
-            finishReason: command.finishReason,
-            inputTokens: command.inputTokens,
-            outputTokens: command.outputTokens,
-            totalTokens,
-            estimatedCostUsd: command.estimatedCostUsd,
-            startedAt: command.startedAt,
-            finishedAt: command.finishedAt,
-            durationMs,
-            timeToFirstOutputMs: command.timeToFirstOutputMs,
-          },
-        });
-        return created;
-      });
+          const created = await tx.aiStep.create({
+            data: {
+              runId: command.runId,
+              sequence: command.sequence,
+              modelRole: toPrismaAiLanguageModelRole(command.modelRole),
+              resolvedModelId: command.resolvedModelId,
+              provider: command.provider,
+              responseId: command.responseId,
+              finishReason: command.finishReason,
+              inputTokens: command.inputTokens,
+              outputTokens: command.outputTokens,
+              totalTokens,
+              estimatedCostUsd: command.estimatedCostUsd,
+              startedAt: command.startedAt,
+              finishedAt: command.finishedAt,
+              durationMs,
+              timeToFirstOutputMs: command.timeToFirstOutputMs,
+            },
+          });
+          return created;
+        },
+      );
 
       return toAiModelStepRecord(step);
     } catch (error) {

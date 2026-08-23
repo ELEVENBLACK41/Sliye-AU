@@ -3,10 +3,16 @@
  */
 
 /** 第 2.4 阶段允许持久化的工具调用状态。 */
-export const AI_TOOL_CALL_STATUSES = ['RUNNING', 'COMPLETED', 'FAILED'] as const;
+export const AI_TOOL_CALL_STATUSES = ['WAITING', 'RUNNING', 'COMPLETED', 'FAILED'] as const;
 
 /** 一次工具调用的当前审计状态。 */
 export type AiToolCallStatus = (typeof AI_TOOL_CALL_STATUSES)[number];
+
+/** Thread 来源依赖的两种稳定登记用途。 */
+export const AI_SOURCE_DEPENDENCY_USAGES = ['TOOL_READ', 'ANSWER_CITATION'] as const;
+
+/** 来源由真实工具读取或由助手最终回答引用。 */
+export type AiSourceDependencyUsage = (typeof AI_SOURCE_DEPENDENCY_USAGES)[number];
 
 /** 当前唯一开放的真实只读工具名称。 */
 export type AiToolName = 'getDecisionContext';
@@ -73,8 +79,8 @@ export type AiToolCall = {
   resultSummary: GetDecisionContextToolResultSummary | null;
   /** 失败时的稳定错误码；其他状态为空。 */
   errorCode: string | null;
-  /** 工具开始时间，使用 ISO 8601 字符串。 */
-  startedAt: string;
+  /** 工具开始时间；等待执行时为空。 */
+  startedAt: string | null;
   /** 工具结束时间；仍运行时为空。 */
   finishedAt: string | null;
   /** 工具完整耗时；仍运行时为空。 */

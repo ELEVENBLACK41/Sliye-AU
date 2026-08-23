@@ -4,7 +4,6 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import type { AiLanguageModelRole } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
@@ -16,11 +15,10 @@ import {
   AiThreadScopeState,
   type Prisma,
 } from '../../../generated/prisma';
-import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 import {
   toAiMessage,
-  toAiRun,
+  toAiRunPublicSummary,
   toAiThread,
   toAiLanguageModelRole,
   toPrismaAiLanguageModelRole,
@@ -31,6 +29,7 @@ import type {
   CreateThreadMessageRunCommand,
   RetryAiRunCommand,
 } from '../types/ai-state-persistence.types';
+import { AiThreadScopeService } from './ai-thread-scope.service';
 
 /** 第一版用户消息允许持久化的最大 Unicode 字符数。 */
 const MAX_AI_MESSAGE_CHARACTERS = 20_000;
@@ -54,20 +53,29 @@ type AiRequestDeduplicationRecord = Prisma.AiRequestDeduplicationGetPayload<{
   include: typeof aiRequestDeduplicationInclude;
 }>;
 
-/** 已通过当前权限校验的 Decision 绑定信息。 */
-type AccessibleAiDecision = {
-  /** 决策主键。 */
-  id: number;
-  /** 决策所属项目主键。 */
-  projectId: number;
+/** 浏览器幂等请求在数据库中的稳定查找键。 */
+type AiIdempotencyLookup = {
+  /** 请求所属用户主键。 */
+  userId: number;
+  /** 创建 Thread、追加消息或重试 Run 的操作类型。 */
+  operation: AiRequestOperation;
+  /** 由服务端生成的 Decision、Thread 或 Run 范围键。 */
+  scopeKey: string;
+  /** 浏览器生成的 UUID 幂等键。 */
+  clientRequestId: string;
 };
+
+/** 初始创建事务只返回新结果，或把旧幂等记录交给 Thread 全范围事务读取。 */
+type AiInitialRunTransactionOutcome =
+  | { kind: 'created'; value: AiRunCreationResult }
+  | { kind: 'replay'; threadId: string };
 
 @Injectable()
 export class AiThreadService {
   /** 注入数据库和统一授权查询能力。 */
   constructor(
     private readonly prisma: PrismaService,
-    private readonly authorizationService: AuthorizationService,
+    private readonly threadScopeService: AiThreadScopeService,
   ) {}
 
   /** 原子创建绑定 Decision 的 Thread、首条用户消息、首个 Run 和幂等记录。 */
@@ -76,27 +84,19 @@ export class AiThreadService {
   ): Promise<AiRunCreationResult> {
     const content = this.normalizeMessageContent(command.content);
     this.assertUuid(command.clientRequestId, 'clientRequestId');
-    const decision = await this.findAccessibleDecision(
-      command.authorization,
-      command.decisionId,
-    );
-    const scopeKey = this.createDecisionScopeKey(decision.id);
+    const scopeKey = this.createDecisionScopeKey(command.decisionId);
     const fingerprint = this.createRequestFingerprint({
       operation: AiRequestOperation.CREATE_THREAD,
       scopeKey,
       content,
       modelRole: command.modelRole,
     });
-    const existing = await this.prepareIdempotentRequest({
+    const idempotency = {
       userId: command.authorization.userId,
       operation: AiRequestOperation.CREATE_THREAD,
       scopeKey,
       clientRequestId: command.clientRequestId,
-    });
-
-    if (existing) {
-      return this.resolveIdempotentResult(existing, fingerprint);
-    }
+    } as const;
 
     const threadId = randomUUID();
     const messageId = randomUUID();
@@ -104,65 +104,85 @@ export class AiThreadService {
     const expiresAt = new Date(Date.now() + AI_IDEMPOTENCY_TTL_MILLISECONDS);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        await tx.aiThread.create({
-          data: {
-            id: threadId,
-            ownerUserId: command.authorization.userId,
-            projectId: decision.projectId,
-            decisionId: decision.id,
-            title: this.createThreadTitle(content),
-          },
-        });
-        const message = await tx.aiMessage.create({
-          data: {
-            id: messageId,
-            threadId,
-            authorUserId: command.authorization.userId,
-            role: AiMessageRole.USER,
-            content,
-          },
-        });
-        const run = await tx.aiRun.create({
-          data: {
-            id: runId,
-            threadId,
-            userMessageId: messageId,
-            modelRole: toPrismaAiLanguageModelRole(command.modelRole),
-          },
-        });
-        const thread = await tx.aiThread.update({
-          where: { id: threadId },
-          data: { activeRunId: runId },
-        });
-        await tx.aiRequestDeduplication.create({
-          data: {
-            userId: command.authorization.userId,
-            operation: AiRequestOperation.CREATE_THREAD,
-            scopeKey,
-            clientRequestId: command.clientRequestId,
-            requestFingerprint: fingerprint,
-            threadId,
-            messageId,
-            runId,
-            expiresAt,
-          },
-        });
+      const outcome =
+        await this.threadScopeService.withAccessibleDecision<AiInitialRunTransactionOutcome>(
+          command.authorization,
+          command.decisionId,
+          async (tx, decision) => {
+            const existing = await this.prepareIdempotentReference(
+              tx,
+              idempotency,
+            );
+            if (existing) {
+              return { kind: 'replay', threadId: existing.threadId };
+            }
 
-        return {
-          thread: toAiThread(thread),
-          message: toAiMessage(message),
-          run: toAiRun(run),
-          replayed: false,
-        };
-      });
+            await tx.aiThread.create({
+              data: {
+                id: threadId,
+                ownerUserId: command.authorization.userId,
+                projectId: decision.projectId,
+                decisionId: decision.decisionId,
+                title: this.createThreadTitle(content),
+              },
+            });
+            const message = await tx.aiMessage.create({
+              data: {
+                id: messageId,
+                threadId,
+                authorUserId: command.authorization.userId,
+                role: AiMessageRole.USER,
+                content,
+              },
+            });
+            const run = await tx.aiRun.create({
+              data: {
+                id: runId,
+                threadId,
+                userMessageId: messageId,
+                modelRole: toPrismaAiLanguageModelRole(command.modelRole),
+              },
+            });
+            const thread = await tx.aiThread.update({
+              where: { id: threadId },
+              data: { activeRunId: runId },
+            });
+            await tx.aiRequestDeduplication.create({
+              data: {
+                ...idempotency,
+                requestFingerprint: fingerprint,
+                threadId,
+                messageId,
+                runId,
+                expiresAt,
+              },
+            });
+
+            return {
+              kind: 'created',
+              value: {
+                thread: toAiThread(thread),
+                message: toAiMessage(message),
+                run: toAiRunPublicSummary(run),
+                replayed: false,
+              },
+            };
+          },
+        );
+
+      return outcome.kind === 'created'
+        ? outcome.value
+        : this.readAccessibleIdempotentResult(
+            command.authorization,
+            outcome.threadId,
+            idempotency,
+            fingerprint,
+          );
     } catch (error) {
       return this.resolveConcurrentIdempotentRequest(
         error,
-        command.authorization.userId,
-        AiRequestOperation.CREATE_THREAD,
-        scopeKey,
-        command.clientRequestId,
+        command.authorization,
+        idempotency,
         fingerprint,
       );
     }
@@ -175,98 +195,95 @@ export class AiThreadService {
     const content = this.normalizeMessageContent(command.content);
     this.assertUuid(command.threadId, 'threadId');
     this.assertUuid(command.clientRequestId, 'clientRequestId');
-    const currentThread = await this.findAccessibleThread(
-      command.authorization,
-      command.threadId,
-    );
-    const scopeKey = this.createThreadScopeKey(currentThread.id);
+    const scopeKey = this.createThreadScopeKey(command.threadId);
     const fingerprint = this.createRequestFingerprint({
       operation: AiRequestOperation.SEND_MESSAGE,
       scopeKey,
       content,
       modelRole: command.modelRole,
     });
-    const existing = await this.prepareIdempotentRequest({
+    const idempotency = {
       userId: command.authorization.userId,
       operation: AiRequestOperation.SEND_MESSAGE,
       scopeKey,
       clientRequestId: command.clientRequestId,
-    });
-
-    if (existing) {
-      return this.resolveIdempotentResult(existing, fingerprint);
-    }
+    } as const;
 
     const messageId = randomUUID();
     const runId = randomUUID();
     const expiresAt = new Date(Date.now() + AI_IDEMPOTENCY_TTL_MILLISECONDS);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        // 先锁定 Thread 行再插入带外键的 Message/Run，避免并发事务在外键锁升级时形成死锁。
-        const gate = await tx.aiThread.updateMany({
-          where: {
-            id: currentThread.id,
-            ownerUserId: command.authorization.userId,
-            scopeState: AiThreadScopeState.ACTIVE,
-            activeRunId: null,
-          },
-          data: { updatedAt: new Date() },
-        });
+      return await this.threadScopeService.withAccessibleThread(
+        command.authorization,
+        command.threadId,
+        [],
+        async (tx, currentThread) => {
+          const existing = await this.prepareIdempotentRequest(tx, idempotency);
+          if (existing) {
+            return this.resolveIdempotentResult(existing, fingerprint);
+          }
 
-        if (gate.count !== 1) {
-          this.throwThreadRunActive();
-        }
+          // 先锁定 Thread 行再插入带外键的 Message/Run，避免并发事务在外键锁升级时形成死锁。
+          const gate = await tx.aiThread.updateMany({
+            where: {
+              id: currentThread.threadId,
+              ownerUserId: command.authorization.userId,
+              scopeState: AiThreadScopeState.ACTIVE,
+              activeRunId: null,
+            },
+            data: { updatedAt: new Date() },
+          });
 
-        const message = await tx.aiMessage.create({
-          data: {
-            id: messageId,
-            threadId: currentThread.id,
-            authorUserId: command.authorization.userId,
-            role: AiMessageRole.USER,
-            content,
-          },
-        });
-        const run = await tx.aiRun.create({
-          data: {
-            id: runId,
-            threadId: currentThread.id,
-            userMessageId: messageId,
-            modelRole: toPrismaAiLanguageModelRole(command.modelRole),
-          },
-        });
-        const thread = await tx.aiThread.update({
-          where: { id: currentThread.id },
-          data: { activeRunId: runId },
-        });
-        await tx.aiRequestDeduplication.create({
-          data: {
-            userId: command.authorization.userId,
-            operation: AiRequestOperation.SEND_MESSAGE,
-            scopeKey,
-            clientRequestId: command.clientRequestId,
-            requestFingerprint: fingerprint,
-            threadId: currentThread.id,
-            messageId,
-            runId,
-            expiresAt,
-          },
-        });
+          if (gate.count !== 1) {
+            this.throwThreadRunActive();
+          }
 
-        return {
-          thread: toAiThread(thread),
-          message: toAiMessage(message),
-          run: toAiRun(run),
-          replayed: false,
-        };
-      });
+          const message = await tx.aiMessage.create({
+            data: {
+              id: messageId,
+              threadId: currentThread.threadId,
+              authorUserId: command.authorization.userId,
+              role: AiMessageRole.USER,
+              content,
+            },
+          });
+          const run = await tx.aiRun.create({
+            data: {
+              id: runId,
+              threadId: currentThread.threadId,
+              userMessageId: messageId,
+              modelRole: toPrismaAiLanguageModelRole(command.modelRole),
+            },
+          });
+          const thread = await tx.aiThread.update({
+            where: { id: currentThread.threadId },
+            data: { activeRunId: runId },
+          });
+          await tx.aiRequestDeduplication.create({
+            data: {
+              ...idempotency,
+              requestFingerprint: fingerprint,
+              threadId: currentThread.threadId,
+              messageId,
+              runId,
+              expiresAt,
+            },
+          });
+
+          return {
+            thread: toAiThread(thread),
+            message: toAiMessage(message),
+            run: toAiRunPublicSummary(run),
+            replayed: false,
+          };
+        },
+      );
     } catch (error) {
       return this.resolveConcurrentIdempotentRequest(
         error,
-        command.authorization.userId,
-        AiRequestOperation.SEND_MESSAGE,
-        scopeKey,
-        command.clientRequestId,
+        command.authorization,
+        idempotency,
         fingerprint,
       );
     }
@@ -276,233 +293,204 @@ export class AiThreadService {
   async retryRun(command: RetryAiRunCommand): Promise<AiRunCreationResult> {
     this.assertUuid(command.runId, 'runId');
     this.assertUuid(command.clientRequestId, 'clientRequestId');
-    const source = await this.prisma.aiRun.findFirst({
-      where: {
-        id: command.runId,
-        thread: { ownerUserId: command.authorization.userId },
-      },
-      include: { userMessage: true },
-    });
-    if (!source) {
-      this.throwRunNotFound();
-    }
-    await this.findAccessibleThread(command.authorization, source.threadId);
-    if (
-      source.status !== AiRunStatus.FAILED &&
-      source.status !== AiRunStatus.CANCELLED
-    ) {
-      this.throwRunNotRetryable();
-    }
-
-    const scopeKey = this.createRunScopeKey(source.id);
-    const modelRole = toAiLanguageModelRole(source.modelRole);
-    const fingerprint = this.createRequestFingerprint({
-      operation: AiRequestOperation.RETRY_RUN,
-      scopeKey,
-      content: source.userMessage.content,
-      modelRole,
-    });
-    const existing = await this.prepareIdempotentRequest({
+    const scopeKey = this.createRunScopeKey(command.runId);
+    const idempotency = {
       userId: command.authorization.userId,
       operation: AiRequestOperation.RETRY_RUN,
       scopeKey,
       clientRequestId: command.clientRequestId,
-    });
-    if (existing) {
-      return this.resolveIdempotentResult(existing, fingerprint);
-    }
+    } as const;
 
     const runId = randomUUID();
     const expiresAt = new Date(Date.now() + AI_IDEMPOTENCY_TTL_MILLISECONDS);
+    let fingerprint: string | null = null;
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const gate = await tx.aiThread.updateMany({
-          where: {
-            id: source.threadId,
-            ownerUserId: command.authorization.userId,
-            scopeState: AiThreadScopeState.ACTIVE,
-            activeRunId: null,
-          },
-          data: { updatedAt: new Date() },
-        });
-        if (gate.count !== 1) {
-          this.throwThreadRunActive();
-        }
+      return await this.threadScopeService.withAccessibleRun(
+        command.authorization,
+        command.runId,
+        [],
+        async (tx, accessible) => {
+          const source = await tx.aiRun.findUniqueOrThrow({
+            where: { id: command.runId },
+            include: { userMessage: true },
+          });
+          if (
+            source.status !== AiRunStatus.FAILED &&
+            source.status !== AiRunStatus.CANCELLED
+          ) {
+            this.throwRunNotRetryable();
+          }
 
-        const retrySource = await tx.aiRun.findFirst({
-          where: {
-            id: source.id,
-            threadId: source.threadId,
-            status: { in: [AiRunStatus.FAILED, AiRunStatus.CANCELLED] },
-          },
-          include: { userMessage: true },
-        });
-        if (!retrySource) {
-          this.throwRunNotRetryable();
-        }
-        const run = await tx.aiRun.create({
-          data: {
-            id: runId,
-            threadId: retrySource.threadId,
-            userMessageId: retrySource.userMessageId,
-            retryOfRunId: retrySource.id,
-            modelRole: retrySource.modelRole,
-          },
-        });
-        const thread = await tx.aiThread.update({
-          where: { id: retrySource.threadId },
-          data: { activeRunId: run.id },
-        });
-        await tx.aiRequestDeduplication.create({
-          data: {
-            userId: command.authorization.userId,
+          fingerprint = this.createRequestFingerprint({
             operation: AiRequestOperation.RETRY_RUN,
             scopeKey,
-            clientRequestId: command.clientRequestId,
-            requestFingerprint: fingerprint,
-            threadId: retrySource.threadId,
-            messageId: retrySource.userMessageId,
-            runId: run.id,
-            expiresAt,
-          },
-        });
+            content: source.userMessage.content,
+            modelRole: toAiLanguageModelRole(source.modelRole),
+          });
+          const existing = await this.prepareIdempotentRequest(tx, idempotency);
+          if (existing) {
+            return this.resolveIdempotentResult(existing, fingerprint);
+          }
 
-        return {
-          thread: toAiThread(thread),
-          message: toAiMessage(retrySource.userMessage),
-          run: toAiRun(run),
-          replayed: false,
-        };
-      });
+          const gate = await tx.aiThread.updateMany({
+            where: {
+              id: accessible.threadId,
+              ownerUserId: command.authorization.userId,
+              scopeState: AiThreadScopeState.ACTIVE,
+              activeRunId: null,
+            },
+            data: { updatedAt: new Date() },
+          });
+          if (gate.count !== 1) {
+            this.throwThreadRunActive();
+          }
+
+          const run = await tx.aiRun.create({
+            data: {
+              id: runId,
+              threadId: accessible.threadId,
+              userMessageId: source.userMessageId,
+              retryOfRunId: source.id,
+              modelRole: source.modelRole,
+            },
+          });
+          const thread = await tx.aiThread.update({
+            where: { id: accessible.threadId },
+            data: { activeRunId: run.id },
+          });
+          await tx.aiRequestDeduplication.create({
+            data: {
+              ...idempotency,
+              requestFingerprint: fingerprint,
+              threadId: accessible.threadId,
+              messageId: source.userMessageId,
+              runId: run.id,
+              expiresAt,
+            },
+          });
+
+          return {
+            thread: toAiThread(thread),
+            message: toAiMessage(source.userMessage),
+            run: toAiRunPublicSummary(run),
+            replayed: false,
+          };
+        },
+      );
     } catch (error) {
+      if (!fingerprint) {
+        throw error;
+      }
       return this.resolveConcurrentIdempotentRequest(
         error,
-        command.authorization.userId,
-        AiRequestOperation.RETRY_RUN,
-        scopeKey,
-        command.clientRequestId,
+        command.authorization,
+        idempotency,
         fingerprint,
       );
     }
   }
 
-  /** 查询当前用户仍可访问的 Decision，并由服务端解析真实 projectId。 */
-  private async findAccessibleDecision(
-    authorization: AuthorizationContext,
-    decisionId: number,
-  ): Promise<AccessibleAiDecision> {
-    this.authorizationService.assertPermission(authorization, 'ai:chat:use');
-    this.authorizationService.assertPermission(authorization, 'decision:read');
-
-    if (!Number.isInteger(decisionId) || decisionId <= 0) {
-      this.throwValidationError('decisionId', '决策主键必须是正整数');
-    }
-
-    const scopeWhere = await this.authorizationService.buildDecisionWhere(
-      authorization,
-      'decision:read',
-    );
-    const decision = await this.prisma.decision.findFirst({
-      where: { AND: [{ id: decisionId }, scopeWhere] },
-      select: { id: true, projectId: true },
-    });
-
-    if (!decision) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.DECISION_NOT_FOUND,
-        message: '决策不存在或当前账号无权访问',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
-
-    return decision;
-  }
-
-  /** 查询当前用户拥有且仍处于可访问范围内的 Thread。 */
-  private async findAccessibleThread(
-    authorization: AuthorizationContext,
-    threadId: string,
-  ): Promise<{ id: string }> {
-    const thread = await this.prisma.aiThread.findFirst({
-      where: { id: threadId, ownerUserId: authorization.userId },
-      select: { id: true, decisionId: true, scopeState: true },
-    });
-
-    if (!thread) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.AI_THREAD_NOT_FOUND,
-        message: 'AI 会话不存在或当前账号无权访问',
-        status: HttpStatus.NOT_FOUND,
-      });
-    }
-
-    if (thread.scopeState === AiThreadScopeState.LOCKED) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.AI_THREAD_SCOPE_CHANGED,
-        message: 'AI 会话的业务权限范围已经变化',
-        status: HttpStatus.CONFLICT,
-      });
-    }
-
-    await this.findAccessibleDecision(authorization, thread.decisionId);
-    return { id: thread.id };
-  }
-
-  /** 删除已经过期的同键记录，并返回仍在有效期内的幂等结果。 */
-  private async prepareIdempotentRequest(options: {
-    userId: number;
-    operation: AiRequestOperation;
-    scopeKey: string;
-    clientRequestId: string;
-  }): Promise<AiRequestDeduplicationRecord | null> {
+  /** 在调用方权限事务中删除过期记录，并读取完整幂等结果。 */
+  private async prepareIdempotentRequest(
+    tx: Prisma.TransactionClient,
+    options: AiIdempotencyLookup,
+  ): Promise<AiRequestDeduplicationRecord | null> {
     const now = new Date();
-    await this.prisma.aiRequestDeduplication.deleteMany({
+    await tx.aiRequestDeduplication.deleteMany({
       where: { ...options, expiresAt: { lte: now } },
     });
 
-    return this.prisma.aiRequestDeduplication.findFirst({
+    return tx.aiRequestDeduplication.findFirst({
       where: { ...options, expiresAt: { gt: now } },
       include: aiRequestDeduplicationInclude,
     });
   }
 
-  /** 并发失败后重新读取胜出请求；没有胜出记录时保留原始异常。 */
-  private async resolveConcurrentIdempotentRequest(
-    error: unknown,
-    userId: number,
-    operation: AiRequestOperation,
-    scopeKey: string,
-    clientRequestId: string,
-    fingerprint: string,
-  ): Promise<AiRunCreationResult> {
-    const concurrent = await this.prisma.aiRequestDeduplication.findFirst({
-      where: {
-        userId,
-        operation,
-        scopeKey,
-        clientRequestId,
-        expiresAt: { gt: new Date() },
-      },
-      include: aiRequestDeduplicationInclude,
+  /** 初始创建仅读取旧记录的 Thread 引用，正文稍后由完整范围事务恢复。 */
+  private async prepareIdempotentReference(
+    tx: Prisma.TransactionClient,
+    options: AiIdempotencyLookup,
+  ): Promise<{ threadId: string } | null> {
+    const now = new Date();
+    await tx.aiRequestDeduplication.deleteMany({
+      where: { ...options, expiresAt: { lte: now } },
     });
 
-    if (concurrent) {
-      return this.resolveIdempotentResult(concurrent, fingerprint);
+    return tx.aiRequestDeduplication.findFirst({
+      where: { ...options, expiresAt: { gt: now } },
+      select: { threadId: true },
+    });
+  }
+
+  /** 在 Thread 全依赖复核事务中重新读取旧幂等结果，避免正文恢复越权。 */
+  private async readAccessibleIdempotentResult(
+    authorization: AuthorizationContext,
+    threadId: string,
+    options: AiIdempotencyLookup,
+    fingerprint: string,
+  ): Promise<AiRunCreationResult> {
+    return this.threadScopeService.withAccessibleThread(
+      authorization,
+      threadId,
+      [],
+      async (tx) => {
+        const record = await tx.aiRequestDeduplication.findFirst({
+          where: { ...options, expiresAt: { gt: new Date() } },
+          include: aiRequestDeduplicationInclude,
+        });
+        if (!record) {
+          this.throwIdempotencyConflict();
+        }
+        return this.resolveIdempotentResult(record, fingerprint);
+      },
+    );
+  }
+
+  /** 唯一键竞争后只读取引用，再通过 Thread 权限事务恢复胜出请求。 */
+  private async resolveConcurrentIdempotentRequest(
+    error: unknown,
+    authorization: AuthorizationContext,
+    options: AiIdempotencyLookup,
+    fingerprint: string,
+  ): Promise<AiRunCreationResult> {
+    if (!this.isUniqueConstraintError(error)) {
+      throw error;
     }
 
-    if (
-      error instanceof PrismaClientKnownRequestError &&
+    const concurrent = await this.prisma.aiRequestDeduplication.findFirst({
+      where: { ...options, expiresAt: { gt: new Date() } },
+      select: { threadId: true },
+    });
+    if (!concurrent) {
+      this.throwIdempotencyConflict();
+    }
+
+    return this.readAccessibleIdempotentResult(
+      authorization,
+      concurrent.threadId,
+      options,
+      fingerprint,
+    );
+  }
+
+  /** 跨 Prisma 运行时包边界按稳定错误码识别唯一键冲突。 */
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
       error.code === 'P2002'
-    ) {
-      throw new BusinessException({
-        code: API_ERROR_CODES.AI_IDEMPOTENCY_CONFLICT,
-        message: 'AI 请求幂等记录发生冲突，请刷新后重试',
-        status: HttpStatus.CONFLICT,
-      });
-    }
+    );
+  }
 
-    throw error;
+  /** 返回不泄漏胜出记录内容的稳定幂等竞争错误。 */
+  private throwIdempotencyConflict(): never {
+    throw new BusinessException({
+      code: API_ERROR_CODES.AI_IDEMPOTENCY_CONFLICT,
+      message: 'AI 请求幂等记录发生冲突，请刷新后重试',
+      status: HttpStatus.CONFLICT,
+    });
   }
 
   /** 校验幂等重放载荷一致，并返回原始 Thread、Message 和 Run。 */
@@ -521,7 +509,7 @@ export class AiThreadService {
     return {
       thread: toAiThread(record.thread),
       message: toAiMessage(record.message),
-      run: toAiRun(record.run),
+      run: toAiRunPublicSummary(record.run),
       replayed: true,
     };
   }
@@ -602,15 +590,6 @@ export class AiThreadService {
       code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE,
       message: '当前 AI 会话已有正在处理的请求',
       status: HttpStatus.CONFLICT,
-    });
-  }
-
-  /** 抛出不存在或不属于当前用户的 Run 错误。 */
-  private throwRunNotFound(): never {
-    throw new BusinessException({
-      code: API_ERROR_CODES.AI_RUN_NOT_FOUND,
-      message: 'AI 运行不存在或当前账号无权访问',
-      status: HttpStatus.NOT_FOUND,
     });
   }
 

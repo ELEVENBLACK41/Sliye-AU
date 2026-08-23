@@ -1,188 +1,394 @@
 /**
- * 本文件实现绑定单项决策的真实 Agent 流式对话、工具状态、停止和失败重试界面。
+ * 本文件实现可恢复的决策过程 AI 对话区，统一首次流与持久化历史的结构化部件。
  */
 'use client';
 
-import { useState } from 'react';
-import { Bot, RefreshCw, Send, Square, UserRound } from 'lucide-react';
+import type { MutableRefObject } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArchiveRestore, Bot, History, LoaderCircle, Send, Square } from 'lucide-react';
 
+import type {
+  AiRunPublicSummary,
+  AiThreadDetail,
+  AiThreadMessageHistoryItem,
+} from '@workspace/contracts/ai';
+import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
+import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
+import { Skeleton } from '@workspace/ui/components/skeleton';
+import { Textarea } from '@workspace/ui/components/textarea';
+
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from '@/components/ai-elements/conversation';
+import { ApiClientError } from '@/services/request';
 
 import { useAiChat } from '../hooks/use-ai-chat';
+import type { AiDecisionUiMessage } from '../types/ai-message';
+import {
+  createAiToolCallIdentity,
+  type AiRunLocatedMetadata,
+  type AiRunRequestContext,
+} from '../utils/ai-chat-session';
+import { getAiThreadScopeLabel } from '../utils/ai-thread-response';
+import { projectAiThreadTimeline, toAiDecisionUiMessages } from '../utils/ai-thread-timeline';
+import { AiHistoricalTimelinePart, AiLiveMessageParts } from './ai-chat-timeline-parts';
 
-/** 对话面板可选的预填决策上下文。 */
+/** 对话面板属性。 */
 export type AiChatPanelProps = {
-  /** 从决策页面跳转时预填的决策主键。 */
+  /** 显式切换 Thread 时变化的 Chat 实例键。 */
+  sessionId: string;
+  /** 当前已授权 Thread 详情；新会话为空。 */
+  thread: AiThreadDetail | null;
+  /** 当前恢复到内存的持久化历史页。 */
+  historyItems: AiThreadMessageHistoryItem[];
+  /** Thread 消息首屏是否仍在加载。 */
+  historyLoading: boolean;
+  /** Thread 详情或消息读取错误。 */
+  historyError: string | null;
+  /** 是否仍有更早的持久化消息。 */
+  hasOlderMessages: boolean;
+  /** 新会话从业务页面跳转时预填的决策主键。 */
   initialDecisionId?: number;
+  /** 移动端打开历史抽屉。 */
+  onOpenHistory: () => void;
+  /** 首个流元数据到达时同步路由和 Thread 详情。 */
+  onRunLocated: (metadata: AiRunLocatedMetadata) => void;
+  /** Run 结束后刷新并返回权威消息。 */
+  onRunSettled: (context: AiRunRequestContext) => Promise<AiDecisionUiMessage[] | null>;
+  /** 加载更早消息。 */
+  onLoadOlderMessages: () => void;
+  /** 重新加载当前 Thread。 */
+  onReloadThread: () => void;
+  /** 恢复当前已归档 Thread。 */
+  onRestoreThread: () => Promise<boolean>;
+  /** 让工作区在显式切换前只断开浏览器消费。 */
+  disconnectRef: MutableRefObject<(() => Promise<void>) | null>;
 };
 
-/** 渲染经过权限保护的流式 AI 对话面板。 */
-export function AiChatPanel({ initialDecisionId }: AiChatPanelProps) {
+/** 渲染含消息时间流、输入区、停止和重试入口的主聊天面板。 */
+export function AiChatPanel({
+  sessionId,
+  thread,
+  historyItems,
+  historyLoading,
+  historyError,
+  hasOlderMessages,
+  initialDecisionId,
+  onOpenHistory,
+  onRunLocated,
+  onRunSettled,
+  onLoadOlderMessages,
+  onReloadThread,
+  onRestoreThread,
+  disconnectRef,
+}: AiChatPanelProps) {
   const [input, setInput] = useState('');
-  const [decisionIdInput, setDecisionIdInput] = useState(initialDecisionId ? String(initialDecisionId) : '');
-  const { messages, status, stop, error, send, retry, threadId, runId, canRetry } = useAiChat();
-  const isRunning = status === 'submitted' || status === 'streaming';
-  const decisionId = Number(decisionIdInput);
+  const [decisionIdInput, setDecisionIdInput] = useState(
+    initialDecisionId ? String(initialDecisionId) : '',
+  );
+  const [actionError, setActionError] = useState<string | null>(null);
+  const initialMessages = useMemo(() => toAiDecisionUiMessages(historyItems), [historyItems]);
+  const timeline = useMemo(() => projectAiThreadTimeline(historyItems), [historyItems]);
+  const persistedMessageIds = useMemo(
+    () => new Set(historyItems.map((item) => item.message.id)),
+    [historyItems],
+  );
+  const persistedToolCallKeys = useMemo(
+    () =>
+      new Set(
+        historyItems.flatMap((item) =>
+          item.runs.flatMap((history) =>
+            history.toolCalls.map((toolCall) =>
+              createAiToolCallIdentity(history.run.id, toolCall.toolCallId),
+            ),
+          ),
+        ),
+      ),
+    [historyItems],
+  );
+  const chat = useAiChat({
+    sessionId,
+    initialThreadId: thread?.id ?? null,
+    initialRunId: thread?.activeRunId ?? null,
+    initialMessages,
+    onRunLocated,
+    onRunSettled,
+  });
+  const isBrowserStreaming = chat.status === 'submitted' || chat.status === 'streaming';
+  const isBusy = isBrowserStreaming || Boolean(thread?.activeRunId);
+  const isArchived = Boolean(thread?.archivedAt);
+  const decisionId = thread?.decision.id ?? Number(decisionIdInput);
   const hasDecisionId = Number.isInteger(decisionId) && decisionId > 0;
 
+  useEffect(() => {
+    disconnectRef.current = chat.disconnect;
+    return () => {
+      disconnectRef.current = null;
+    };
+  }, [chat.disconnect, disconnectRef]);
+
+  /** 校验输入后提交消息；失败时保留原输入供用户修正或重试。 */
+  const handleSubmit = async (): Promise<void> => {
+    const message = input.trim();
+    if (!message || !hasDecisionId || isBusy || isArchived) {
+      return;
+    }
+
+    setActionError(null);
+    try {
+      const isPersisted = await chat.send(message, decisionId);
+      if (isPersisted) {
+        setInput('');
+      }
+    } catch (error) {
+      setActionError(formatAiChatError(error));
+    }
+  };
+
+  /** 请求停止当前 Run，并让权威历史负责最终状态回填。 */
+  const handleStop = async (): Promise<void> => {
+    setActionError(null);
+    try {
+      await chat.stop();
+    } catch (error) {
+      setActionError(formatAiChatError(error));
+    }
+  };
+
+  /** 对当前最后一个可重试 Run 创建关联新 Run。 */
+  const handleRetry = async (run: AiRunPublicSummary): Promise<void> => {
+    setActionError(null);
+    try {
+      await chat.retry(run.id, run.userMessageId);
+    } catch (error) {
+      setActionError(formatAiChatError(error));
+    }
+  };
+
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
-      <Card className="flex min-h-[70vh] flex-1 flex-col rounded-md shadow-none">
-        <CardHeader className="border-b">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Bot className="size-5 text-primary" aria-hidden />
-            决策过程 AI
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            绑定一项真实决策；模型会先调用 NestJS 权限保护的基础上下文工具。
-          </p>
-          {threadId && runId ? (
-            <p className="text-xs text-muted-foreground">
-              Thread {threadId.slice(0, 8)} · Run {runId.slice(0, 8)}
-            </p>
-          ) : null}
-        </CardHeader>
-        <CardContent className="flex flex-1 flex-col gap-4 p-4">
-          <div className="flex flex-1 flex-col gap-3" aria-live="polite">
-            {messages.length ? (
-              messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={
-                    message.role === 'user'
-                      ? 'ml-auto max-w-[85%] rounded-md bg-primary p-3 text-sm text-primary-foreground'
-                      : 'mr-auto max-w-[85%] rounded-md bg-muted p-3 text-sm'
-                  }
-                >
-                  <header className="mb-2 flex items-center gap-1.5 text-xs opacity-75">
-                    {message.role === 'user' ? (
-                      <UserRound className="size-3.5" aria-hidden />
-                    ) : (
-                      <Bot className="size-3.5" aria-hidden />
-                    )}
-                    {message.role === 'user' ? '你' : 'AI'}
-                  </header>
-                  {message.parts.map((part, index) => {
-                    if (part.type === 'text') {
-                      return (
-                        <p key={`${message.id}-${index}`} className="whitespace-pre-wrap leading-6">
-                          {part.text}
-                        </p>
-                      );
-                    }
-
-                    if (part.type === 'tool-getDecisionContext') {
-                      const completed = part.state === 'output-available';
-                      return (
-                        <section
-                          key={`${message.id}-${index}`}
-                          className="mt-2 rounded-md border bg-background p-3 text-xs"
-                        >
-                          <p className="font-medium">读取决策基础上下文</p>
-                          <p className="mt-1 text-muted-foreground">
-                            {completed
-                              ? `${part.output.decision.title} · ${part.output.decision.status} · ${part.output.project.title}`
-                              : part.state === 'output-error'
-                                ? part.errorText
-                                : '正在通过 NestJS 校验权限并读取真实数据…'}
-                          </p>
-                        </section>
-                      );
-                    }
-
-                    return null;
-                  })}
-                </article>
-              ))
-            ) : (
-              <div className="flex flex-1 items-center justify-center text-center text-sm text-muted-foreground">
-                输入一条消息开始测试受权限保护的流式响应。
-              </div>
-            )}
+    <section className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden bg-background" aria-label="AI 对话工作区">
+      <header className="flex shrink-0 items-center gap-3 border-b px-3 py-2.5 sm:px-4">
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="outline"
+          className="lg:hidden"
+          aria-label="打开 AI 会话历史"
+          onClick={onOpenHistory}
+        >
+          <History aria-hidden />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2 className="truncate font-semibold">{thread?.title ?? '新建决策过程会话'}</h2>
+            {isArchived ? <Badge variant="secondary">已归档</Badge> : null}
+            {isBusy ? (
+              <Badge variant="outline" className="gap-1">
+                <LoaderCircle aria-hidden className="size-3 animate-spin motion-reduce:animate-none" />
+                {chat.stopping ? '正在停止' : '运行中'}
+              </Badge>
+            ) : null}
           </div>
+          <p className="truncate text-xs text-muted-foreground">
+            {thread
+              ? getAiThreadScopeLabel(thread)
+              : '发送首条消息时才会创建 Thread，不保存空白草稿'}
+          </p>
+        </div>
+        {isArchived ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => void onRestoreThread()}>
+            <ArchiveRestore aria-hidden />
+            恢复后继续
+          </Button>
+        ) : null}
+      </header>
 
-          <form
-            className="grid gap-2 border-t pt-4 sm:grid-cols-[8rem_1fr_auto_auto]"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const message = input.trim();
+      <Conversation>
+        <ConversationContent>
+          {hasOlderMessages ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mx-auto"
+              disabled={historyLoading}
+              onClick={onLoadOlderMessages}
+            >
+              {historyLoading ? (
+                <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
+              ) : null}
+              {historyLoading ? '正在加载' : '加载更早消息'}
+            </Button>
+          ) : null}
 
-              if (!message) {
-                return;
-              }
+          {historyLoading && historyItems.length === 0 ? <AiMessageHistorySkeleton /> : null}
 
-              if (!hasDecisionId) {
-                return;
-              }
+          {historyError && historyItems.length === 0 ? (
+            <Alert variant="destructive">
+              <AlertTitle>当前会话无法加载</AlertTitle>
+              <AlertDescription>
+                <p>{historyError}</p>
+                <Button type="button" size="sm" variant="outline" onClick={onReloadThread}>
+                  重新加载
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-              void send(message, decisionId);
-              setInput('');
-            }}
-          >
-            <Input
-              value={decisionIdInput}
-              inputMode="numeric"
-              aria-label="决策 ID"
-              placeholder="决策 ID"
-              disabled={isRunning || Boolean(threadId)}
-              onChange={(event) => setDecisionIdInput(event.currentTarget.value)}
+          {!historyLoading && !historyError && timeline.length === 0 && chat.messages.length === 0 ? (
+            <ConversationEmptyState
+              icon={<Bot aria-hidden className="size-7" />}
+              title="开始记录一段决策分析"
+              description="可以询问当前决策的背景、状态或形成过程；离题问题会被简短拒绝。"
             />
-            <Input
+          ) : null}
+
+          {timeline.map((item) => (
+            <AiHistoricalTimelinePart
+              key={item.id}
+              item={item}
+              thread={thread}
+              retrying={chat.retrying}
+              onRetry={handleRetry}
+            />
+          ))}
+
+          {chat.messages
+            .filter((message) => !persistedMessageIds.has(message.id))
+            .map((message) => (
+              <AiLiveMessageParts
+                key={message.id}
+                message={message}
+                streaming={isBrowserStreaming}
+                runId={chat.runId}
+                thread={thread}
+                fallbackDecisionId={hasDecisionId ? decisionId : 0}
+                persistedToolCallKeys={persistedToolCallKeys}
+              />
+            ))}
+
+          {historyError && historyItems.length > 0 ? (
+            <Alert variant="destructive">
+              <AlertTitle>部分历史刷新失败</AlertTitle>
+              <AlertDescription>{historyError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {chat.error || actionError ? (
+            <Alert variant="destructive">
+              <AlertTitle>本次操作未完成</AlertTitle>
+              <AlertDescription>{actionError ?? formatAiChatError(chat.error)}</AlertDescription>
+            </Alert>
+          ) : null}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
+
+      <footer className="shrink-0 border-t bg-card p-3 sm:p-4">
+        {isArchived ? (
+          <p className="mb-2 text-xs text-muted-foreground">当前会话已归档，恢复后才能继续提问。</p>
+        ) : null}
+        <form
+          className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <div className="grid min-w-0 gap-2">
+            {!thread ? (
+              <Input
+                value={decisionIdInput}
+                inputMode="numeric"
+                aria-label="决策 ID"
+                placeholder="输入要分析的决策 ID"
+                disabled={isBusy}
+                onChange={(event) => setDecisionIdInput(event.currentTarget.value)}
+              />
+            ) : null}
+            <Textarea
               value={input}
               aria-label="AI 对话消息"
-              placeholder="输入消息……"
-              disabled={isRunning}
+              placeholder="询问这项决策是如何形成的……"
+              className="max-h-40 min-h-16 resize-none overflow-y-auto"
+              disabled={isBusy || isArchived || Boolean(historyError && !thread)}
               onChange={(event) => setInput(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  void handleSubmit();
+                }
+              }}
             />
-            {isRunning ? (
+          </div>
+          <div className="flex items-end gap-2 sm:flex-col sm:justify-end">
+            {isBusy ? (
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  void stop();
-                }}
+                disabled={chat.stopping || !chat.runId}
+                onClick={() => void handleStop()}
               >
-                <Square aria-hidden />
-                停止
+                {chat.stopping ? (
+                  <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Square aria-hidden />
+                )}
+                {chat.stopping ? '正在停止' : '停止'}
               </Button>
             ) : null}
-            <Button type="submit" disabled={!input.trim() || !hasDecisionId || isRunning}>
+            <Button
+              type="submit"
+              disabled={!input.trim() || !hasDecisionId || isBusy || isArchived || historyLoading}
+            >
               <Send aria-hidden />
               发送
             </Button>
-          </form>
-          {error || canRetry ? (
-            <div
-              role={error ? 'alert' : 'status'}
-              className={
-                error
-                  ? 'flex items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive'
-                  : 'flex items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm'
-              }
-            >
-              <p>{error ? formatAiChatError(error) : '本次 Run 已停止，可以创建一个关联的新 Run 重试。'}</p>
-              {runId && canRetry && !isRunning ? (
-                <Button type="button" size="sm" variant="outline" onClick={() => void retry()}>
-                  <RefreshCw aria-hidden />
-                  重试 Run
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </main>
+          </div>
+        </form>
+        <p className="mt-2 text-xs text-muted-foreground">Ctrl/⌘ + Enter 发送；AI 只回答当前 Thread 绑定决策的形成过程。</p>
+      </footer>
+    </section>
   );
 }
 
-/** 从 DefaultChatTransport 的错误文本中提取统一 API 中文消息。 */
-function formatAiChatError(error: Error): string {
+/** 渲染独立于左侧历史导航的消息首屏骨架。 */
+function AiMessageHistorySkeleton() {
+  return (
+    <div className="space-y-5" aria-label="正在加载 AI 会话消息" role="status">
+      <div className="ml-auto w-2/3 space-y-2">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+      <div className="w-4/5 space-y-2">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    </div>
+  );
+}
+
+/** 从统一 BFF 错误正文提取安全中文信息，未知异常使用固定兜底。 */
+function formatAiChatError(error: unknown): string {
+  if (error instanceof ApiClientError) {
+    return error.message.trim() || 'AI 对话暂时不可用，请稍后重试';
+  }
+
+  if (!(error instanceof Error)) {
+    return 'AI 对话暂时不可用，请稍后重试';
+  }
+
   try {
     const parsed = JSON.parse(error.message) as { message?: unknown };
-    return typeof parsed.message === 'string' ? parsed.message : 'AI 对话暂时不可用，请稍后重试';
+    return typeof parsed.message === 'string' && parsed.message.trim()
+      ? parsed.message
+      : 'AI 对话暂时不可用，请稍后重试';
   } catch {
-    return error.message || 'AI 对话暂时不可用，请稍后重试';
+    return 'AI 对话暂时不可用，请稍后重试';
   }
 }

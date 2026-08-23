@@ -15,6 +15,8 @@ import { API_ERROR_CODES, type ApiErrorCode } from '@workspace/contracts/common'
 import { createDecisionHubAgent } from '../agents/decision-hub-agent';
 import { routeDecisionAgentRequest } from '../agents/decision-agent-scope-policy';
 import { buildAiAgentContext } from '../context/agent-context-builder.server';
+import { serializeAiThreadScopeChangedError } from '../utils/ai-workspace-state';
+import { toAiContextUiMessages } from './ai-authoritative-context';
 import { normalizeAiModelError } from './ai-model-error';
 import { estimateAiLanguageModelCostUsd } from './ai-model-registry';
 import { resolveAiLanguageModel } from './ai-model.server';
@@ -26,6 +28,7 @@ import {
   confirmAiRunCancellation,
   failAiRun,
   finishAiToolCall,
+  listAiThreadMessages,
   recordAiModelStep,
   renewAiRun,
   startAiToolCall,
@@ -53,11 +56,14 @@ type AiExecutorHandle = {
 /** 进程内临时执行器注册表；PostgreSQL 仍是唯一权威状态。 */
 const aiExecutors = new Map<string, AiExecutorHandle>();
 
+/** 新 Run 解析模型上下文时允许使用的两种权威来源。 */
+export type AiRunContextSource = 'created-message' | 'thread-history';
+
 /** 原子领取并启动一条新 Run，幂等重放则只恢复持久化事件。 */
 export async function startAiRunExecution(options: {
   identity: AiNestIdentity;
   creation: AiRunCreation;
-  uiMessages: UIMessage[];
+  contextSource: AiRunContextSource;
 }): Promise<Response> {
   const { creation, identity } = options;
 
@@ -69,6 +75,12 @@ export async function startAiRunExecution(options: {
       afterSequence: 0,
     });
   }
+
+  const uiMessages = await resolveAuthoritativeContextMessages(
+    identity,
+    creation,
+    options.contextSource,
+  );
 
   const lease = await claimAiRun(identity, creation.run.id, {
     leaseDurationMs: AI_EXECUTION_LEASE_DURATION_MS,
@@ -84,8 +96,22 @@ export async function startAiRunExecution(options: {
     creation,
     executionLeaseId: lease.executionLeaseId,
     handle,
-    uiMessages: options.uiMessages,
+    uiMessages,
   });
+}
+
+/** 根据 Run 类型读取首条已创建消息或 Thread 最新一页权威持久化历史。 */
+async function resolveAuthoritativeContextMessages(
+  identity: AiNestIdentity,
+  creation: AiRunCreation,
+  contextSource: AiRunContextSource,
+): Promise<UIMessage[]> {
+  if (contextSource === 'created-message') {
+    return toAiContextUiMessages([creation.message]);
+  }
+
+  const page = await listAiThreadMessages(identity, creation.thread.id, { limit: 100 });
+  return toAiContextUiMessages(page.items.map((item) => item.message));
 }
 
 /** 在 stop 已落库后触发当前进程内执行器 Abort。 */
@@ -118,6 +144,8 @@ async function createClaimedRunResponse(options: {
   const assistantMessageId = crypto.randomUUID();
   const stepStartTimes = new Map<number, Date>();
   const toolSequences = new Map<string, number>();
+  const runningToolCalls = new Set<string>();
+  const answerSourceIds = new Set<string>();
   let nextToolSequence = 1;
   let assistantContent = '';
   let resolvedModelId = creation.run.resolvedModelId ?? '';
@@ -136,6 +164,31 @@ async function createClaimedRunResponse(options: {
 
     if (!handle.abortController.signal.aborted) {
       handle.abortController.abort(abortReason);
+    }
+  };
+
+  /** 为同一个工具调用分配稳定序号，并把等待或运行态幂等写入 NestJS。 */
+  const persistToolCallStatus = async (
+    toolCallId: string,
+    status: 'WAITING' | 'RUNNING',
+  ): Promise<void> => {
+    let sequence = toolSequences.get(toolCallId);
+    if (sequence === undefined) {
+      sequence = nextToolSequence++;
+      toolSequences.set(toolCallId, sequence);
+    }
+
+    await startAiToolCall(identity, creation.run.id, {
+      executionLeaseId,
+      toolCallId,
+      sequence,
+      status,
+      toolName: 'getDecisionContext',
+      input: { decisionId: creation.thread.decisionId },
+    });
+
+    if (status === 'RUNNING') {
+      runningToolCalls.add(toolCallId);
     }
   };
 
@@ -181,6 +234,7 @@ async function createClaimedRunResponse(options: {
           assistantMessageId,
           assistantContent,
           resolvedModelId,
+          sourceIds: [...answerSourceIds],
         });
       }
     } catch (error) {
@@ -253,31 +307,25 @@ async function createClaimedRunResponse(options: {
         }
       },
       onToolExecutionStart: async ({ toolCall }) => {
-        const sequence = nextToolSequence++;
         try {
-          await startAiToolCall(identity, creation.run.id, {
-            executionLeaseId,
-            toolCallId: toolCall.toolCallId,
-            sequence,
-            toolName: 'getDecisionContext',
-            input: { decisionId: creation.thread.decisionId },
-          });
-          toolSequences.set(toolCall.toolCallId, sequence);
+          await persistToolCallStatus(toolCall.toolCallId, 'RUNNING');
         } catch (error) {
           stopForFatalError(error, 'INTERNAL_ERROR', 'TOOL_AUDIT_START_FAILED');
         }
       },
       onToolExecutionEnd: async ({ toolCall, toolExecutionMs, toolOutput }) => {
-        if (!toolSequences.has(toolCall.toolCallId)) {
+        if (!runningToolCalls.has(toolCall.toolCallId)) {
           return;
         }
 
         try {
           if (toolOutput.type === 'tool-result') {
+            const resultSummary = summarizeDecisionContext(asDecisionContext(toolOutput.output));
+            resultSummary.sourceIds.forEach((sourceId) => answerSourceIds.add(sourceId));
             await finishAiToolCall(identity, creation.run.id, {
               executionLeaseId,
               toolCallId: toolCall.toolCallId,
-              resultSummary: summarizeDecisionContext(asDecisionContext(toolOutput.output)),
+              resultSummary,
               errorCode: null,
               durationMs: Math.max(0, Math.round(toolExecutionMs)),
             });
@@ -311,6 +359,18 @@ async function createClaimedRunResponse(options: {
               controller.enqueue({ type: 'error', error: fatalError });
             }
             return;
+          }
+
+          if (part.type === 'tool-input-start' && part.toolName === 'getDecisionContext') {
+            try {
+              await persistToolCallStatus(part.id, 'WAITING');
+            } catch (error) {
+              fatalError = error;
+              fatalFailureReason = 'INTERNAL_ERROR';
+              handle.abortController.abort('TOOL_AUDIT_WAITING_FAILED');
+              controller.enqueue({ type: 'error', error });
+              return;
+            }
           }
 
           if (part.type === 'text-delta' && part.text) {
@@ -413,6 +473,11 @@ function resolveExecutionFailure(
 
 /** 为 UI 返回与失败阶段一致的脱敏错误，不把业务工具失败伪装成模型故障。 */
 function resolveExecutionStreamError(error: unknown, reason: AiRunFailureReason): string {
+  const scopeChangedError = serializeAiThreadScopeChangedError(error);
+  if (scopeChangedError) {
+    return scopeChangedError;
+  }
+
   if (error instanceof AiNestRequestError) {
     return error.response.message;
   }

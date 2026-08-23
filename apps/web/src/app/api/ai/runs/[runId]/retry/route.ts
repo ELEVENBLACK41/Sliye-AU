@@ -2,8 +2,6 @@
  * 本文件从失败或取消 Run 幂等创建新 Run，并按同一执行协议启动流。
  */
 
-import type { UIMessage } from 'ai';
-
 import { aiRetryStreamRequestSchema } from '@/features/ai/schemas/ai-request.schema';
 import { startAiRunExecution } from '@/features/ai/runtime/ai-agent-runtime.server';
 import { retryAiRun, stopAiRun } from '@/features/ai/runtime/ai-nest-client.server';
@@ -20,26 +18,30 @@ export async function POST(request: Request, context: { params: Promise<{ runId:
     return authentication.response;
   }
 
-  let createdRunId: string | null = null;
+  let body: unknown;
 
   try {
-    const parsed = aiRetryStreamRequestSchema.safeParse(await request.json());
+    body = await request.json();
+  } catch {
+    return apiError({ status: 400, message: 'AI 重试参数不正确', path });
+  }
 
-    if (!parsed.success) {
-      return apiError({ status: 400, message: 'AI 重试参数不正确', path });
-    }
+  const parsed = aiRetryStreamRequestSchema.safeParse(body);
 
+  if (!parsed.success) {
+    return apiError({ status: 400, message: 'AI 重试参数不正确', path });
+  }
+
+  let createdRunId: string | null = null;
+  try {
     const creation = await retryAiRun(authentication.identity, runId, parsed.data);
     createdRunId = creation.replayed ? null : creation.run.id;
-    const uiMessages: UIMessage[] = [
-      {
-        id: creation.message.id,
-        role: 'user',
-        parts: [{ type: 'text', text: creation.message.content }],
-      },
-    ];
 
-    return await startAiRunExecution({ identity: authentication.identity, creation, uiMessages });
+    return await startAiRunExecution({
+      identity: authentication.identity,
+      creation,
+      contextSource: 'thread-history',
+    });
   } catch (error) {
     if (createdRunId) {
       await stopAiRun(authentication.identity, createdRunId).catch(() => undefined);

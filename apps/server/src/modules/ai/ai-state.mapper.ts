@@ -6,6 +6,7 @@ import type {
   AiLanguageModelRole,
   AiMessage,
   AiRun,
+  AiRunPublicSummary,
   AiThread,
 } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
@@ -15,8 +16,37 @@ import type {
   AiStep as PrismaAiStep,
   AiThread as PrismaAiThread,
   AiLanguageModelRole as PrismaAiLanguageModelRole,
+  Prisma,
 } from '../../generated/prisma';
 import type { AiModelStepRecord } from './types/ai-state-persistence.types';
+
+/** 浏览器安全 Run 摘要只从数据库选择这些白名单字段。 */
+export const aiRunPublicSummarySelect = {
+  id: true,
+  threadId: true,
+  userMessageId: true,
+  retryOfRunId: true,
+  status: true,
+  modelRole: true,
+  resolvedModelId: true,
+  cancellationReason: true,
+  failureReason: true,
+  failureCode: true,
+  modelCallCount: true,
+  inputTokens: true,
+  outputTokens: true,
+  totalTokens: true,
+  estimatedCostUsd: true,
+  startedAt: true,
+  finishedAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.AiRunSelect;
+
+/** 数据库查询出的浏览器安全 Run 白名单记录。 */
+type AiRunPublicSummaryRecord = Prisma.AiRunGetPayload<{
+  select: typeof aiRunPublicSummarySelect;
+}>;
 
 /** 把共享模型角色映射为数据库枚举。 */
 export function toPrismaAiLanguageModelRole(
@@ -63,8 +93,10 @@ export function toAiMessage(record: PrismaAiMessage): AiMessage {
   };
 }
 
-/** 把 Prisma Run 记录映射为共享 Run，并按模型调用数量决定是否暴露用量。 */
-export function toAiRun(record: PrismaAiRun): AiRun {
+/** 把 Prisma Run 记录映射为不含执行租约的浏览器安全摘要。 */
+export function toAiRunPublicSummary(
+  record: AiRunPublicSummaryRecord,
+): AiRunPublicSummary {
   return {
     id: record.id,
     threadId: record.threadId,
@@ -73,9 +105,6 @@ export function toAiRun(record: PrismaAiRun): AiRun {
     status: record.status,
     modelRole: toAiLanguageModelRole(record.modelRole),
     resolvedModelId: record.resolvedModelId,
-    executionLeaseId: record.executionLeaseId,
-    executionLeaseExpiresAt:
-      record.executionLeaseExpiresAt?.toISOString() ?? null,
     cancellationReason: record.cancellationReason,
     failureReason: record.failureReason,
     failureCode: record.failureCode as ApiErrorCode | null,
@@ -92,6 +121,16 @@ export function toAiRun(record: PrismaAiRun): AiRun {
     finishedAt: record.finishedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+/** 把 Prisma Run 记录映射为仅供服务端执行链路使用的完整共享 Run。 */
+export function toAiRun(record: PrismaAiRun): AiRun {
+  return {
+    ...toAiRunPublicSummary(record),
+    executionLeaseId: record.executionLeaseId,
+    executionLeaseExpiresAt:
+      record.executionLeaseExpiresAt?.toISOString() ?? null,
   };
 }
 

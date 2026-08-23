@@ -3,6 +3,8 @@
  * Thread 只承担会话容器、权限范围和当前运行门禁，不保存模型执行细节。
  */
 
+import type { AiRunPublicSummary } from './ai-run.types.ts';
+
 /** AI Thread 可被普通用户读取或因业务来源失权而被锁定的范围状态。 */
 export const AI_THREAD_SCOPE_STATES = ['ACTIVE', 'LOCKED'] as const;
 
@@ -50,18 +52,78 @@ export type AiThreadArchiveState = (typeof AI_THREAD_ARCHIVE_STATES)[number];
 export type AiThreadListItem = {
   /** 对外稳定的 Thread UUID。 */
   id: string;
-  /** Thread 唯一绑定的决策主键。 */
-  decisionId: number;
+  /** Thread 所属项目的真实公开标识与标题。 */
+  project: {
+    /** 项目主键。 */
+    id: number;
+    /** 项目当前真实标题。 */
+    title: string;
+  };
+  /** Thread 唯一绑定决策的真实公开标识与标题。 */
+  decision: {
+    /** 决策主键。 */
+    id: number;
+    /** 决策当前真实标题。 */
+    title: string;
+  };
   /** 用户可修改的会话标题。 */
   title: string;
   /** 当前非终态 Run；没有运行时为空。 */
   activeRunId: string | null;
+  /** 按 `createdAt`、Run UUID 倒序确定的最近一次安全运行摘要。 */
+  latestRun: AiRunPublicSummary | null;
   /** 用户归档时间；未归档时为空。 */
   archivedAt: string | null;
   /** Thread 创建时间，使用 ISO 8601 字符串。 */
   createdAt: string;
   /** Thread 最后一次业务变化时间，使用 ISO 8601 字符串。 */
   updatedAt: string;
+};
+
+/** AI Thread 详情接口允许浏览器读取的安全业务快照。 */
+export type AiThreadDetail = {
+  /** 对外稳定的 Thread UUID。 */
+  id: string;
+  /** Thread 所属项目的真实公开标识与标题。 */
+  project: {
+    /** 项目主键。 */
+    id: number;
+    /** 项目当前真实标题。 */
+    title: string;
+  };
+  /** Thread 唯一绑定决策的真实公开标识与标题。 */
+  decision: {
+    /** 决策主键。 */
+    id: number;
+    /** 决策当前真实标题。 */
+    title: string;
+  };
+  /** 用户可修改的会话标题。 */
+  title: string;
+  /** 当前非终态 Run；没有运行时为空。 */
+  activeRunId: string | null;
+  /** 按 `createdAt`、Run UUID 倒序确定的最近一次安全运行摘要。 */
+  latestRun: AiRunPublicSummary | null;
+  /** 用户归档时间；未归档时为空。 */
+  archivedAt: string | null;
+  /** Thread 创建时间，使用 ISO 8601 字符串。 */
+  createdAt: string;
+  /** Thread 最后一次业务变化时间，使用 ISO 8601 字符串。 */
+  updatedAt: string;
+};
+
+/** 第一版 Thread 白名单更新请求。 */
+export type UpdateAiThreadRequest = {
+  /** trim 后 1～60 个 Unicode 字符的会话标题；省略时不修改。 */
+  title?: string;
+  /** `true` 写入归档时间，`false` 清空归档时间；省略时不修改。 */
+  archived?: boolean;
+};
+
+/** Thread 白名单更新完成后的安全详情响应。 */
+export type UpdateAiThreadResponse = {
+  /** 已重新鉴权并完成更新的 Thread 详情。 */
+  thread: AiThreadDetail;
 };
 
 /** AI Thread 历史列表的游标分页查询参数。 */

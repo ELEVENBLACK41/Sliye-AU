@@ -6,67 +6,72 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
 import { AiRunStatus } from '../../../generated/prisma';
 import type {
   AppendAiEventCommand,
   AppendAiEventResult,
 } from '../types/ai-state-persistence.types';
+import { AiThreadScopeService } from './ai-thread-scope.service';
 
 @Injectable()
 export class AiEventService {
-  /** 注入数据库以原子递增 Run 事件序号并追加事件。 */
-  constructor(private readonly prisma: PrismaService) {}
+  /** 注入 Thread 范围服务以在同一事务中复核来源并追加事件。 */
+  constructor(private readonly threadScopeService: AiThreadScopeService) {}
 
   /** 追加一条事件并返回数据库分配的严格单调序号。 */
   async append(command: AppendAiEventCommand): Promise<AppendAiEventResult> {
     this.assertEventPayload(command);
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const now = new Date();
-        const fenced = await tx.aiRun.updateMany({
-          where: {
-            id: command.runId,
-            status: AiRunStatus.RUNNING,
-            executionLeaseId: command.executionLeaseId,
-            executionLeaseExpiresAt: { gt: now },
-          },
-          data: { nextEventSequence: { increment: 1 } },
-        });
-        if (fenced.count !== 1) {
-          const exists = await tx.aiRun.findUnique({
-            where: { id: command.runId },
-            select: { id: true },
+      return await this.threadScopeService.withAccessibleRun(
+        command.authorization,
+        command.runId,
+        [],
+        async (tx) => {
+          const now = new Date();
+          const fenced = await tx.aiRun.updateMany({
+            where: {
+              id: command.runId,
+              status: AiRunStatus.RUNNING,
+              executionLeaseId: command.executionLeaseId,
+              executionLeaseExpiresAt: { gt: now },
+            },
+            data: { nextEventSequence: { increment: 1 } },
           });
-          if (!exists) {
-            this.throwRunNotFound();
+          if (fenced.count !== 1) {
+            const exists = await tx.aiRun.findUnique({
+              where: { id: command.runId },
+              select: { id: true },
+            });
+            if (!exists) {
+              this.throwRunNotFound();
+            }
+            this.throwExecutionLeaseInvalid();
           }
-          this.throwExecutionLeaseInvalid();
-        }
-        const run = await tx.aiRun.findUniqueOrThrow({
-          where: { id: command.runId },
-          select: { nextEventSequence: true },
-        });
-        const sequence = run.nextEventSequence - 1;
-        const event = await tx.aiEvent.create({
-          data: {
-            runId: command.runId,
-            sequence,
-            type: command.type,
-            payload: command.data,
-          },
-        });
+          const run = await tx.aiRun.findUniqueOrThrow({
+            where: { id: command.runId },
+            select: { nextEventSequence: true },
+          });
+          const sequence = run.nextEventSequence - 1;
+          const event = await tx.aiEvent.create({
+            data: {
+              runId: command.runId,
+              sequence,
+              type: command.type,
+              payload: command.data,
+            },
+          });
 
-        return {
-          id: event.id,
-          runId: event.runId,
-          sequence: event.sequence,
-          type: command.type,
-          data: command.data,
-          createdAt: event.createdAt.toISOString(),
-        };
-      });
+          return {
+            id: event.id,
+            runId: event.runId,
+            sequence: event.sequence,
+            type: command.type,
+            data: command.data,
+            createdAt: event.createdAt.toISOString(),
+          };
+        },
+      );
     } catch (error) {
       if (
         error instanceof PrismaClientKnownRequestError &&

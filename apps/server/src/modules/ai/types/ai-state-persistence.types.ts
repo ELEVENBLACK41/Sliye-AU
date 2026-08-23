@@ -50,6 +50,8 @@ export type AiRunCreationResult = AiRunCreation;
 
 /** 原子领取排队中 Run 并签发执行租约的命令。 */
 export type ClaimAiRunCommand = {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 需要由当前执行器领取的 Run UUID。 */
   runId: string;
   /** 当前执行器承诺续租前的租约有效毫秒数。 */
@@ -66,6 +68,8 @@ export type AiRunLeaseResult = {
 
 /** 续租当前执行租约的命令。 */
 export type RenewAiRunLeaseCommand = {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 当前执行中的 Run UUID。 */
   runId: string;
   /** 领取时签发且不能被其他执行器替代的租约 UUID。 */
@@ -84,6 +88,8 @@ export type RequestAiRunCancellationCommand = {
 
 /** 执行器确认取消已经生效并写入唯一取消终态的命令。 */
 export type ConfirmAiRunCancellationCommand = {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 当前执行中的 Run UUID。 */
   runId: string;
   /** 必须与数据库当前租约匹配的 fencing UUID。 */
@@ -92,6 +98,8 @@ export type ConfirmAiRunCancellationCommand = {
 
 /** 执行器写入助手最终消息并完成 Run 的命令。 */
 export type CompleteAiRunCommand = {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 当前执行中的 Run UUID。 */
   runId: string;
   /** 必须与数据库当前租约匹配的 fencing UUID。 */
@@ -102,10 +110,14 @@ export type CompleteAiRunCommand = {
   assistantContent: string;
   /** Gateway 最终实际执行的供应商模型 ID。 */
   resolvedModelId: string;
+  /** 助手最终回答实际引用的稳定来源 ID。 */
+  sourceIds: string[];
 };
 
 /** 执行器把当前 Run 收敛为失败终态的命令。 */
 export type FailAiRunCommand = {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 当前执行中的 Run UUID。 */
   runId: string;
   /** 必须与数据库当前租约匹配的 fencing UUID。 */
@@ -142,6 +154,8 @@ export type RetryAiRunCommand = {
 
 /** 追加助手文本增量事件的命令。 */
 export type AppendAiTextDeltaEventCommand = {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 事件所属 Run UUID。 */
   runId: string;
   /** 必须与 Run 当前执行租约匹配的 fencing UUID。 */
@@ -157,6 +171,8 @@ export type AppendAiEventCommand = AppendAiTextDeltaEventCommand;
 
 /** 持久化一次独立语言模型调用及用量快照的命令。 */
 export type RecordAiModelStepCommand = {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 模型调用所属 Run UUID。 */
   runId: string;
   /** 必须与 Run 当前执行租约匹配的 fencing UUID。 */
@@ -230,12 +246,16 @@ export type AppendAiEventResult = AiEvent;
 
 /** 创建工具调用审计记录的内部命令。 */
 export type StartAiToolCallCommand = StartAiToolCallRequest & {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 工具调用所属 Run UUID。 */
   runId: string;
 };
 
 /** 完成工具调用审计记录的内部命令。 */
 export type FinishAiToolCallCommand = FinishAiToolCallRequest & {
+  /** 当前执行请求携带且需要重新复核的用户授权上下文。 */
+  authorization: AuthorizationContext;
   /** 工具调用所属 Run UUID。 */
   runId: string;
 };

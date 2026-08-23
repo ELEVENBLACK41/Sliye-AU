@@ -326,9 +326,16 @@ enum AiEventType {
 
 /// AI 工具调用的审计状态；进入完成或失败后不允许回到运行中。
 enum AiToolCallStatus {
+  WAITING
   RUNNING
   COMPLETED
   FAILED
+}
+
+/// AI 来源依赖由工具真实读取或助手最终回答引用产生。
+enum AiSourceDependencyUsage {
+  TOOL_READ
+  ANSWER_CITATION
 }
 
 /// AI 幂等请求所属的业务操作，避免相同客户端标识跨接口误去重。
@@ -1571,6 +1578,7 @@ model AiRun {
   steps                AiStep[]
   events               AiEvent[]
   toolCalls            AiToolCall[]
+  sourceDependencies   AiSourceDependency[]
   requestDeduplication AiRequestDeduplication?
 
   @@index([threadId, createdAt])
@@ -1642,7 +1650,8 @@ model AiToolCall {
   resultSummary Json?
   errorCode     String?
 
-  startedAt  DateTime
+  /// 等待态尚未真正执行工具，因此开始时间允许为空。
+  startedAt  DateTime?
   finishedAt DateTime?
   durationMs Int?
   createdAt  DateTime  @default(now())
@@ -1654,6 +1663,23 @@ model AiToolCall {
   @@unique([runId, sequence])
   @@index([toolName, status])
   @@index([createdAt])
+}
+
+/// Thread 通过所属 Run 持久化工具读取与回答引用的稳定来源依赖。
+model AiSourceDependency {
+  id String @id @default(uuid()) @db.Uuid
+
+  runId    String                  @db.Uuid
+  sourceId String                  @db.VarChar(160)
+  usage    AiSourceDependencyUsage
+
+  createdAt DateTime @default(now())
+
+  run AiRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sourceId, usage])
+  @@index([runId])
+  @@index([sourceId])
 }
 
 /// 浏览器重放保护记录；过期后可以清理，不承担 Run 审计职责。

@@ -7,7 +7,6 @@ import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
 import { AiRunStatus, type Prisma } from '../../../generated/prisma';
 import { toAiRun } from '../ai-state.mapper';
 import type {
@@ -15,6 +14,7 @@ import type {
   ClaimAiRunCommand,
   RenewAiRunLeaseCommand,
 } from '../types/ai-state-persistence.types';
+import { AiThreadScopeService } from './ai-thread-scope.service';
 
 /** 第一版租约最短允许一秒，避免零时长租约制造不可解释竞态。 */
 const MIN_EXECUTION_LEASE_MILLISECONDS = 1_000;
@@ -26,8 +26,8 @@ const UUID_PATTERN =
 
 @Injectable()
 export class AiRunLeaseService {
-  /** 注入数据库以执行原子领取和续租。 */
-  constructor(private readonly prisma: PrismaService) {}
+  /** 注入 Thread 范围服务以在同一事务内复核权限并执行租约写入。 */
+  constructor(private readonly threadScopeService: AiThreadScopeService) {}
 
   /** 原子把一个排队中 Run 领取为运行态，并签发唯一 UUID 执行租约。 */
   async claim(command: ClaimAiRunCommand): Promise<AiRunLeaseResult> {
@@ -39,44 +39,51 @@ export class AiRunLeaseService {
       now.getTime() + command.leaseDurationMs,
     );
 
-    return this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.aiRun.updateMany({
-        where: {
-          id: command.runId,
-          status: AiRunStatus.QUEUED,
-          executionLeaseId: null,
-          activeForThread: { activeRunId: command.runId },
-        },
-        data: {
-          status: AiRunStatus.RUNNING,
-          executionLeaseId,
-          executionLeaseExpiresAt,
-          startedAt: now,
-          nextEventSequence: { increment: 1 },
-        },
-      });
-      if (claimed.count !== 1) {
-        await this.assertRunExists(tx, command.runId);
-        this.throwExecutionLeaseInvalid('AI Run 已被其他执行器领取或不再排队');
-      }
-
-      const run = await this.loadRun(tx, command.runId);
-      await tx.aiEvent.create({
-        data: {
-          runId: run.id,
-          sequence: run.nextEventSequence - 1,
-          type: 'RUN_STATUS_CHANGED',
-          payload: {
-            fromStatus: AiRunStatus.QUEUED,
-            toStatus: AiRunStatus.RUNNING,
-            cancellationReason: null,
-            failureReason: null,
+    return this.threadScopeService.withAccessibleRun(
+      command.authorization,
+      command.runId,
+      [],
+      async (tx) => {
+        const claimed = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            status: AiRunStatus.QUEUED,
+            executionLeaseId: null,
+            activeForThread: { activeRunId: command.runId },
           },
-        },
-      });
+          data: {
+            status: AiRunStatus.RUNNING,
+            executionLeaseId,
+            executionLeaseExpiresAt,
+            startedAt: now,
+            nextEventSequence: { increment: 1 },
+          },
+        });
+        if (claimed.count !== 1) {
+          await this.assertRunExists(tx, command.runId);
+          this.throwExecutionLeaseInvalid(
+            'AI Run 已被其他执行器领取或不再排队',
+          );
+        }
 
-      return { run: toAiRun(run), executionLeaseId };
-    });
+        const run = await this.loadRun(tx, command.runId);
+        await tx.aiEvent.create({
+          data: {
+            runId: run.id,
+            sequence: run.nextEventSequence - 1,
+            type: 'RUN_STATUS_CHANGED',
+            payload: {
+              fromStatus: AiRunStatus.QUEUED,
+              toStatus: AiRunStatus.RUNNING,
+              cancellationReason: null,
+              failureReason: null,
+            },
+          },
+        });
+
+        return { run: toAiRun(run), executionLeaseId };
+      },
+    );
   }
 
   /** 仅允许当前且尚未过期的执行租约从当前时刻继续延长。 */
@@ -89,28 +96,35 @@ export class AiRunLeaseService {
       now.getTime() + command.leaseDurationMs,
     );
 
-    return this.prisma.$transaction(async (tx) => {
-      const renewed = await tx.aiRun.updateMany({
-        where: {
-          id: command.runId,
-          executionLeaseId: command.executionLeaseId,
-          executionLeaseExpiresAt: { gt: now },
-          status: {
-            in: [AiRunStatus.RUNNING, AiRunStatus.CANCELLATION_REQUESTED],
+    return this.threadScopeService.withAccessibleRun(
+      command.authorization,
+      command.runId,
+      [],
+      async (tx) => {
+        const renewed = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            executionLeaseId: command.executionLeaseId,
+            executionLeaseExpiresAt: { gt: now },
+            status: {
+              in: [AiRunStatus.RUNNING, AiRunStatus.CANCELLATION_REQUESTED],
+            },
           },
-        },
-        data: { executionLeaseExpiresAt },
-      });
-      if (renewed.count !== 1) {
-        await this.assertRunExists(tx, command.runId);
-        this.throwExecutionLeaseInvalid('AI 执行租约不存在、已过期或已被替换');
-      }
+          data: { executionLeaseExpiresAt },
+        });
+        if (renewed.count !== 1) {
+          await this.assertRunExists(tx, command.runId);
+          this.throwExecutionLeaseInvalid(
+            'AI 执行租约不存在、已过期或已被替换',
+          );
+        }
 
-      return {
-        run: toAiRun(await this.loadRun(tx, command.runId)),
-        executionLeaseId: command.executionLeaseId,
-      };
-    });
+        return {
+          run: toAiRun(await this.loadRun(tx, command.runId)),
+          executionLeaseId: command.executionLeaseId,
+        };
+      },
+    );
   }
 
   /** 读取事务内 Run；调用前已经通过条件更新取得行锁。 */

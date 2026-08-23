@@ -21,6 +21,8 @@ import type {
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsIn,
   IsInt,
   IsISO8601,
@@ -251,6 +253,14 @@ export class CompleteAiRunExecutionDto implements CompleteAiRunExecutionRequest 
   @MinLength(1)
   @MaxLength(160)
   resolvedModelId!: string;
+
+  /** 助手最终回答实际引用的稳定来源 ID。 */
+  @ApiProperty({ type: [String], maxItems: 100 })
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(160, { each: true })
+  sourceIds!: string[];
 }
 
 /** 内部执行器写入失败终态的 DTO。 */
@@ -323,6 +333,11 @@ export class StartAiToolCallDto implements StartAiToolCallRequest {
   @IsInt()
   @Min(1)
   sequence!: number;
+
+  /** 当前幂等调用希望确认的等待或运行状态。 */
+  @ApiProperty({ enum: ['WAITING', 'RUNNING'] })
+  @IsIn(['WAITING', 'RUNNING'])
+  status!: 'WAITING' | 'RUNNING';
 
   /** 当前唯一开放的真实工具。 */
   @ApiProperty({ enum: ['getDecisionContext'] })

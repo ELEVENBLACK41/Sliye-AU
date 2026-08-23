@@ -6,22 +6,21 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
 import {
   AiMessageRole,
   AiRunCancellationReason,
+  AiSourceDependencyUsage,
   AiRunStatus,
   type Prisma,
 } from '../../../generated/prisma';
-import { AuthorizationService } from '../../auth/services/authorization.service';
-import type { AuthorizationContext } from '../../auth/types/auth.types';
-import { toAiRun } from '../ai-state.mapper';
+import { toAiRun, toAiRunPublicSummary } from '../ai-state.mapper';
 import type {
   CompleteAiRunCommand,
   ConfirmAiRunCancellationCommand,
   FailAiRunCommand,
   RequestAiRunCancellationCommand,
 } from '../types/ai-state-persistence.types';
+import { AiThreadScopeService } from './ai-thread-scope.service';
 
 /** 助手最终消息的第一版持久化字符上限。 */
 const MAX_ASSISTANT_MESSAGE_CHARACTERS = 100_000;
@@ -31,88 +30,89 @@ const UUID_PATTERN =
 
 @Injectable()
 export class AiRunService {
-  /** 注入数据库和统一授权能力。 */
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly authorizationService: AuthorizationService,
-  ) {}
+  /** 注入 Thread 范围服务以在同一事务内执行权限复核和状态收敛。 */
+  constructor(private readonly threadScopeService: AiThreadScopeService) {}
 
   /** 用户请求停止 Run；排队状态直接取消，执行状态先进入正在取消。 */
   async requestCancellation(
     command: RequestAiRunCancellationCommand,
-  ): Promise<ReturnType<typeof toAiRun>> {
+  ): Promise<ReturnType<typeof toAiRunPublicSummary>> {
     this.assertUuid(command.runId, 'runId');
-    await this.assertAccessibleRun(command.authorization, command.runId);
     const now = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
-      const queuedCancellation = await tx.aiRun.updateMany({
-        where: {
-          id: command.runId,
-          status: AiRunStatus.QUEUED,
-          thread: { ownerUserId: command.authorization.userId },
-        },
-        data: {
-          status: AiRunStatus.CANCELLED,
+    return this.threadScopeService.withAccessibleRun(
+      command.authorization,
+      command.runId,
+      [],
+      async (tx) => {
+        const queuedCancellation = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            status: AiRunStatus.QUEUED,
+            thread: { ownerUserId: command.authorization.userId },
+          },
+          data: {
+            status: AiRunStatus.CANCELLED,
+            cancellationReason: AiRunCancellationReason.USER_REQUESTED,
+            executionLeaseId: null,
+            executionLeaseExpiresAt: null,
+            finishedAt: now,
+            nextEventSequence: { increment: 1 },
+          },
+        });
+
+        if (queuedCancellation.count === 1) {
+          const run = await this.loadRun(tx, command.runId);
+          await this.appendStatusEvent(tx, run, AiRunStatus.QUEUED);
+          await this.releaseThreadGate(tx, run.threadId, run.id);
+          return toAiRunPublicSummary(run);
+        }
+
+        const cancellationData = {
+          status: AiRunStatus.CANCELLATION_REQUESTED,
           cancellationReason: AiRunCancellationReason.USER_REQUESTED,
-          executionLeaseId: null,
-          executionLeaseExpiresAt: null,
-          finishedAt: now,
           nextEventSequence: { increment: 1 },
-        },
-      });
+        } satisfies Prisma.AiRunUpdateManyMutationInput;
+        const runningCancellation = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            status: AiRunStatus.RUNNING,
+            thread: { ownerUserId: command.authorization.userId },
+          },
+          data: cancellationData,
+        });
 
-      if (queuedCancellation.count === 1) {
-        const run = await this.loadRun(tx, command.runId);
-        await this.appendStatusEvent(tx, run, AiRunStatus.QUEUED);
-        await this.releaseThreadGate(tx, run.threadId, run.id);
-        return toAiRun(run);
-      }
+        if (runningCancellation.count === 1) {
+          const run = await this.loadRun(tx, command.runId);
+          await this.appendStatusEvent(tx, run, AiRunStatus.RUNNING);
+          return toAiRunPublicSummary(run);
+        }
 
-      const cancellationData = {
-        status: AiRunStatus.CANCELLATION_REQUESTED,
-        cancellationReason: AiRunCancellationReason.USER_REQUESTED,
-        nextEventSequence: { increment: 1 },
-      } satisfies Prisma.AiRunUpdateManyMutationInput;
-      const runningCancellation = await tx.aiRun.updateMany({
-        where: {
-          id: command.runId,
-          status: AiRunStatus.RUNNING,
-          thread: { ownerUserId: command.authorization.userId },
-        },
-        data: cancellationData,
-      });
+        const waitingCancellation = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            status: AiRunStatus.WAITING_APPROVAL,
+            thread: { ownerUserId: command.authorization.userId },
+          },
+          data: cancellationData,
+        });
+        if (waitingCancellation.count === 1) {
+          const run = await this.loadRun(tx, command.runId);
+          await this.appendStatusEvent(tx, run, AiRunStatus.WAITING_APPROVAL);
+          return toAiRunPublicSummary(run);
+        }
 
-      if (runningCancellation.count === 1) {
-        const run = await this.loadRun(tx, command.runId);
-        await this.appendStatusEvent(tx, run, AiRunStatus.RUNNING);
-        return toAiRun(run);
-      }
+        const current = await this.loadRun(tx, command.runId);
+        if (
+          current.status === AiRunStatus.CANCELLATION_REQUESTED ||
+          current.status === AiRunStatus.CANCELLED
+        ) {
+          return toAiRunPublicSummary(current);
+        }
 
-      const waitingCancellation = await tx.aiRun.updateMany({
-        where: {
-          id: command.runId,
-          status: AiRunStatus.WAITING_APPROVAL,
-          thread: { ownerUserId: command.authorization.userId },
-        },
-        data: cancellationData,
-      });
-      if (waitingCancellation.count === 1) {
-        const run = await this.loadRun(tx, command.runId);
-        await this.appendStatusEvent(tx, run, AiRunStatus.WAITING_APPROVAL);
-        return toAiRun(run);
-      }
-
-      const current = await this.loadRun(tx, command.runId);
-      if (
-        current.status === AiRunStatus.CANCELLATION_REQUESTED ||
-        current.status === AiRunStatus.CANCELLED
-      ) {
-        return toAiRun(current);
-      }
-
-      this.throwInvalidStatusTransition(current.status, '请求取消');
-    });
+        this.throwInvalidStatusTransition(current.status, '请求取消');
+      },
+    );
   }
 
   /** 当前执行器确认 Abort 已生效，并把正在取消的 Run 收敛为取消终态。 */
@@ -122,33 +122,42 @@ export class AiRunService {
     this.assertFencedCommand(command);
     const now = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
-      const cancelled = await tx.aiRun.updateMany({
-        where: {
-          id: command.runId,
-          status: AiRunStatus.CANCELLATION_REQUESTED,
-          executionLeaseId: command.executionLeaseId,
-          executionLeaseExpiresAt: { gt: now },
-        },
-        data: {
-          status: AiRunStatus.CANCELLED,
-          executionLeaseId: null,
-          executionLeaseExpiresAt: null,
-          finishedAt: now,
-          nextEventSequence: { increment: 1 },
-        },
-      });
+    return this.threadScopeService.withAccessibleRun(
+      command.authorization,
+      command.runId,
+      [],
+      async (tx) => {
+        const cancelled = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            status: AiRunStatus.CANCELLATION_REQUESTED,
+            executionLeaseId: command.executionLeaseId,
+            executionLeaseExpiresAt: { gt: now },
+          },
+          data: {
+            status: AiRunStatus.CANCELLED,
+            executionLeaseId: null,
+            executionLeaseExpiresAt: null,
+            finishedAt: now,
+            nextEventSequence: { increment: 1 },
+          },
+        });
 
-      if (cancelled.count !== 1) {
-        await this.assertRunExists(tx, command.runId);
-        this.throwExecutionLeaseInvalid('取消确认使用的执行租约已经失效');
-      }
+        if (cancelled.count !== 1) {
+          await this.assertRunExists(tx, command.runId);
+          this.throwExecutionLeaseInvalid('取消确认使用的执行租约已经失效');
+        }
 
-      const run = await this.loadRun(tx, command.runId);
-      await this.appendStatusEvent(tx, run, AiRunStatus.CANCELLATION_REQUESTED);
-      await this.releaseThreadGate(tx, run.threadId, run.id);
-      return toAiRun(run);
-    });
+        const run = await this.loadRun(tx, command.runId);
+        await this.appendStatusEvent(
+          tx,
+          run,
+          AiRunStatus.CANCELLATION_REQUESTED,
+        );
+        await this.releaseThreadGate(tx, run.threadId, run.id);
+        return toAiRun(run);
+      },
+    );
   }
 
   /** 在同一事务中写入助手最终消息、完成状态、状态事件并释放 Thread 门禁。 */
@@ -166,43 +175,54 @@ export class AiRunService {
     }
     const now = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
-      const completed = await tx.aiRun.updateMany({
-        where: {
-          id: command.runId,
-          status: AiRunStatus.RUNNING,
-          executionLeaseId: command.executionLeaseId,
-          executionLeaseExpiresAt: { gt: now },
-        },
-        data: {
-          status: AiRunStatus.COMPLETED,
-          resolvedModelId,
-          executionLeaseId: null,
-          executionLeaseExpiresAt: null,
-          finishedAt: now,
-          nextEventSequence: { increment: 1 },
-        },
-      });
+    return this.threadScopeService.withAccessibleRun(
+      command.authorization,
+      command.runId,
+      command.sourceIds,
+      async (tx) => {
+        const completed = await tx.aiRun.updateMany({
+          where: {
+            id: command.runId,
+            status: AiRunStatus.RUNNING,
+            executionLeaseId: command.executionLeaseId,
+            executionLeaseExpiresAt: { gt: now },
+          },
+          data: {
+            status: AiRunStatus.COMPLETED,
+            resolvedModelId,
+            executionLeaseId: null,
+            executionLeaseExpiresAt: null,
+            finishedAt: now,
+            nextEventSequence: { increment: 1 },
+          },
+        });
 
-      if (completed.count !== 1) {
-        await this.assertRunExists(tx, command.runId);
-        this.throwExecutionLeaseInvalid('完成写入使用的执行租约已经失效');
-      }
+        if (completed.count !== 1) {
+          await this.assertRunExists(tx, command.runId);
+          this.throwExecutionLeaseInvalid('完成写入使用的执行租约已经失效');
+        }
 
-      const run = await this.loadRun(tx, command.runId);
-      await tx.aiMessage.create({
-        data: {
-          id: command.assistantMessageId,
-          threadId: run.threadId,
-          runId: run.id,
-          role: AiMessageRole.ASSISTANT,
-          content: assistantContent,
-        },
-      });
-      await this.appendStatusEvent(tx, run, AiRunStatus.RUNNING);
-      await this.releaseThreadGate(tx, run.threadId, run.id);
-      return toAiRun(run);
-    });
+        const run = await this.loadRun(tx, command.runId);
+        await tx.aiMessage.create({
+          data: {
+            id: command.assistantMessageId,
+            threadId: run.threadId,
+            runId: run.id,
+            role: AiMessageRole.ASSISTANT,
+            content: assistantContent,
+          },
+        });
+        await this.threadScopeService.registerSourceDependencies(
+          tx,
+          run.id,
+          AiSourceDependencyUsage.ANSWER_CITATION,
+          command.sourceIds,
+        );
+        await this.appendStatusEvent(tx, run, AiRunStatus.RUNNING);
+        await this.releaseThreadGate(tx, run.threadId, run.id);
+        return toAiRun(run);
+      },
+    );
   }
 
   /** 使用当前有效租约把运行中或正在取消的 Run 收敛为失败终态。 */
@@ -210,75 +230,55 @@ export class AiRunService {
     this.assertFencedCommand(command);
     const now = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
-      const failureData = {
-        status: AiRunStatus.FAILED,
-        failureReason: command.failureReason,
-        failureCode: command.failureCode,
-        executionLeaseId: null,
-        executionLeaseExpiresAt: null,
-        finishedAt: now,
-        nextEventSequence: { increment: 1 },
-      } satisfies Prisma.AiRunUpdateManyMutationInput;
-      const runningFailure = await tx.aiRun.updateMany({
-        where: {
-          id: command.runId,
-          status: AiRunStatus.RUNNING,
-          executionLeaseId: command.executionLeaseId,
-          executionLeaseExpiresAt: { gt: now },
-        },
-        data: failureData,
-      });
-      let fromStatus: AiRunStatus = AiRunStatus.RUNNING;
-      if (runningFailure.count !== 1) {
-        const cancellationFailure = await tx.aiRun.updateMany({
+    return this.threadScopeService.withAccessibleRun(
+      command.authorization,
+      command.runId,
+      [],
+      async (tx) => {
+        const failureData = {
+          status: AiRunStatus.FAILED,
+          failureReason: command.failureReason,
+          failureCode: command.failureCode,
+          executionLeaseId: null,
+          executionLeaseExpiresAt: null,
+          finishedAt: now,
+          nextEventSequence: { increment: 1 },
+        } satisfies Prisma.AiRunUpdateManyMutationInput;
+        const runningFailure = await tx.aiRun.updateMany({
           where: {
             id: command.runId,
-            status: AiRunStatus.CANCELLATION_REQUESTED,
+            status: AiRunStatus.RUNNING,
             executionLeaseId: command.executionLeaseId,
             executionLeaseExpiresAt: { gt: now },
           },
           data: failureData,
         });
-        if (cancellationFailure.count !== 1) {
-          await this.assertRunExists(tx, command.runId);
-          this.throwExecutionLeaseInvalid('失败终态写入使用的执行租约已经失效');
+        let fromStatus: AiRunStatus = AiRunStatus.RUNNING;
+        if (runningFailure.count !== 1) {
+          const cancellationFailure = await tx.aiRun.updateMany({
+            where: {
+              id: command.runId,
+              status: AiRunStatus.CANCELLATION_REQUESTED,
+              executionLeaseId: command.executionLeaseId,
+              executionLeaseExpiresAt: { gt: now },
+            },
+            data: failureData,
+          });
+          if (cancellationFailure.count !== 1) {
+            await this.assertRunExists(tx, command.runId);
+            this.throwExecutionLeaseInvalid(
+              '失败终态写入使用的执行租约已经失效',
+            );
+          }
+          fromStatus = AiRunStatus.CANCELLATION_REQUESTED;
         }
-        fromStatus = AiRunStatus.CANCELLATION_REQUESTED;
-      }
 
-      const run = await this.loadRun(tx, command.runId);
-      await this.appendStatusEvent(tx, run, fromStatus);
-      await this.releaseThreadGate(tx, run.threadId, run.id);
-      return toAiRun(run);
-    });
-  }
-
-  /** 校验当前用户仍拥有 Run 所属 Thread 和 Decision 的访问权。 */
-  private async assertAccessibleRun(
-    authorization: AuthorizationContext,
-    runId: string,
-  ): Promise<void> {
-    this.authorizationService.assertPermission(authorization, 'ai:chat:use');
-    this.authorizationService.assertPermission(authorization, 'decision:read');
-    const run = await this.prisma.aiRun.findFirst({
-      where: { id: runId, thread: { ownerUserId: authorization.userId } },
-      select: { thread: { select: { decisionId: true } } },
-    });
-    if (!run) {
-      this.throwRunNotFound();
-    }
-    const decisionWhere = await this.authorizationService.buildDecisionWhere(
-      authorization,
-      'decision:read',
+        const run = await this.loadRun(tx, command.runId);
+        await this.appendStatusEvent(tx, run, fromStatus);
+        await this.releaseThreadGate(tx, run.threadId, run.id);
+        return toAiRun(run);
+      },
     );
-    const decision = await this.prisma.decision.findFirst({
-      where: { AND: [{ id: run.thread.decisionId }, decisionWhere] },
-      select: { id: true },
-    });
-    if (!decision) {
-      this.throwRunNotFound();
-    }
   }
 
   /** 读取事务内 Run；调用前已经通过条件更新取得行锁。 */

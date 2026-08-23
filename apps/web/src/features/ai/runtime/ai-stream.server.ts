@@ -15,8 +15,8 @@ import type { AiRunEventPage, AiRunStreamMetadata } from '@workspace/contracts/a
 
 import type { AiDecisionUiMessage } from '../types/ai-message';
 import type { createDecisionAgentTools } from '../tools/registry';
-import type { AiNestIdentity } from './ai-nest-client.server';
-import { getAiRunEvents } from './ai-nest-client.server';
+import { serializeAiThreadScopeChangedError } from '../utils/ai-workspace-state';
+import { getAiRunEvents, type AiNestIdentity } from './ai-nest-client.server';
 
 /** Decision Agent 原始模型流片段类型。 */
 export type DecisionAgentStreamPart = TextStreamPart<ReturnType<typeof createDecisionAgentTools>>;
@@ -92,11 +92,19 @@ async function pumpPersistedEvents(
   try {
     for (;;) {
       const page = await getAiRunEvents(options.identity, options.threadId, options.runId, sequence);
+      const previousSequence = sequence;
       ({ sequence, textPartId, messageStarted } = emitPersistedEvents(controller, page, {
         sequence,
         textPartId,
         messageStarted,
       }));
+
+      if (page.hasMore) {
+        if (sequence <= previousSequence) {
+          throw new Error('AI 运行事件分页游标未推进');
+        }
+        continue;
+      }
 
       if (isTerminalRunStatus(page.run.status)) {
         if (textPartId) {
@@ -115,7 +123,9 @@ async function pumpPersistedEvents(
   } catch (error) {
     controller.enqueue({
       type: 'error',
-      errorText: error instanceof Error ? error.message : 'AI 运行恢复失败',
+      errorText:
+        serializeAiThreadScopeChangedError(error) ??
+        (error instanceof Error ? error.message : 'AI 运行恢复失败'),
     });
     controller.close();
   }

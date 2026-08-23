@@ -1,18 +1,20 @@
 /**
- * 本文件提供第 2.4 阶段绑定单项决策的真实 AI Agent 测试入口。
+ * 本文件提供第 2.6 阶段新建决策过程 AI 会话的工作区入口。
  */
 
-import { AiChatPanel } from '@/features/ai/components/ai-chat-panel';
+import { AiWorkspace } from '@/features/ai/components/ai-workspace';
 
-/** 渲染 Decision Agent 页面，并允许通过查询参数预填 decisionId。 */
-export default async function AiPage({ searchParams }: { searchParams: Promise<{ decisionId?: string }> }) {
+/** 新会话页面属性。 */
+type AiPageProps = {
+  /** 允许从决策页跳转时预填真实 Decision 主键。 */
+  searchParams: Promise<{ decisionId?: string }>;
+};
+
+/** 渲染未绑定 Thread 的新会话工作区。 */
+export default async function AiPage({ searchParams }: AiPageProps) {
   const params = await searchParams;
   const parsedDecisionId = Number(params.decisionId);
   const initialDecisionId = Number.isInteger(parsedDecisionId) && parsedDecisionId > 0 ? parsedDecisionId : undefined;
 
-  return (
-    <div className="flex min-h-0 flex-1 p-4 md:p-6">
-      <AiChatPanel initialDecisionId={initialDecisionId} />
-    </div>
-  );
+  return <AiWorkspace initialDecisionId={initialDecisionId} initialThreadId={null} />;
 }

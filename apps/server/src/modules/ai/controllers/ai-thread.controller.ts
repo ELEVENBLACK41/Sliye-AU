@@ -1,5 +1,5 @@
 /**
- * 本文件提供 2.4 阶段最小 AI Thread 创建、消息提交与事件补拉接口。
+ * 本文件提供 AI Thread 创建、历史恢复、白名单更新、消息提交与事件补拉接口。
  */
 
 import {
@@ -9,6 +9,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -20,7 +21,9 @@ import {
   CreateAiThreadMessageRunDto,
   CreateAiThreadRunDto,
 } from '../dto/ai-request.dto';
+import { ListAiThreadMessagesDto } from '../dto/list-ai-thread-messages.dto';
 import { ListAiThreadsDto } from '../dto/list-ai-threads.dto';
+import { UpdateAiThreadDto } from '../dto/update-ai-thread.dto';
 import { AiRuntimeQueryService } from '../services/ai-runtime-query.service';
 import { AiThreadHistoryQueryService } from '../services/ai-thread-history-query.service';
 import { AiThreadService } from '../services/ai-thread.service';
@@ -45,6 +48,52 @@ export class AiThreadController {
     @Query() query: ListAiThreadsDto,
   ) {
     return this.aiThreadHistoryQueryService.listThreads(authorization, query);
+  }
+
+  /** 返回当前用户拥有且仍可访问的 AI Thread 安全详情。 */
+  @Get(':threadId')
+  @RequirePermissions('ai:chat:use', 'decision:read')
+  @ApiOperation({ summary: '查询 AI Thread 安全详情' })
+  getThreadDetail(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('threadId') threadId: string,
+  ) {
+    return this.aiThreadHistoryQueryService.getThreadDetail(
+      authorization,
+      threadId,
+    );
+  }
+
+  /** 分页返回消息、对应 Run、工具调用和稳定来源关联。 */
+  @Get(':threadId/messages')
+  @RequirePermissions('ai:chat:use', 'decision:read')
+  @ApiOperation({ summary: '分页查询 AI Thread 消息历史' })
+  listThreadMessages(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('threadId') threadId: string,
+    @Query() query: ListAiThreadMessagesDto,
+  ) {
+    return this.aiThreadHistoryQueryService.listThreadMessages(
+      authorization,
+      threadId,
+      query,
+    );
+  }
+
+  /** 只允许当前 owner 重命名、归档或恢复 AI Thread。 */
+  @Patch(':threadId')
+  @RequirePermissions('ai:chat:use', 'decision:read')
+  @ApiOperation({ summary: '更新 AI Thread 标题或归档状态' })
+  updateThread(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('threadId') threadId: string,
+    @Body() body: UpdateAiThreadDto,
+  ) {
+    return this.aiThreadHistoryQueryService.updateThread(
+      authorization,
+      threadId,
+      body,
+    );
   }
 
   /** 原子创建 Thread、首条用户消息和排队 Run。 */

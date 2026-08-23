@@ -7,9 +7,12 @@ import 'server-only';
 import type {
   AiDecisionContext,
   AiRun,
+  AiRunPublicSummary,
   AiRunCreation,
   AiRunEventPage,
   AiRunExecutionLease,
+  AiThreadDetail,
+  AiThreadMessagePage,
   AiThreadPage,
   AppendAiTextDeltaRequest,
   ClaimAiRunExecutionRequest,
@@ -24,7 +27,10 @@ import type {
   StartAiToolCallRequest,
   FinishAiToolCallRequest,
   ListAiThreadsQuery,
+  ListAiThreadMessagesQuery,
   AiToolCall,
+  UpdateAiThreadRequest,
+  UpdateAiThreadResponse,
 } from '@workspace/contracts/ai';
 import type { ApiErrorResponse } from '@workspace/contracts/common';
 
@@ -86,6 +92,39 @@ export function listAiThreads(identity: AiNestIdentity, query: ListAiThreadsQuer
   return requestAiNest(`/ai/threads${suffix}`, identity, { method: 'GET' });
 }
 
+/** 读取当前用户拥有且仍具备决策权限的 AI Thread 安全详情。 */
+export function getAiThreadDetail(identity: AiNestIdentity, threadId: string): Promise<AiThreadDetail> {
+  return requestAiNest(`/ai/threads/${threadId}`, identity, { method: 'GET' });
+}
+
+/** 分页读取指定 Thread 的持久化消息、运行、工具调用与来源关联。 */
+export function listAiThreadMessages(
+  identity: AiNestIdentity,
+  threadId: string,
+  query: ListAiThreadMessagesQuery,
+): Promise<AiThreadMessagePage> {
+  const searchParams = new URLSearchParams();
+
+  if (query.cursor) {
+    searchParams.set('cursor', query.cursor);
+  }
+  if (query.limit !== undefined) {
+    searchParams.set('limit', String(query.limit));
+  }
+
+  const suffix = searchParams.size > 0 ? `?${searchParams}` : '';
+  return requestAiNest(`/ai/threads/${threadId}/messages${suffix}`, identity, { method: 'GET' });
+}
+
+/** 通过白名单字段重命名、归档或恢复指定 AI Thread。 */
+export function updateAiThread(
+  identity: AiNestIdentity,
+  threadId: string,
+  request: UpdateAiThreadRequest,
+): Promise<UpdateAiThreadResponse> {
+  return requestAiNest(`/ai/threads/${threadId}`, identity, { method: 'PATCH', body: request });
+}
+
 /** 在既有 Thread 中原子创建消息和排队 Run。 */
 export function createAiMessageRun(
   identity: AiNestIdentity,
@@ -105,7 +144,7 @@ export function retryAiRun(
 }
 
 /** 请求停止排队或执行中的 Run。 */
-export function stopAiRun(identity: AiNestIdentity, runId: string): Promise<AiRun> {
+export function stopAiRun(identity: AiNestIdentity, runId: string): Promise<AiRunPublicSummary> {
   return requestAiNest(`/ai/runs/${runId}/stop`, identity, { method: 'POST' });
 }
 
@@ -252,7 +291,7 @@ async function requestAiNest<TData, TBody = unknown>(
   path: string,
   identity: AiNestIdentity,
   options: {
-    method: 'GET' | 'POST';
+    method: 'GET' | 'POST' | 'PATCH';
     body?: TBody;
     internal?: boolean;
     executionLeaseId?: string;

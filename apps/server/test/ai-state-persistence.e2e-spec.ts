@@ -238,12 +238,14 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
       select: { id: true },
     });
     const lease = await runLeaseService.claim({
+      authorization,
       runId: run.id,
       leaseDurationMs: 60_000,
     });
     const events = await Promise.all(
       Array.from({ length: 20 }, (_, index) =>
         eventService.append({
+          authorization,
           runId: run.id,
           executionLeaseId: lease.executionLeaseId,
           type: 'ASSISTANT_TEXT_DELTA',
@@ -286,6 +288,7 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
     const startedAt = new Date('2026-08-21T06:00:00.000Z');
     const [firstStep, secondStep] = await Promise.all([
       stepService.recordModelStep({
+        authorization,
         runId: run.id,
         executionLeaseId,
         sequence: 1,
@@ -302,6 +305,7 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
         timeToFirstOutputMs: 200,
       }),
       stepService.recordModelStep({
+        authorization,
         runId: run.id,
         executionLeaseId,
         sequence: 2,
