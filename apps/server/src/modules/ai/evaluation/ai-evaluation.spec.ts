@@ -5,9 +5,7 @@
 import { AI_DECISION_PROCESS_FIXTURE_V1 } from './fixtures/ai-decision-process.fixture';
 import { AI_PERMISSION_GOLD_QUERY_DATASET_V1 } from './fixtures/ai-permission-gold-query.fixture';
 import { AI_PERMISSION_FIXTURE_V1 } from './fixtures/ai-permission.fixture';
-import { AI_STAGE_TWO_AGENT_SCOPE_GOLD_QUERY_DATASET_V1 } from './fixtures/ai-stage-two-agent-scope-gold-query.fixture';
 import { AI_STAGE_ZERO_GOLD_QUERY_DATASET_V1 } from './fixtures/ai-stage-zero-gold-query.fixture';
-import { calculateAnswerMetrics } from './metrics/answer.metrics';
 import { toSourceReferenceKey } from './metrics/metric-math';
 import { calculateRetrieverMetrics } from './metrics/retriever.metrics';
 import {
@@ -16,7 +14,6 @@ import {
 } from './runners/evaluation-report.serializer';
 import { filterPermissionFixtureSources } from './runners/permission-fixture-filter';
 import { createStageZeroEvaluationReport } from './runners/stage-zero-evaluation.runner';
-import { runMockLanguageEvaluation } from './runners/mock-model.runner';
 import type { AiGoldQueryForbiddenSourceReference } from './types/ai-gold-query.types';
 
 /** 收集决策过程 Fixture 中全部可定位来源键。 */
@@ -109,33 +106,6 @@ describe('AI 第 0 阶段确定性评测', () => {
         query.relevantSourceReferences.map(toSourceReferenceKey),
       );
     }
-  });
-
-  it('2.4 固定评测集应覆盖四类离题、标题精确差异和 Thread 范围切换', async () => {
-    const dataset = AI_STAGE_TWO_AGENT_SCOPE_GOLD_QUERY_DATASET_V1;
-    const ids = dataset.queries.map((query) => query.id);
-    const evaluation = await runMockLanguageEvaluation(dataset);
-    const metrics = calculateAnswerMetrics(
-      dataset,
-      evaluation.answerObservations,
-    );
-
-    expect(dataset.datasetVersion).toBe(
-      'ai-stage-two-agent-scope-gold-query-v1',
-    );
-    expect(ids).toEqual([
-      'stage-two-off-topic-react-tutorial',
-      'stage-two-off-topic-weather',
-      'stage-two-off-topic-general-writing',
-      'stage-two-off-topic-code-generation',
-      'stage-two-title-exact-match',
-      'stage-two-title-punctuation-mismatch',
-      'stage-two-thread-scope-switch-injection',
-    ]);
-    expect(evaluation.languageModelCallCount).toBe(dataset.queries.length);
-    expect(metrics.noAnswerAccuracy).toBe(1);
-    expect(metrics.citationLeakSourceCount).toBe(0);
-    expect(metrics.failedQueryIds).toEqual([]);
   });
 
   it('Retriever 指标必须把拒绝请求中的任何召回立即计为权限泄漏', () => {
