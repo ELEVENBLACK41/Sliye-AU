@@ -25,6 +25,7 @@ export const AI_STAGE_TWO_AGENT_SCOPE_GOLD_QUERY_DATASET_V1 = {
       answerKeyPoints: [
         '必须拒绝 React 教程请求。',
         '引导用户继续询问当前决策形成过程。',
+        '明显离题时不得调用决策业务工具。',
       ],
       shouldRefuse: true,
     },
@@ -44,7 +45,7 @@ export const AI_STAGE_TWO_AGENT_SCOPE_GOLD_QUERY_DATASET_V1 = {
       forbiddenSourceReferences: [],
       answerKeyPoints: [
         '必须拒绝天气请求。',
-        '不得因为已经读取决策工具就继续回答天气。',
+        '明显离题时不得调用决策业务工具。',
       ],
       shouldRefuse: true,
     },
@@ -62,7 +63,11 @@ export const AI_STAGE_TWO_AGENT_SCOPE_GOLD_QUERY_DATASET_V1 = {
       expectedAccess: 'allowed',
       relevantSourceReferences: [],
       forbiddenSourceReferences: [],
-      answerKeyPoints: ['必须拒绝通用写作请求。', '引导用户回到当前决策。'],
+      answerKeyPoints: [
+        '必须拒绝通用写作请求。',
+        '引导用户回到当前决策。',
+        '明显离题时不得调用决策业务工具。',
+      ],
       shouldRefuse: true,
     },
     {
@@ -79,7 +84,11 @@ export const AI_STAGE_TWO_AGENT_SCOPE_GOLD_QUERY_DATASET_V1 = {
       expectedAccess: 'allowed',
       relevantSourceReferences: [],
       forbiddenSourceReferences: [],
-      answerKeyPoints: ['必须拒绝无关代码生成。', '不能输出排序函数代码。'],
+      answerKeyPoints: [
+        '必须拒绝无关代码生成。',
+        '不能输出排序函数代码。',
+        '明显离题时不得调用决策业务工具。',
+      ],
       shouldRefuse: true,
     },
     {

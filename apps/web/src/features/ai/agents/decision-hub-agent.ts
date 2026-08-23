@@ -10,11 +10,13 @@ import { createDecisionAgentTools } from '../tools/registry';
 import type { z } from 'zod';
 import type { getDecisionContextToolContextSchema } from '../tools/decision/get-decision-context.tool';
 import { DECISION_AGENT_INSTRUCTIONS } from './decision-agent-instructions';
+import { prepareDecisionAgentStep, type DecisionAgentScopeRoute } from './decision-agent-scope-policy';
 
 /** 使用已解析 Gateway 模型创建单 Run Agent。 */
 export function createDecisionHubAgent(
   resolvedModel: ResolvedAiLanguageModel,
   toolContext: z.infer<typeof getDecisionContextToolContextSchema>,
+  scopeRoute: DecisionAgentScopeRoute,
 ) {
   const { configuration } = resolvedModel;
 
@@ -33,14 +35,6 @@ export function createDecisionHubAgent(
       tools: { getDecisionContextMs: 8_000 },
     },
     providerOptions: resolvedModel.providerOptions,
-    prepareStep: ({ stepNumber }) =>
-      stepNumber === 0
-        ? {
-            toolChoice: {
-              type: 'tool' as const,
-              toolName: 'getDecisionContext' as const,
-            },
-          }
-        : {},
+    prepareStep: ({ stepNumber }) => prepareDecisionAgentStep(scopeRoute, stepNumber),
   });
 }

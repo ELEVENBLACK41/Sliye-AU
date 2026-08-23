@@ -13,6 +13,7 @@ import type {
 import { API_ERROR_CODES, type ApiErrorCode } from '@workspace/contracts/common';
 
 import { createDecisionHubAgent } from '../agents/decision-hub-agent';
+import { routeDecisionAgentRequest } from '../agents/decision-agent-scope-policy';
 import { buildAiAgentContext } from '../context/agent-context-builder.server';
 import { normalizeAiModelError } from './ai-model-error';
 import { estimateAiLanguageModelCostUsd } from './ai-model-registry';
@@ -203,14 +204,19 @@ async function createClaimedRunResponse(options: {
       userId: identity.userId,
       feature: 'decision-agent',
     });
-    const agent = createDecisionHubAgent(resolvedModel, {
-      userId: identity.userId,
-      accessToken: identity.accessToken,
-      runId: creation.run.id,
-      executionLeaseId,
-      decisionId: creation.thread.decisionId,
-    });
     const context = buildAiAgentContext(options.uiMessages);
+    const scopeRoute = routeDecisionAgentRequest(creation.message.content);
+    const agent = createDecisionHubAgent(
+      resolvedModel,
+      {
+        userId: identity.userId,
+        accessToken: identity.accessToken,
+        runId: creation.run.id,
+        executionLeaseId,
+        decisionId: creation.thread.decisionId,
+      },
+      scopeRoute,
+    );
     resolvedModelId = resolvedModel.configuration.primary.modelId;
     const result = await agent.stream({
       messages: context.messages,
