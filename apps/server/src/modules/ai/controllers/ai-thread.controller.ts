@@ -20,7 +20,9 @@ import {
   CreateAiThreadMessageRunDto,
   CreateAiThreadRunDto,
 } from '../dto/ai-request.dto';
+import { ListAiThreadsDto } from '../dto/list-ai-threads.dto';
 import { AiRuntimeQueryService } from '../services/ai-runtime-query.service';
+import { AiThreadHistoryQueryService } from '../services/ai-thread-history-query.service';
 import { AiThreadService } from '../services/ai-thread.service';
 
 @ApiTags('ai-threads')
@@ -30,8 +32,20 @@ export class AiThreadController {
   /** 注入 Thread 状态服务和事件查询服务。 */
   constructor(
     private readonly aiThreadService: AiThreadService,
+    private readonly aiThreadHistoryQueryService: AiThreadHistoryQueryService,
     private readonly aiRuntimeQueryService: AiRuntimeQueryService,
   ) {}
+
+  /** 返回当前用户仍有 Decision 访问权的 AI Thread 历史页。 */
+  @Get()
+  @RequirePermissions('ai:chat:use', 'decision:read')
+  @ApiOperation({ summary: '分页查询当前用户的 AI Thread 历史' })
+  listThreads(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Query() query: ListAiThreadsDto,
+  ) {
+    return this.aiThreadHistoryQueryService.listThreads(authorization, query);
+  }
 
   /** 原子创建 Thread、首条用户消息和排队 Run。 */
   @Post()

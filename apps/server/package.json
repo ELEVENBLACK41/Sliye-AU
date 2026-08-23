@@ -28,7 +28,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:ai:state:integration": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json ai-state-persistence.e2e-spec.ts ai-run-lifecycle.e2e-spec.ts --runInBand",
+    "test:ai:state:integration": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json ai-state-persistence.e2e-spec.ts ai-run-lifecycle.e2e-spec.ts ai-thread-history.e2e-spec.ts --runInBand",
     "ai:evaluation:report": "ts-node --project tsconfig.json src/modules/ai/evaluation/runners/generate-stage-zero-report.ts"
   },
   "dependencies": {

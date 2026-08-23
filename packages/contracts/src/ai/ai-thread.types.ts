@@ -39,3 +39,49 @@ export type AiThread = {
   /** Thread 最后一次业务变化时间，使用 ISO 8601 字符串。 */
   updatedAt: string;
 };
+
+/** AI Thread 历史列表支持的归档范围。 */
+export const AI_THREAD_ARCHIVE_STATES = ['active', 'archived'] as const;
+
+/** AI Thread 历史列表当前查询的归档范围。 */
+export type AiThreadArchiveState = (typeof AI_THREAD_ARCHIVE_STATES)[number];
+
+/** 历史列表中一条不暴露内部所有者与权限锁定细节的 AI Thread 摘要。 */
+export type AiThreadListItem = {
+  /** 对外稳定的 Thread UUID。 */
+  id: string;
+  /** Thread 唯一绑定的决策主键。 */
+  decisionId: number;
+  /** 用户可修改的会话标题。 */
+  title: string;
+  /** 当前非终态 Run；没有运行时为空。 */
+  activeRunId: string | null;
+  /** 用户归档时间；未归档时为空。 */
+  archivedAt: string | null;
+  /** Thread 创建时间，使用 ISO 8601 字符串。 */
+  createdAt: string;
+  /** Thread 最后一次业务变化时间，使用 ISO 8601 字符串。 */
+  updatedAt: string;
+};
+
+/** AI Thread 历史列表的游标分页查询参数。 */
+export type ListAiThreadsQuery = {
+  /** 服务端生成的不透明分页游标；首屏省略。 */
+  cursor?: string;
+  /** 查询未归档或已归档会话；省略时只返回未归档会话。 */
+  archiveState?: AiThreadArchiveState;
+  /** 可选的单项决策筛选条件。 */
+  decisionId?: number;
+  /** 单页数量，服务端默认 20 且最大 50。 */
+  limit?: number;
+};
+
+/** AI Thread 历史列表的一页稳定结果。 */
+export type AiThreadPage = {
+  /** 按 `updatedAt` 和 Thread UUID 倒序排列的当前页。 */
+  items: AiThreadListItem[];
+  /** 继续向后查询的服务端不透明游标；没有更多数据时为空。 */
+  nextCursor: string | null;
+  /** 当前筛选条件下是否仍有更多会话。 */
+  hasMore: boolean;
+};

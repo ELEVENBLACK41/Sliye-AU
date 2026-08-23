@@ -14,6 +14,7 @@ import { AiRunReconciliationService } from './services/ai-run-reconciliation.ser
 import { AiRunService } from './services/ai-run.service';
 import { AiRuntimeQueryService } from './services/ai-runtime-query.service';
 import { AiStepService } from './services/ai-step.service';
+import { AiThreadHistoryQueryService } from './services/ai-thread-history-query.service';
 import { AiThreadService } from './services/ai-thread.service';
 import { AiToolCallService } from './services/ai-tool-call.service';
 
@@ -27,6 +28,7 @@ import { AiToolCallService } from './services/ai-tool-call.service';
     AiRunReconciliationService,
     AiEventService,
     AiStepService,
+    AiThreadHistoryQueryService,
     AiRuntimeQueryService,
     AiRuntimeServiceGuard,
     AiToolCallService,
@@ -38,9 +40,10 @@ import { AiToolCallService } from './services/ai-tool-call.service';
     AiRunReconciliationService,
     AiEventService,
     AiStepService,
+    AiThreadHistoryQueryService,
     AiRuntimeQueryService,
     AiToolCallService,
   ],
 })
-/** AI 状态模块，注册 2.4 最小运行闭环接口；历史管理接口仍留到 2.5。 */
+/** AI 状态模块，注册运行闭环与 2.5 历史管理查询能力。 */
 export class AiModule {}

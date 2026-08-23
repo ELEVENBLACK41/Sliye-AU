@@ -10,6 +10,7 @@ import type {
   AiRunCreation,
   AiRunEventPage,
   AiRunExecutionLease,
+  AiThreadPage,
   AppendAiTextDeltaRequest,
   ClaimAiRunExecutionRequest,
   CompleteAiRunExecutionRequest,
@@ -22,6 +23,7 @@ import type {
   RetryAiRunRequest,
   StartAiToolCallRequest,
   FinishAiToolCallRequest,
+  ListAiThreadsQuery,
   AiToolCall,
 } from '@workspace/contracts/ai';
 import type { ApiErrorResponse } from '@workspace/contracts/common';
@@ -61,6 +63,27 @@ export function createInitialAiRun(
   request: CreateAiThreadRunRequest,
 ): Promise<AiRunCreation> {
   return requestAiNest('/ai/threads', identity, { method: 'POST', body: request });
+}
+
+/** 分页读取当前用户仍有 Decision 权限的 AI Thread 历史。 */
+export function listAiThreads(identity: AiNestIdentity, query: ListAiThreadsQuery): Promise<AiThreadPage> {
+  const searchParams = new URLSearchParams();
+
+  if (query.cursor) {
+    searchParams.set('cursor', query.cursor);
+  }
+  if (query.archiveState) {
+    searchParams.set('archiveState', query.archiveState);
+  }
+  if (query.decisionId !== undefined) {
+    searchParams.set('decisionId', String(query.decisionId));
+  }
+  if (query.limit !== undefined) {
+    searchParams.set('limit', String(query.limit));
+  }
+
+  const suffix = searchParams.size > 0 ? `?${searchParams}` : '';
+  return requestAiNest(`/ai/threads${suffix}`, identity, { method: 'GET' });
 }
 
 /** 在既有 Thread 中原子创建消息和排队 Run。 */

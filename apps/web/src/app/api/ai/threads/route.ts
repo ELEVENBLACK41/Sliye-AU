@@ -4,9 +4,44 @@
 
 import { aiChatStreamRequestSchema, getLatestUserMessageText } from '@/features/ai/schemas/ai-request.schema';
 import { startAiRunExecution } from '@/features/ai/runtime/ai-agent-runtime.server';
-import { createInitialAiRun, stopAiRun } from '@/features/ai/runtime/ai-nest-client.server';
+import { createInitialAiRun, listAiThreads, stopAiRun } from '@/features/ai/runtime/ai-nest-client.server';
 import { authenticateAiRoute, handleAiRouteError } from '@/features/ai/runtime/ai-route.server';
-import { apiError } from '@/app/api/_utils/response';
+import { apiError, apiSuccess } from '@/app/api/_utils/response';
+import type { ListAiThreadsQuery } from '@workspace/contracts/ai';
+import { z } from 'zod';
+
+/** BFF 仅接受 2.5 首版历史列表的白名单查询参数。 */
+const aiThreadListQuerySchema = z
+  .object({
+    cursor: z.string().min(1).max(512).optional(),
+    archiveState: z.enum(['active', 'archived']).optional(),
+    decisionId: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+  })
+  .strict();
+
+/** 读取当前用户仍可访问的 AI Thread 历史页。 */
+export async function GET(request: Request): Promise<Response> {
+  const path = '/api/ai/threads';
+  const authentication = await authenticateAiRoute(path);
+
+  if (!authentication.ok) {
+    return authentication.response;
+  }
+
+  const parsed = aiThreadListQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
+
+  if (!parsed.success) {
+    return apiError({ status: 400, message: 'AI 会话列表查询参数不正确', path });
+  }
+
+  try {
+    const page = await listAiThreads(authentication.identity, parsed.data satisfies ListAiThreadsQuery);
+    return apiSuccess({ data: page, message: 'AI 会话历史获取成功' });
+  } catch (error) {
+    return handleAiRouteError(error, path, 'AI 会话历史获取失败，请稍后重试');
+  }
+}
 
 /** 校验请求、原子创建状态并由当前 BFF 请求领取执行。 */
 export async function POST(request: Request): Promise<Response> {
