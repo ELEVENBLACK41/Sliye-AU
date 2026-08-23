@@ -532,9 +532,22 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
       fixture.decisionId,
     );
     expect(decisionContext).toMatchObject({
-      decision: { id: fixture.decisionId },
+      decision: {
+        id: fixture.decisionId,
+        title: 'AI 租约测试决策',
+      },
       project: { id: fixture.projectId },
       sources: [{ sourceId: `decision:${fixture.decisionId}` }],
+    });
+    await expect(
+      runtimeQueryService.getDecisionContext(
+        authorization,
+        created.run.id,
+        lease.executionLeaseId,
+        fixture.decisionId + 999_999,
+      ),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
     });
     await expect(
       runtimeQueryService.getDecisionContext(

@@ -114,24 +114,12 @@ async function createClaimedRunResponse(options: {
   uiMessages: UIMessage[];
 }): Promise<Response> {
   const { creation, executionLeaseId, handle, identity } = options;
-  const resolvedModel = resolveAiLanguageModel(creation.run.modelRole, {
-    userId: identity.userId,
-    feature: 'decision-agent',
-  });
-  const agent = createDecisionHubAgent(resolvedModel, {
-    userId: identity.userId,
-    accessToken: identity.accessToken,
-    runId: creation.run.id,
-    executionLeaseId,
-    decisionId: creation.thread.decisionId,
-  });
-  const context = buildAiAgentContext(options.uiMessages);
   const assistantMessageId = crypto.randomUUID();
   const stepStartTimes = new Map<number, Date>();
   const toolSequences = new Map<string, number>();
   let nextToolSequence = 1;
   let assistantContent = '';
-  let resolvedModelId = resolvedModel.configuration.primary.modelId;
+  let resolvedModelId = creation.run.resolvedModelId ?? '';
   let fatalError: unknown = null;
   let fatalFailureReason: AiRunFailureReason = 'MODEL_ERROR';
   let fatalErrorEmitted = false;
@@ -211,6 +199,19 @@ async function createClaimedRunResponse(options: {
   };
 
   try {
+    const resolvedModel = resolveAiLanguageModel(creation.run.modelRole, {
+      userId: identity.userId,
+      feature: 'decision-agent',
+    });
+    const agent = createDecisionHubAgent(resolvedModel, {
+      userId: identity.userId,
+      accessToken: identity.accessToken,
+      runId: creation.run.id,
+      executionLeaseId,
+      decisionId: creation.thread.decisionId,
+    });
+    const context = buildAiAgentContext(options.uiMessages);
+    resolvedModelId = resolvedModel.configuration.primary.modelId;
     const result = await agent.stream({
       messages: context.messages,
       abortSignal: handle.abortController.signal,
