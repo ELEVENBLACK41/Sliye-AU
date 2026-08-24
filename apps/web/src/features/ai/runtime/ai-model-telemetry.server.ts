@@ -4,18 +4,18 @@
  */
 import 'server-only';
 
-import type { LanguageModelCallEndEvent } from 'ai';
+import type { LanguageModelCallEndEvent, ToolSet } from 'ai';
 import type { AiLanguageModelRole } from '@workspace/contracts/ai';
 
 import { normalizeAiModelError } from './ai-model-error.ts';
 import { estimateAiLanguageModelCostUsd } from './ai-model-registry.ts';
 
 /** 记录一次真实语言模型调用的模型、用量、耗时和静态成本估算。 */
-export function logAiLanguageModelCallEnd(options: {
+export function logAiLanguageModelCallEnd<TOOLS extends ToolSet>(options: {
   requestId: string;
   role: AiLanguageModelRole;
   configuredModelId: string;
-  event: LanguageModelCallEndEvent;
+  event: LanguageModelCallEndEvent<TOOLS>;
 }): void {
   const { requestId, role, configuredModelId, event } = options;
 

@@ -6,7 +6,9 @@
 import { useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import type { ChatStatus, UIMessage } from 'ai';
-import { Copy } from 'lucide-react';
+import { ChevronDown, Copy, Globe2 } from 'lucide-react';
+
+import { Switch } from '@workspace/ui/components/switch';
 
 import { AiRunActivityLabel, AiToolCallGroup, type AiToolMessagePart } from './ai-tool-call-card';
 import {
@@ -28,10 +30,12 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input';
+import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai-elements/sources';
 
 /** 渲染复用既有 `/api/chat` 流式测试机器人的 AI 对话主画布。 */
 export function AiChatSurface({ userName }: { userName: string }) {
   const [input, setInput] = useState('');
+  const [enableWebSearch, setEnableWebSearch] = useState(false);
   const { messages, sendMessage, status, stop, error } = useChat();
   const isRunning = status === 'submitted' || status === 'streaming';
 
@@ -40,7 +44,7 @@ export function AiChatSurface({ userName }: { userName: string }) {
     const text = message.text.trim();
     if (!text || isRunning) return;
 
-    void sendMessage({ text });
+    void sendMessage({ text }, { body: { enableWebSearch } });
     setInput('');
   }
 
@@ -53,7 +57,9 @@ export function AiChatSurface({ userName }: { userName: string }) {
             input={input}
             status={status}
             isRunning={isRunning}
+            enableWebSearch={enableWebSearch}
             onInputChange={setInput}
+            onWebSearchChange={setEnableWebSearch}
             onStop={stop}
             onSubmit={handleMessageSubmit}
           />
@@ -73,7 +79,9 @@ export function AiChatSurface({ userName }: { userName: string }) {
           input={input}
           status={status}
           isRunning={isRunning}
+          enableWebSearch={enableWebSearch}
           onInputChange={setInput}
+          onWebSearchChange={setEnableWebSearch}
           onStop={stop}
           onSubmit={handleMessageSubmit}
         />
@@ -117,6 +125,7 @@ function AiConversationMessage({ message, isStreaming }: { message: UIMessage; i
   const hasAssistantText =
     message.role === 'assistant' && message.parts.some((part) => part.type === 'text' && part.text.trim());
   const toolParts = message.parts.filter((part) => part.type.startsWith('tool-')) as AiToolMessagePart[];
+  const webSources = getWebSources(toolParts);
 
   if (message.role === 'user') {
     return (
@@ -150,11 +159,74 @@ function AiConversationMessage({ message, isStreaming }: { message: UIMessage; i
 
           return null;
         })}
+        {webSources.length > 0 ? <AiWebSources sources={webSources} /> : null}
       </MessageContent>
       {hasAssistantText && messageText ? <AiMessageCopyAction text={messageText} label="复制 AI 回复" /> : null}
     </Message>
   );
 }
+
+/** 渲染当前回答实际使用的外部网页来源，保持来源与对应工具结果同一条消息内。 */
+function AiWebSources({ sources }: { sources: AiWebSource[] }) {
+  return (
+    <Sources defaultOpen className="mb-0 pt-1 text-decision-meeting">
+      <SourcesTrigger count={sources.length} className="w-fit text-decision-meeting hover:text-decision-meeting/80">
+        <Globe2 className="size-3.5" aria-hidden />
+        <span>引用了 {sources.length} 个网页来源</span>
+        <ChevronDown className="size-3.5" aria-hidden />
+      </SourcesTrigger>
+      <SourcesContent className="mt-2 flex w-full flex-col gap-1">
+        {sources.map((source) => (
+          <Source
+            key={source.url}
+            className="w-fit max-w-full text-decision-meeting hover:text-decision-meeting/80"
+            href={source.url}
+            title={source.title}
+          />
+        ))}
+      </SourcesContent>
+    </Sources>
+  );
+}
+
+/** 从网页检索工具的真实输出中提取去重后的可点击来源。 */
+function getWebSources(parts: AiToolMessagePart[]): AiWebSource[] {
+  const sources = new Map<string, AiWebSource>();
+
+  for (const part of parts) {
+    if (part.type !== 'tool-parallel_search') continue;
+
+    for (const source of getWebSearchOutputSources(part.output)) {
+      sources.set(source.url, source);
+    }
+  }
+
+  return [...sources.values()];
+}
+
+/** 校验并转换网页检索输出，防止工具失败对象或不完整数据被当作来源展示。 */
+function getWebSearchOutputSources(output: unknown): AiWebSource[] {
+  if (!isWebSearchResult(output)) return [];
+
+  return output.results.flatMap((result) =>
+    typeof result.url === 'string' && result.url && typeof result.title === 'string' && result.title
+      ? [{ title: result.title, url: result.url }]
+      : [],
+  );
+}
+
+/** 判断未知工具输出是否符合 Parallel 网页检索成功结果的最小结构。 */
+function isWebSearchResult(output: unknown): output is { results: Array<{ title?: unknown; url?: unknown }> } {
+  return typeof output === 'object' && output !== null && 'results' in output && Array.isArray(output.results);
+}
+
+/** 单条外部网页来源在界面上需要的最小安全字段。 */
+type AiWebSource = {
+  /** 用户可打开的 HTTPS 或 HTTP 网页地址。 */
+  url: string;
+  /** 搜索服务返回的网页标题。 */
+  title: string;
+};
 
 /** 渲染单条消息下方的复制操作，并调用兼容 HTTPS 与本地开发环境的复制逻辑。 */
 function AiMessageCopyAction({ text, label }: { text: string; label: string }) {
@@ -236,14 +308,18 @@ function AiComposer({
   input,
   status,
   isRunning,
+  enableWebSearch,
   onInputChange,
+  onWebSearchChange,
   onStop,
   onSubmit,
 }: {
   input: string;
   status: ChatStatus;
   isRunning: boolean;
+  enableWebSearch: boolean;
   onInputChange: (value: string) => void;
+  onWebSearchChange: (enabled: boolean) => void;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage) => void;
 }) {
@@ -261,7 +337,18 @@ function AiComposer({
         disabled={isRunning}
         onChange={(event) => onInputChange(event.currentTarget.value)}
       />
-      <PromptInputFooter className="justify-end">
+      <PromptInputFooter className="justify-between">
+        <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+          <Globe2 className="size-3.5" aria-hidden />
+          <span>联网检索</span>
+          <Switch
+            aria-label="开启联网检索"
+            checked={enableWebSearch}
+            disabled={isRunning}
+            onCheckedChange={onWebSearchChange}
+            size="sm"
+          />
+        </div>
         <PromptInputSubmit
           status={status}
           onStop={onStop}

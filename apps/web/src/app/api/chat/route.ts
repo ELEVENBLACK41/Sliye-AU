@@ -11,6 +11,7 @@ import {
   tool,
   type UIMessage,
 } from 'ai';
+import { gateway } from '@ai-sdk/gateway';
 import { z } from 'zod';
 import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 
@@ -28,6 +29,8 @@ import { getAuthenticatedRouteUser } from '@/server/bff/authenticated-nest-proxy
 /** AI 对话请求体运行时校验规则。 */
 const chatRequestSchema = z.object({
   messages: z.array(z.custom<UIMessage>()),
+  /** 用户显式开启时，才允许本轮模型调用外部网页检索工具。 */
+  enableWebSearch: z.boolean().optional().default(false),
 });
 
 /** 当前 AI 测试机器人的联调规则，确保全量工具展示可被稳定触发。 */
@@ -41,11 +44,33 @@ const AI_TEST_ASSISTANT_INSTRUCTIONS = `
 4. 等待所有工具返回后，再用中文简要汇总五项模拟结果。
 `;
 
+/** 用户显式同意联网时追加的工具使用边界，避免将静态模型知识伪装为检索结论。 */
+const WEB_SEARCH_ASSISTANT_INSTRUCTIONS = `
+用户已经明确开启“联网检索”。当回答需要近期、外部或可验证的网页信息时，必须使用 parallel_search 工具。
+只能基于工具返回的网页来源说明检索结论；若没有成功获取来源，应明确说明未检索到足够依据。
+`;
+
+/** 网页检索在返回工具结果前不会产生文本片段，因此允许更长的相邻片段等待时间。 */
+const WEB_SEARCH_CHUNK_TIMEOUT_MS = 30_000;
+
 /** 等待指定时间，用于模拟外部工具的异步执行耗时。 */
 function waitForMockToolResult(delayMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayMs);
   });
+}
+
+/** 在不放宽整轮总预算的前提下，为已启用的外部检索调整流式空窗超时。 */
+function getChatTimeout(
+  timeout: ReturnType<typeof resolveAiLanguageModel>['timeout'],
+  enableWebSearch: boolean,
+): ReturnType<typeof resolveAiLanguageModel>['timeout'] {
+  if (!enableWebSearch) return timeout;
+
+  return {
+    ...timeout,
+    chunkMs: WEB_SEARCH_CHUNK_TIMEOUT_MS,
+  };
 }
 
 /** 校验认证与权限后创建 AI SDK 流式响应。 */
@@ -83,6 +108,7 @@ export async function POST(request: Request) {
       });
     }
 
+    const { enableWebSearch, messages } = parsed.data;
     const resolvedModel = resolveAiLanguageModel('standard', {
       userId: currentUser.id,
       feature: 'chat',
@@ -90,10 +116,12 @@ export async function POST(request: Request) {
     const { configuration } = resolvedModel;
     const result = streamText({
       model: resolvedModel.model,
-      system: AI_TEST_ASSISTANT_INSTRUCTIONS,
-      messages: await convertToModelMessages(parsed.data.messages),
+      system: enableWebSearch
+        ? `${AI_TEST_ASSISTANT_INSTRUCTIONS}\n${WEB_SEARCH_ASSISTANT_INSTRUCTIONS}`
+        : AI_TEST_ASSISTANT_INSTRUCTIONS,
+      messages: await convertToModelMessages(messages),
       abortSignal: request.signal,
-      timeout: resolvedModel.timeout,
+      timeout: getChatTimeout(resolvedModel.timeout, enableWebSearch),
       maxOutputTokens: configuration.budget.maxOutputTokens,
       maxRetries: configuration.budget.maxRetries,
       providerOptions: resolvedModel.providerOptions,
@@ -205,6 +233,19 @@ export async function POST(request: Request) {
             };
           },
         }),
+        ...(enableWebSearch
+          ? {
+              /** 仅在用户显式开启时向 AI Gateway 请求最多五条外部网页结果。 */
+              parallel_search: gateway.tools.parallelSearch({
+                excerpts: {
+                  maxCharsPerResult: 800,
+                  maxCharsTotal: 4_000,
+                },
+                maxResults: 5,
+                mode: 'agentic',
+              }),
+            }
+          : {}),
       },
       onLanguageModelCallEnd: (event) => {
         logAiLanguageModelCallEnd({

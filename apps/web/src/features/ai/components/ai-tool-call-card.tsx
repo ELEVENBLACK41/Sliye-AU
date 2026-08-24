@@ -13,6 +13,7 @@ const AI_TOOL_LABELS: Record<string, string> = {
   getDecisionTimeline: '读取决策时间线',
   compareDecisionProposals: '比较候选提案',
   getMeetingSummary: '读取会议纪要',
+  parallel_search: '网页检索',
 };
 
 /** AI SDK 工具消息在自定义 UI 中渲染所需的最小结构。 */
