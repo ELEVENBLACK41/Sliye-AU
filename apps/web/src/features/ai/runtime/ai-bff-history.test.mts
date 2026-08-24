@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { AiMessage } from '@workspace/contracts/ai';
+import type { AiHistoryMessage, AiMessage } from '@workspace/contracts/ai';
 
 import {
   aiChatStreamRequestSchema,
@@ -57,6 +57,33 @@ test('后续上下文只按 Nest 持久化消息的顺序恢复纯文本角色',
       id: messages[2]!.id,
       role: 'user',
       parts: [{ type: 'text', text: '第二问' }],
+    },
+  ]);
+});
+
+test('来源失权的助手消息不得重新进入后续模型上下文', () => {
+  const visibleUser: AiHistoryMessage = {
+    ...createMessage({ content: '保留用户自己的问题' }),
+    visibility: { state: 'VISIBLE', reason: null },
+  };
+  const hiddenAssistant: AiHistoryMessage = {
+    id: 'd62d973f-7e90-4d0f-80ba-b44e22f42b90',
+    threadId: visibleUser.threadId,
+    runId: '9718324e-dae1-4277-af76-a570884931ad',
+    authorUserId: null,
+    role: 'ASSISTANT',
+    createdAt: '2026-08-23T00:01:00.000Z',
+    visibility: {
+      state: 'HIDDEN',
+      reason: 'SOURCE_ACCESS_REVOKED',
+    },
+  };
+
+  assert.deepEqual(toAiContextUiMessages([visibleUser, hiddenAssistant]), [
+    {
+      id: visibleUser.id,
+      role: 'user',
+      parts: [{ type: 'text', text: '保留用户自己的问题' }],
     },
   ]);
 });

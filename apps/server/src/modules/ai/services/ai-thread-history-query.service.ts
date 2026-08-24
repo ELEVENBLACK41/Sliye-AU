@@ -1,6 +1,6 @@
 /**
  * 本文件负责 AI Thread 历史列表、详情、消息恢复与白名单更新。
- * 所有浏览器读取都重新校验 Thread owner 和当前 Decision 访问权，并只返回安全字段。
+ * 所有浏览器读取都校验 Thread owner，并按每项历史来源重新鉴权后返回安全字段。
  */
 
 import { HttpStatus, Injectable } from '@nestjs/common';
@@ -15,18 +15,20 @@ import type {
 } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
-import { AiThreadScopeState, type Prisma } from '../../../generated/prisma';
+import type { Prisma } from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 import {
   type AiThreadHistoryRecord,
   aiThreadHistorySelect,
   aiThreadMessageHistorySelect,
+  collectAiThreadHistorySourceIds,
   toAiThreadDetail,
   toAiThreadListItem,
   toAiThreadMessageHistoryItem,
 } from '../ai-thread-history.mapper';
 import { AiThreadScopeService } from './ai-thread-scope.service';
+import type { AiHistorySourceVisibilityMap } from './ai-thread-scope.service';
 
 /** 第一版历史列表默认返回的 Thread 数量。 */
 const DEFAULT_AI_THREAD_PAGE_SIZE = 20;
@@ -64,6 +66,17 @@ function encodeTimestampCursor(
     JSON.stringify({ [field]: timestamp, id }),
     'utf8',
   ).toString('base64url');
+}
+
+/** 判断一条旧 Thread 的兼容项目与决策摘要是否仍可安全返回。 */
+function canExposeLegacyThreadScope(
+  record: AiThreadHistoryRecord,
+  sourceVisibilities: AiHistorySourceVisibilityMap,
+): boolean {
+  return (
+    record.decision === null ||
+    sourceVisibilities.get(`decision:${record.decision.id}`) === null
+  );
 }
 
 @Injectable()
@@ -104,55 +117,48 @@ export class AiThreadHistoryQueryService {
           ],
         }
       : undefined;
-    const records = await this.threadScopeService.withRevalidatedOwnedThreads(
+    const history = await this.threadScopeService.withRevalidatedOwnedThreads(
       authorization,
       query.decisionId,
-      (tx) =>
-        tx.aiThread.findMany({
+      async (tx) => {
+        const records = await tx.aiThread.findMany({
           where: {
             AND: [
               {
                 ownerUserId: authorization.userId,
-                scopeState: AiThreadScopeState.ACTIVE,
                 archivedAt: archiveState === 'archived' ? { not: null } : null,
                 ...(query.decisionId === undefined
                   ? {}
                   : {
-                      OR: [
-                        { decisionId: query.decisionId },
+                      AND: [
                         {
-                          runs: {
-                            some: {
-                              decisionScopes: {
-                                some: { decisionId: query.decisionId },
+                          OR: [
+                            {
+                              decision: {
+                                is: {
+                                  AND: [
+                                    { id: query.decisionId },
+                                    decisionWhere,
+                                  ],
+                                },
                               },
                             },
-                          },
+                            {
+                              runs: {
+                                some: {
+                                  decisionScopes: {
+                                    some: {
+                                      decisionId: query.decisionId,
+                                      decision: { is: decisionWhere },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          ],
                         },
                       ],
                     }),
-                AND: [
-                  {
-                    OR: [
-                      { decision: { is: decisionWhere } },
-                      {
-                        runs: {
-                          some: {
-                            decisionScopes: {
-                              some: { decision: { is: decisionWhere } },
-                            },
-                          },
-                        },
-                      },
-                      {
-                        decisionId: null,
-                        runs: {
-                          none: { decisionScopes: { some: {} } },
-                        },
-                      },
-                    ],
-                  },
-                ],
               },
               ...(cursorWhere ? [cursorWhere] : []),
             ],
@@ -160,10 +166,28 @@ export class AiThreadHistoryQueryService {
           orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
           take: limit + 1,
           select: aiThreadHistorySelect,
-        }),
+        });
+        const sourceVisibilities =
+          await this.threadScopeService.resolveHistorySourceVisibilities(
+            tx,
+            authorization,
+            records.flatMap((record) =>
+              record.decision ? [`decision:${record.decision.id}`] : [],
+            ),
+          );
+        return { records, sourceVisibilities };
+      },
     );
+    const { records, sourceVisibilities } = history;
     const hasMore = records.length > limit;
-    const items = records.slice(0, limit).map(toAiThreadListItem);
+    const items = records
+      .slice(0, limit)
+      .map((record) =>
+        toAiThreadListItem(
+          record,
+          canExposeLegacyThreadScope(record, sourceVisibilities),
+        ),
+      );
     const lastItem = items.at(-1);
 
     return {
@@ -176,13 +200,19 @@ export class AiThreadHistoryQueryService {
     };
   }
 
-  /** 重新校验 owner 与 Decision 访问权后返回 Thread 安全详情。 */
+  /** 校验 owner 后返回 Thread 详情，并隐藏已失权的旧绑定摘要。 */
   async getThreadDetail(
     authorization: AuthorizationContext,
     threadId: string,
   ): Promise<AiThreadDetail> {
-    const record = await this.findAccessibleThread(authorization, threadId);
-    return toAiThreadDetail(record);
+    const { record, sourceVisibilities } = await this.findOwnedThread(
+      authorization,
+      threadId,
+    );
+    return toAiThreadDetail(
+      record,
+      canExposeLegacyThreadScope(record, sourceVisibilities),
+    );
   }
 
   /** 重新鉴权后按稳定游标返回消息、Run、工具调用和来源关联。 */
@@ -213,26 +243,39 @@ export class AiThreadHistoryQueryService {
           ],
         }
       : undefined;
-    const records = await this.threadScopeService.withAccessibleThread(
+    const history = await this.threadScopeService.withAccessibleThread(
       authorization,
       threadId,
       [],
-      (tx) =>
-        tx.aiMessage.findMany({
+      async (tx) => {
+        const records = await tx.aiMessage.findMany({
           where: {
             AND: [{ threadId }, ...(cursorWhere ? [cursorWhere] : [])],
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: limit + 1,
           select: aiThreadMessageHistorySelect,
-        }),
+        });
+        const sourceVisibilities =
+          await this.threadScopeService.resolveHistorySourceVisibilities(
+            tx,
+            authorization,
+            collectAiThreadHistorySourceIds(records),
+          );
+        return { records, sourceVisibilities };
+      },
     );
+    const { records, sourceVisibilities } = history;
     const hasMore = records.length > limit;
     const pageRecords = records.slice(0, limit);
     const oldestRecord = pageRecords.at(-1);
 
     return {
-      items: pageRecords.reverse().map(toAiThreadMessageHistoryItem),
+      items: pageRecords
+        .reverse()
+        .map((record) =>
+          toAiThreadMessageHistoryItem(record, sourceVisibilities),
+        ),
       hasMore,
       nextCursor:
         hasMore && oldestRecord
@@ -286,32 +329,55 @@ export class AiThreadHistoryQueryService {
                 }),
           },
         });
-        return tx.aiThread.findUniqueOrThrow({
+        const record = await tx.aiThread.findUniqueOrThrow({
           where: { id: threadId },
           select: aiThreadHistorySelect,
         });
+        const sourceVisibilities =
+          await this.threadScopeService.resolveHistorySourceVisibilities(
+            tx,
+            authorization,
+            record.decision ? [`decision:${record.decision.id}`] : [],
+          );
+        return { record, sourceVisibilities };
       },
     );
 
-    return { thread: toAiThreadDetail(updated) };
+    return {
+      thread: toAiThreadDetail(
+        updated.record,
+        canExposeLegacyThreadScope(updated.record, updated.sourceVisibilities),
+      ),
+    };
   }
 
-  /** 读取当前 owner 且仍有 Decision 权限的 ACTIVE Thread。 */
-  private async findAccessibleThread(
+  /** 读取当前 owner 的 Thread，并同时解析旧绑定摘要是否仍可展示。 */
+  private async findOwnedThread(
     authorization: AuthorizationContext,
     threadId: string,
-  ): Promise<AiThreadHistoryRecord> {
+  ): Promise<{
+    record: AiThreadHistoryRecord;
+    sourceVisibilities: AiHistorySourceVisibilityMap;
+  }> {
     this.assertHistoryPermissions(authorization);
     this.assertUuid(threadId, 'threadId');
     return this.threadScopeService.withAccessibleThread(
       authorization,
       threadId,
       [],
-      async (tx) =>
-        tx.aiThread.findUniqueOrThrow({
+      async (tx) => {
+        const record = await tx.aiThread.findUniqueOrThrow({
           where: { id: threadId },
           select: aiThreadHistorySelect,
-        }),
+        });
+        const sourceVisibilities =
+          await this.threadScopeService.resolveHistorySourceVisibilities(
+            tx,
+            authorization,
+            record.decision ? [`decision:${record.decision.id}`] : [],
+          );
+        return { record, sourceVisibilities };
+      },
     );
   }
 

@@ -1,8 +1,9 @@
 /**
- * 本文件集中复核 AI Thread 的 Decision 与全部来源依赖，并原子收敛失权运行。
+ * 本文件按当前 Run 复核执行权限，并为历史内容批量解析来源可见性。
  */
 
 import { HttpStatus, Injectable } from '@nestjs/common';
+import type { AiHistoryContentHiddenReason } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
@@ -10,7 +11,6 @@ import {
   AiRunCancellationReason,
   AiRunStatus,
   AiSourceDependencyUsage,
-  AiThreadLockReason,
   AiThreadScopeState,
   AiToolCallStatus,
   Prisma,
@@ -50,6 +50,12 @@ type AiScopeTransactionOutcome<T> =
   | { kind: 'not_found' }
   | { kind: 'scope_changed' };
 
+/** 一组历史来源在当前权限下的安全判定；`null` 表示仍可展示。 */
+export type AiHistorySourceVisibilityMap = ReadonlyMap<
+  string,
+  AiHistoryContentHiddenReason | null
+>;
+
 /** 校验 UUID 路径和内部命令字段的稳定文本格式。 */
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -65,7 +71,7 @@ const ACTIVE_RUN_STATUSES = [
   AiRunStatus.CANCELLATION_REQUESTED,
 ] as const;
 
-/** 权限复核所需的最小 Thread、来源和活跃 Run 数据。 */
+/** 权限复核所需的最小 Thread 与当前活跃 Run 数据。 */
 const aiThreadScopeSelect = {
   id: true,
   decisionId: true,
@@ -78,10 +84,7 @@ const aiThreadScopeSelect = {
       id: true,
       status: true,
       nextEventSequence: true,
-    },
-  },
-  runs: {
-    select: {
+      decisionScopes: { select: { decisionId: true } },
       sourceDependencies: { select: { sourceId: true } },
       toolCalls: {
         where: { status: AiToolCallStatus.COMPLETED },
@@ -96,6 +99,9 @@ type AiThreadScopeRecord = Prisma.AiThreadGetPayload<{
   select: typeof aiThreadScopeSelect;
 }>;
 
+/** Run 执行权限复核所需的当前范围与来源记录。 */
+type AiRunExecutionScopeRecord = NonNullable<AiThreadScopeRecord['activeRun']>;
+
 @Injectable()
 export class AiThreadScopeService {
   /**
@@ -109,7 +115,7 @@ export class AiThreadScopeService {
     private readonly authorizationService: AuthorizationService,
   ) {}
 
-  /** 重新校验一个 Run，并在失权时先提交锁定事务再返回稳定错误。 */
+  /** 重新校验一个 Run，并在失权时只取消受影响的当前运行。 */
   async assertAccessibleRun(
     authorization: AuthorizationContext,
     runId: string,
@@ -123,7 +129,7 @@ export class AiThreadScopeService {
     );
   }
 
-  /** 重新校验一个 Thread，并在全部依赖恢复后自动解除范围锁定。 */
+  /** 重新校验 Thread 归属；历史来源变化不再锁死整个会话。 */
   async assertAccessibleThread(
     authorization: AuthorizationContext,
     threadId: string,
@@ -187,8 +193,8 @@ export class AiThreadScopeService {
   }
 
   /**
-   * 在一次数据库事务中复核 Run、全部既有依赖和本次候选来源后执行受保护操作。
-   * 失权分支不抛异常，确保锁定、取消、清门禁与废租约先原子提交。
+   * 在一次数据库事务中只复核目标 Run 的范围、来源和本次候选来源。
+   * 失权分支先原子取消该 Run 并释放 Thread 门禁，再返回稳定错误。
    */
   async withAccessibleRun<T>(
     authorization: AuthorizationContext,
@@ -215,7 +221,14 @@ export class AiThreadScopeService {
             },
             select: {
               id: true,
+              status: true,
+              nextEventSequence: true,
               decisionScopes: { select: { decisionId: true } },
+              sourceDependencies: { select: { sourceId: true } },
+              toolCalls: {
+                where: { status: AiToolCallStatus.COMPLETED },
+                select: { resultSummary: true },
+              },
               thread: { select: aiThreadScopeSelect },
             },
           });
@@ -223,19 +236,13 @@ export class AiThreadScopeService {
             return { kind: 'not_found' };
           }
 
-          const accessible = await this.isThreadScopeAccessible(
+          const accessible = await this.isSourceSetAccessible(
             tx,
             decisionWhere,
-            run.thread,
-            [
-              ...candidateSourceIds,
-              ...run.decisionScopes.map(
-                (scope) => `decision:${scope.decisionId}`,
-              ),
-            ],
+            this.collectRunSourceIds(run, candidateSourceIds),
           );
           if (!accessible) {
-            await this.lockThreadScope(tx, run.thread);
+            await this.cancelInaccessibleRunScope(tx, run.thread, run);
             return { kind: 'scope_changed' };
           }
 
@@ -256,7 +263,7 @@ export class AiThreadScopeService {
     return this.unwrapOutcome(outcome, 'run');
   }
 
-  /** 在同一权限事务中读取或修改 Thread，避免先鉴权后读取历史内容。 */
+  /** 在同一事务中校验 owner 后读取或修改 Thread，不再复核全部历史来源。 */
   async withAccessibleThread<T>(
     authorization: AuthorizationContext,
     threadId: string,
@@ -283,23 +290,39 @@ export class AiThreadScopeService {
         return { kind: 'not_found' };
       }
 
-      const accessible = await this.isThreadScopeAccessible(
+      const accessible = await this.isSourceSetAccessible(
         tx,
         decisionWhere,
-        thread,
         candidateSourceIds,
       );
       if (!accessible) {
-        await this.lockThreadScope(tx, thread);
         return { kind: 'scope_changed' };
       }
 
-      await this.unlockThreadScope(tx, thread);
+      if (thread.activeRun) {
+        const activeRunAccessible = await this.isSourceSetAccessible(
+          tx,
+          decisionWhere,
+          this.collectRunSourceIds(thread.activeRun, []),
+        );
+        if (activeRunAccessible) {
+          await this.unlockThreadScope(tx, thread);
+        } else {
+          await this.cancelInaccessibleRunScope(tx, thread, thread.activeRun);
+        }
+      } else {
+        await this.unlockThreadScope(tx, thread);
+      }
+      const legacyDecisionAccessible =
+        thread.decisionId !== null &&
+        (await this.isSourceSetAccessible(tx, decisionWhere, [
+          `decision:${thread.decisionId}`,
+        ]));
       return {
         kind: 'success',
         value: await action(tx, {
           threadId: thread.id,
-          decisionId: thread.decisionId,
+          decisionId: legacyDecisionAccessible ? thread.decisionId : null,
         }),
       };
     });
@@ -307,7 +330,7 @@ export class AiThreadScopeService {
     return this.unwrapOutcome(outcome, 'thread');
   }
 
-  /** 在历史列表查询前重新扫描当前 owner 的 Thread，并隐藏本轮新锁定项。 */
+  /** 在历史列表查询前重新扫描当前 owner 的活跃 Run，并迁移旧 Thread 锁。 */
   async revalidateOwnedThreads(
     authorization: AuthorizationContext,
     decisionId?: number,
@@ -317,7 +340,7 @@ export class AiThreadScopeService {
     );
   }
 
-  /** 在同一事务中扫描 owner 的全部 Thread 后执行历史列表安全查询。 */
+  /** 在同一事务中只收敛失权活跃 Run，随后执行历史列表安全查询。 */
   async withRevalidatedOwnedThreads<T>(
     authorization: AuthorizationContext,
     decisionId: number | undefined,
@@ -352,17 +375,19 @@ export class AiThreadScopeService {
       });
 
       for (const thread of threads) {
-        const accessible = await this.isThreadScopeAccessible(
-          tx,
-          decisionWhere,
-          thread,
-          [],
-        );
-        if (accessible) {
-          await this.unlockThreadScope(tx, thread);
-        } else {
-          await this.lockThreadScope(tx, thread);
+        if (thread.activeRun) {
+          const accessible = await this.isSourceSetAccessible(
+            tx,
+            decisionWhere,
+            this.collectRunSourceIds(thread.activeRun, []),
+          );
+          if (!accessible) {
+            await this.cancelInaccessibleRunScope(tx, thread, thread.activeRun);
+            continue;
+          }
         }
+
+        await this.unlockThreadScope(tx, thread);
       }
 
       return action(tx);
@@ -387,25 +412,71 @@ export class AiThreadScopeService {
     });
   }
 
-  /** 校验 Thread 绑定 Decision、历史工具来源、登记依赖和候选来源全部可见。 */
-  private async isThreadScopeAccessible(
+  /**
+   * 在调用方历史读取事务内批量区分可见、失权与已删除来源。
+   * 返回值只供服务端安全映射使用，浏览器不会收到被隐藏的来源 ID。
+   */
+  async resolveHistorySourceVisibilities(
     tx: Prisma.TransactionClient,
-    decisionWhere: Prisma.DecisionWhereInput,
-    thread: AiThreadScopeRecord,
-    candidateSourceIds: readonly string[],
-  ): Promise<boolean> {
-    const sourceIds = this.collectThreadSourceIds(thread, candidateSourceIds);
+    authorization: AuthorizationContext,
+    sourceIds: readonly string[],
+  ): Promise<AiHistorySourceVisibilityMap> {
+    this.assertPermissions(authorization);
+    const normalizedSourceIds = [...new Set(sourceIds)];
+    const parsedSourceIds = new Map<string, number>();
     const decisionIds: number[] = [];
 
-    for (const sourceId of sourceIds) {
-      const match = DECISION_SOURCE_PATTERN.exec(sourceId);
-      const decisionId = match ? Number(match[1]) : Number.NaN;
-      if (
-        !match ||
-        !Number.isSafeInteger(decisionId) ||
-        decisionId <= 0 ||
-        `decision:${decisionId}` !== sourceId
-      ) {
+    for (const sourceId of normalizedSourceIds) {
+      const decisionId = this.parseDecisionSourceId(sourceId);
+      if (decisionId !== null) {
+        parsedSourceIds.set(sourceId, decisionId);
+        decisionIds.push(decisionId);
+      }
+    }
+
+    const uniqueDecisionIds = [...new Set(decisionIds)];
+    const existing = await tx.decision.findMany({
+      where: { id: { in: uniqueDecisionIds } },
+      select: { id: true },
+    });
+    const decisionWhere = await this.authorizationService.buildDecisionWhere(
+      authorization,
+      'decision:read',
+    );
+    const accessible = await tx.decision.findMany({
+      where: {
+        AND: [{ id: { in: uniqueDecisionIds } }, decisionWhere],
+      },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((decision) => decision.id));
+    const accessibleIds = new Set(accessible.map((decision) => decision.id));
+
+    return new Map(
+      normalizedSourceIds.map((sourceId) => {
+        const decisionId = parsedSourceIds.get(sourceId);
+        if (decisionId === undefined || !existingIds.has(decisionId)) {
+          return [sourceId, 'SOURCE_DELETED'] as const;
+        }
+        return [
+          sourceId,
+          accessibleIds.has(decisionId) ? null : 'SOURCE_ACCESS_REVOKED',
+        ] as const;
+      }),
+    );
+  }
+
+  /** 校验当前 Run 或调用候选涉及的全部来源仍可访问。 */
+  private async isSourceSetAccessible(
+    tx: Prisma.TransactionClient,
+    decisionWhere: Prisma.DecisionWhereInput,
+    sourceIds: readonly string[],
+  ): Promise<boolean> {
+    const decisionIds: number[] = [];
+
+    for (const sourceId of new Set(sourceIds)) {
+      const decisionId = this.parseDecisionSourceId(sourceId);
+      if (decisionId === null) {
         return false;
       }
       decisionIds.push(decisionId);
@@ -422,29 +493,38 @@ export class AiThreadScopeService {
     return visible.length === uniqueDecisionIds.length;
   }
 
-  /** 汇总 Thread 绑定范围、新表依赖与迁移前工具摘要中的全部来源 ID。 */
-  private collectThreadSourceIds(
-    thread: AiThreadScopeRecord,
+  /** 汇总目标 Run 的确认范围、已登记依赖、旧工具摘要和本次候选来源。 */
+  private collectRunSourceIds(
+    run: AiRunExecutionScopeRecord,
     candidateSourceIds: readonly string[],
   ): string[] {
     const sourceIds = new Set<string>(candidateSourceIds);
 
-    if (thread.decisionId !== null) {
-      sourceIds.add(`decision:${thread.decisionId}`);
-    }
-
-    for (const run of thread.runs) {
-      run.sourceDependencies.forEach((dependency) => {
-        sourceIds.add(dependency.sourceId);
-      });
-      run.toolCalls.forEach((toolCall) => {
-        this.extractLegacyToolSourceIds(toolCall.resultSummary).forEach(
-          (sourceId) => sourceIds.add(sourceId),
-        );
-      });
-    }
+    run.decisionScopes.forEach((scope) => {
+      sourceIds.add(`decision:${scope.decisionId}`);
+    });
+    run.sourceDependencies.forEach((dependency) => {
+      sourceIds.add(dependency.sourceId);
+    });
+    run.toolCalls.forEach((toolCall) => {
+      this.extractLegacyToolSourceIds(toolCall.resultSummary).forEach(
+        (sourceId) => sourceIds.add(sourceId),
+      );
+    });
 
     return [...sourceIds];
+  }
+
+  /** 严格解析当前唯一支持的 Decision 来源 ID，未知来源按不可访问处理。 */
+  private parseDecisionSourceId(sourceId: string): number | null {
+    const match = DECISION_SOURCE_PATTERN.exec(sourceId);
+    const decisionId = match ? Number(match[1]) : Number.NaN;
+    return match &&
+      Number.isSafeInteger(decisionId) &&
+      decisionId > 0 &&
+      `decision:${decisionId}` === sourceId
+      ? decisionId
+      : null;
   }
 
   /** 从 migration 前已有工具摘要读取来源；损坏结构返回未知标记并关闭权限。 */
@@ -470,20 +550,17 @@ export class AiThreadScopeService {
     return normalized;
   }
 
-  /** 原子锁定 Thread、取消活跃 Run、清理门禁、废租约并追加状态事件。 */
-  private async lockThreadScope(
+  /** 原子取消受影响 Run、释放 Thread 门禁并清理 2.6 遗留锁定状态。 */
+  private async cancelInaccessibleRunScope(
     tx: Prisma.TransactionClient,
     thread: AiThreadScopeRecord,
+    run: AiRunExecutionScopeRecord,
   ): Promise<void> {
     const now = new Date();
-    const activeRun = thread.activeRun;
 
-    if (
-      activeRun &&
-      ACTIVE_RUN_STATUSES.some((status) => status === activeRun.status)
-    ) {
+    if (ACTIVE_RUN_STATUSES.some((status) => status === run.status)) {
       const cancelled = await tx.aiRun.updateMany({
-        where: { id: activeRun.id, status: activeRun.status },
+        where: { id: run.id, status: run.status },
         data: {
           status: AiRunStatus.CANCELLED,
           cancellationReason: AiRunCancellationReason.SCOPE_CHANGED,
@@ -497,16 +574,16 @@ export class AiThreadScopeService {
       });
       if (cancelled.count === 1) {
         const cancelledRun = await tx.aiRun.findUniqueOrThrow({
-          where: { id: activeRun.id },
+          where: { id: run.id },
           select: { nextEventSequence: true },
         });
         await tx.aiEvent.create({
           data: {
-            runId: activeRun.id,
+            runId: run.id,
             sequence: cancelledRun.nextEventSequence - 1,
             type: 'RUN_STATUS_CHANGED',
             payload: {
-              fromStatus: activeRun.status,
+              fromStatus: run.status,
               toStatus: AiRunStatus.CANCELLED,
               cancellationReason: AiRunCancellationReason.SCOPE_CHANGED,
               failureReason: null,
@@ -517,23 +594,24 @@ export class AiThreadScopeService {
     }
 
     if (
-      thread.scopeState !== AiThreadScopeState.LOCKED ||
-      thread.lockReason !== AiThreadLockReason.SCOPE_CHANGED ||
-      thread.activeRunId !== null
+      thread.scopeState !== AiThreadScopeState.ACTIVE ||
+      thread.lockReason !== null ||
+      thread.scopeChangedAt !== null ||
+      thread.activeRunId === run.id
     ) {
       await tx.aiThread.update({
         where: { id: thread.id },
         data: {
-          activeRunId: null,
-          scopeState: AiThreadScopeState.LOCKED,
-          lockReason: AiThreadLockReason.SCOPE_CHANGED,
-          scopeChangedAt: thread.scopeChangedAt ?? now,
+          ...(thread.activeRunId === run.id ? { activeRunId: null } : {}),
+          scopeState: AiThreadScopeState.ACTIVE,
+          lockReason: null,
+          scopeChangedAt: null,
         },
       });
     }
   }
 
-  /** 仅在 Decision 和全部依赖重新可见后清理 Thread 范围锁定。 */
+  /** 幂等清理 2.6 遗留 Thread 锁；历史内容由逐项可见性承担保护。 */
   private async unlockThreadScope(
     tx: Prisma.TransactionClient,
     thread: AiThreadScopeRecord,

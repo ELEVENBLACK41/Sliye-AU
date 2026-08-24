@@ -763,7 +763,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
     ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_RUN_NOT_FOUND });
   });
 
-  it('流中撤权应原子锁定并拒绝部分恢复与迟到租约写入', async () => {
+  it('流中撤权应只原子取消受影响 Run，并拒绝部分恢复与迟到租约写入', async () => {
     const unique = randomUUID();
     const privateArea = await prisma.discussionArea.create({
       data: {
@@ -855,8 +855,8 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
           select: { scopeState: true, lockReason: true, activeRunId: true },
         }),
       ).toEqual({
-        scopeState: 'LOCKED',
-        lockReason: 'SCOPE_CHANGED',
+        scopeState: 'ACTIVE',
+        lockReason: null,
         activeRunId: null,
       });
       expect(
@@ -891,8 +891,13 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
           clientRequestId: initialRequestId,
           modelRole: 'standard',
         }),
-      ).rejects.toMatchObject({
-        code: API_ERROR_CODES.AI_THREAD_SCOPE_CHANGED,
+      ).resolves.toMatchObject({
+        replayed: true,
+        run: {
+          id: created.run.id,
+          status: 'CANCELLED',
+          cancellationReason: 'SCOPE_CHANGED',
+        },
       });
       await expect(
         runtimeQueryService.assertAccessibleRun(authorization, created.run.id),

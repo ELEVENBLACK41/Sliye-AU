@@ -4,6 +4,7 @@
  */
 
 import type { AiRunPublicSummary } from './ai-run.types.ts';
+import type { AiHistoryContentVisibility } from './ai-scope.types.ts';
 import type { AiToolCall } from './ai-tool.types.ts';
 
 /** 第一版 AI 会话允许持久化的消息角色。 */
@@ -30,20 +31,65 @@ export type AiMessage = {
   createdAt: string;
 };
 
+/** 当前仍可展示正文的持久化历史消息。 */
+export type AiVisibleHistoryMessage = AiMessage & {
+  /** 服务端已重新确认正文依赖来源仍可访问。 */
+  visibility: Extract<AiHistoryContentVisibility, { state: 'VISIBLE' }>;
+};
+
+/** 来源失权或删除后只保留定位元数据的助手历史消息。 */
+export type AiHiddenHistoryMessage = Omit<AiMessage, 'content' | 'role'> & {
+  /** 只有助手回答允许被隐藏；用户自己提交的正文始终保留。 */
+  role: 'ASSISTANT';
+  /** 前端只能按稳定原因展示中性占位，不得恢复旧正文。 */
+  visibility: Extract<AiHistoryContentVisibility, { state: 'HIDDEN' }>;
+};
+
+/** 历史接口允许返回的可见消息或无正文隐藏占位。 */
+export type AiHistoryMessage = AiVisibleHistoryMessage | AiHiddenHistoryMessage;
+
+/** 当前仍可展示输入与受控结果摘要的历史工具调用。 */
+export type AiVisibleHistoryToolCall = AiToolCall & {
+  /** 服务端已重新确认工具依赖来源仍可访问。 */
+  visibility: Extract<AiHistoryContentVisibility, { state: 'VISIBLE' }>;
+};
+
+/** 来源失权或删除后不再包含工具输入与结果摘要的历史工具调用。 */
+export type AiHiddenHistoryToolCall = Omit<AiToolCall, 'input' | 'resultSummary'> & {
+  /** 前端只能展示工具结果已隐藏的中性占位。 */
+  visibility: Extract<AiHistoryContentVisibility, { state: 'HIDDEN' }>;
+};
+
+/** 历史接口允许返回的完整工具调用或无业务数据隐藏占位。 */
+export type AiHistoryToolCall = AiVisibleHistoryToolCall | AiHiddenHistoryToolCall;
+
+/** 一次 Run 的引用来源在历史恢复时允许公开的两种状态。 */
+export type AiHistoryCitations =
+  | {
+      /** 当前全部引用来源仍可访问。 */
+      visibility: Extract<AiHistoryContentVisibility, { state: 'VISIBLE' }>;
+      /** 经过服务端权限复核后允许浏览器定位的稳定来源 ID。 */
+      sourceIds: string[];
+    }
+  | {
+      /** 至少一项引用来源已经失权或删除。 */
+      visibility: Extract<AiHistoryContentVisibility, { state: 'HIDDEN' }>;
+    };
+
 /** 一次用户消息对应的单次 Run、工具调用和稳定来源关联。 */
 export type AiThreadMessageRunHistory = {
   /** 不包含执行租约或其他内部 fencing 字段的 Run 摘要。 */
   run: AiRunPublicSummary;
   /** 严格按工具调用序号恢复的持久化工具调用。 */
-  toolCalls: AiToolCall[];
-  /** 从本 Run 工具结果摘要中提取并去重的稳定业务来源 ID。 */
-  sourceIds: string[];
+  toolCalls: AiHistoryToolCall[];
+  /** 与本 Run 助手回答稳定关联且经过本次权限复核的引用部件。 */
+  citations: AiHistoryCitations;
 };
 
 /** 消息历史页中的一条消息及其发起的全部 Run 尝试。 */
 export type AiThreadMessageHistoryItem = {
   /** 用于历史展示和审计的持久化消息。 */
-  message: AiMessage;
+  message: AiHistoryMessage;
   /**
    * 以当前用户消息作为原始请求的全部 Run，按 `createdAt`、Run UUID 正序排列。
    * 助手消息不发起 Run，因此该数组为空；助手消息仍通过 `message.runId` 关联生成它的 Run。

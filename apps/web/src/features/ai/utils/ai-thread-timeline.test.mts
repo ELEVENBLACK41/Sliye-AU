@@ -7,10 +7,12 @@ import * as nodeModule from 'node:module';
 import { test } from 'node:test';
 
 import type {
-  AiMessage,
+  AiHiddenHistoryToolCall,
+  AiHistoryMessage,
   AiRunPublicSummary,
   AiThreadMessageHistoryItem,
-  AiToolCall,
+  AiVisibleHistoryMessage,
+  AiVisibleHistoryToolCall,
 } from '@workspace/contracts/ai';
 
 const TIMESTAMP = '2026-08-23T10:00:00.000Z';
@@ -35,12 +37,11 @@ const nodeModuleWithHooks = nodeModule as unknown as {
 
 nodeModuleWithHooks.registerHooks({ resolve: resolveTestTypeScriptSpecifier });
 
-const { mergeAiThreadHistoryItems, projectAiThreadTimeline, toAiDecisionUiMessages } = await import(
-  './ai-thread-timeline.ts'
-);
+const { mergeAiThreadHistoryItems, projectAiThreadTimeline, toAiDecisionUiMessages } =
+  await import('./ai-thread-timeline.ts');
 
 /** 创建确定性的持久化消息夹具。 */
-function createMessage(overrides: Partial<AiMessage> = {}): AiMessage {
+function createMessage(overrides: Partial<AiVisibleHistoryMessage> = {}): AiVisibleHistoryMessage {
   return {
     id: 'message-user-1',
     threadId: 'thread-1',
@@ -49,6 +50,7 @@ function createMessage(overrides: Partial<AiMessage> = {}): AiMessage {
     role: 'USER',
     content: '为什么形成这项决策？',
     createdAt: TIMESTAMP,
+    visibility: { state: 'VISIBLE', reason: null },
     ...overrides,
   };
 }
@@ -76,7 +78,7 @@ function createRun(overrides: Partial<AiRunPublicSummary> = {}): AiRunPublicSumm
 }
 
 /** 创建结构化工具审计夹具。 */
-function createToolCall(overrides: Partial<AiToolCall> = {}): AiToolCall {
+function createToolCall(overrides: Partial<AiVisibleHistoryToolCall> = {}): AiVisibleHistoryToolCall {
   return {
     id: 'tool-record-1',
     runId: 'run-1',
@@ -100,13 +102,37 @@ function createToolCall(overrides: Partial<AiToolCall> = {}): AiToolCall {
     durationMs: 25,
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
+    visibility: { state: 'VISIBLE', reason: null },
     ...overrides,
+  };
+}
+
+/** 创建不包含工具输入和结果摘要的失权历史工具夹具。 */
+function createHiddenToolCall(): AiHiddenHistoryToolCall {
+  const visible = createToolCall();
+  return {
+    id: visible.id,
+    runId: visible.runId,
+    toolCallId: visible.toolCallId,
+    sequence: visible.sequence,
+    toolName: visible.toolName,
+    status: visible.status,
+    errorCode: visible.errorCode,
+    startedAt: visible.startedAt,
+    finishedAt: visible.finishedAt,
+    durationMs: visible.durationMs,
+    createdAt: visible.createdAt,
+    updatedAt: visible.updatedAt,
+    visibility: {
+      state: 'HIDDEN',
+      reason: 'SOURCE_ACCESS_REVOKED',
+    },
   };
 }
 
 /** 创建一条消息及其 Run 历史夹具。 */
 function createHistoryItem(
-  message: AiMessage,
+  message: AiHistoryMessage,
   runs: AiThreadMessageHistoryItem['runs'] = [],
 ): AiThreadMessageHistoryItem {
   return { message, runs };
@@ -119,7 +145,10 @@ test('历史时间流应按消息、工具、助手正文、引用和 Run 排序
     {
       run,
       toolCalls: [toolCall, toolCall],
-      sourceIds: ['decision:7', 'decision:7'],
+      citations: {
+        visibility: { state: 'VISIBLE', reason: null },
+        sourceIds: ['decision:7', 'decision:7'],
+      },
     },
   ]);
   const assistantItem = createHistoryItem(
@@ -171,7 +200,10 @@ test('重试链复用工具调用 ID 时仍应按 Run 隔离工具、引用和�
           errorCode: 'AI_TOOL_EXECUTION_FAILED',
         }),
       ],
-      sourceIds: ['decision:7@failed'],
+      citations: {
+        visibility: { state: 'VISIBLE', reason: null },
+        sourceIds: ['decision:7@failed'],
+      },
     },
     {
       run: retryRun,
@@ -189,7 +221,10 @@ test('重试链复用工具调用 ID 时仍应按 Run 隔离工具、引用和�
           },
         }),
       ],
-      sourceIds: ['decision:7@retry'],
+      citations: {
+        visibility: { state: 'VISIBLE', reason: null },
+        sourceIds: ['decision:7@retry'],
+      },
     },
   ]);
 
@@ -232,14 +267,26 @@ test('没有工具记录的排队 Run 不应伪造工具卡', () => {
     finishedAt: null,
   });
   const timeline = projectAiThreadTimeline([
-    createHistoryItem(createMessage(), [{ run: queuedRun, toolCalls: [], sourceIds: [] }]),
+    createHistoryItem(createMessage(), [
+      {
+        run: queuedRun,
+        toolCalls: [],
+        citations: {
+          visibility: { state: 'VISIBLE', reason: null },
+          sourceIds: [],
+        },
+      },
+    ]),
   ]);
 
   assert.deepEqual(
     timeline.map((item) => item.id),
     ['message:message-user-1', 'run:run-queued'],
   );
-  assert.equal(timeline.some((item) => item.kind === 'tool'), false);
+  assert.equal(
+    timeline.some((item) => item.kind === 'tool'),
+    false,
+  );
 });
 
 test('等待执行的工具应使用创建时间恢复稳定排序', () => {
@@ -253,7 +300,14 @@ test('等待执行的工具应使用创建时间恢复稳定排序', () => {
   const runningRun = createRun({ status: 'RUNNING', finishedAt: null });
   const timeline = projectAiThreadTimeline([
     createHistoryItem(createMessage(), [
-      { run: runningRun, toolCalls: [waitingTool], sourceIds: [] },
+      {
+        run: runningRun,
+        toolCalls: [waitingTool],
+        citations: {
+          visibility: { state: 'VISIBLE', reason: null },
+          sourceIds: [],
+        },
+      },
     ]),
   ]);
   const tool = timeline.find((item) => item.kind === 'tool');
@@ -265,11 +319,16 @@ test('等待执行的工具应使用创建时间恢复稳定排序', () => {
 
 test('消息分页合并应按稳定 ID 去重并让较新快照覆盖旧快照', () => {
   const older = createHistoryItem(createMessage({ id: 'message-older', createdAt: TIMESTAMP }));
-  const current = createHistoryItem(
-    createMessage({ id: 'message-current', createdAt: '2026-08-23T10:01:00.000Z' }),
-  );
+  const current = createHistoryItem(createMessage({ id: 'message-current', createdAt: '2026-08-23T10:01:00.000Z' }));
   const refreshedCurrent = createHistoryItem(current.message, [
-    { run: createRun(), toolCalls: [], sourceIds: [] },
+    {
+      run: createRun(),
+      toolCalls: [],
+      citations: {
+        visibility: { state: 'VISIBLE', reason: null },
+        sourceIds: [],
+      },
+    },
   ]);
 
   const merged = mergeAiThreadHistoryItems([current], [older, refreshedCurrent]);
@@ -306,6 +365,44 @@ test('持久化消息应保留稳定 ID、角色和正文转换为 UIMessage', (
       id: 'message-assistant-1',
       role: 'assistant',
       parts: [{ type: 'text', text: '这是经持久化恢复的回答。' }],
+    },
+  ]);
+});
+
+test('失权历史只投影中性占位，且隐藏助手正文不会进入 UIMessage 上下文', () => {
+  const user = createHistoryItem(createMessage(), [
+    {
+      run: createRun(),
+      toolCalls: [createHiddenToolCall()],
+      citations: {
+        visibility: {
+          state: 'HIDDEN',
+          reason: 'SOURCE_ACCESS_REVOKED',
+        },
+      },
+    },
+  ]);
+  const hiddenAssistant = createHistoryItem({
+    id: 'message-hidden-assistant',
+    threadId: 'thread-1',
+    runId: 'run-1',
+    authorUserId: null,
+    role: 'ASSISTANT',
+    createdAt: TIMESTAMP,
+    visibility: { state: 'HIDDEN', reason: 'SOURCE_ACCESS_REVOKED' },
+  });
+
+  const timeline = projectAiThreadTimeline([user, hiddenAssistant]);
+
+  assert.deepEqual(
+    timeline.filter((item) => item.kind === 'hidden').map((item) => item.contentKind),
+    ['tool', 'answer', 'citations'],
+  );
+  assert.deepEqual(toAiDecisionUiMessages([user, hiddenAssistant]), [
+    {
+      id: 'message-user-1',
+      role: 'user',
+      parts: [{ type: 'text', text: '为什么形成这项决策？' }],
     },
   ]);
 });

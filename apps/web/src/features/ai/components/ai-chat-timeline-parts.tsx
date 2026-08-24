@@ -9,6 +9,7 @@ import { createAiToolCallIdentity } from '../utils/ai-chat-session';
 import type { AiThreadTimelineItem } from '../utils/ai-thread-timeline';
 import { toLiveAiToolCallView } from '../utils/ai-tool-call-view';
 import { AiCitationList } from './ai-citation-list';
+import { AiHistoryHiddenNotice } from './ai-history-hidden-notice';
 import { AiMessage } from './ai-message';
 import { AiRunStatusCard } from './ai-run-status-card';
 import { AiToolCallCard } from './ai-tool-call-card';
@@ -46,6 +47,8 @@ export function AiHistoricalTimelinePart({ item, thread, retrying, onRetry }: Ai
           decisionId={thread.decision?.id ?? 0}
         />
       ) : null;
+    case 'hidden':
+      return <AiHistoryHiddenNotice contentKind={item.contentKind} reason={item.reason} />;
     case 'run': {
       const isLatestRetryableRun = thread?.activeRunId === null && thread.latestRun?.id === item.run.id;
       return (

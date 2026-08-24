@@ -62,6 +62,8 @@ type AiThreadHistoryFixture = {
   secondaryThreadId: string;
   /** 权限撤销后不得返回的 Thread。 */
   hiddenThreadId: string;
+  /** 权限撤销后只允许返回占位的助手消息。 */
+  hiddenAssistantMessageId: string;
   /** 带重试链和工具记录的 Thread。 */
   detailThreadId: string;
   /** 详情 Thread 的原始用户消息。 */
@@ -72,6 +74,8 @@ type AiThreadHistoryFixture = {
   detailRunIds: string[];
   /** 当前 owner 仍有 Decision 权限、但 scope 已锁定的 Thread。 */
   lockedThreadId: string;
+  /** 来源已删除后只允许返回占位的助手消息。 */
+  lockedAssistantMessageId: string;
 };
 
 /** 为测试用户创建具备系统权限、但仍受项目成员关系约束的授权上下文。 */
@@ -285,6 +289,8 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
     const failedRetryRunId = '00000000-0000-4000-8000-000000000001';
     const completedRetryRunId = 'ffffffff-ffff-4fff-bfff-ffffffffffff';
     const detailAssistantMessageId = randomUUID();
+    const hiddenAssistantMessageId = randomUUID();
+    const lockedAssistantMessageId = randomUUID();
     const initialRunCreatedAt = new Date('2026-08-23T05:00:00.000Z');
     const retryRunsCreatedAt = new Date('2026-08-23T05:01:00.000Z');
 
@@ -408,12 +414,118 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
           durationMs: 12_000,
         },
       }),
+      prisma.aiSourceDependency.create({
+        data: {
+          runId: completedRetryRunId,
+          sourceId: `decision:${detailDecision.id}`,
+          usage: AiSourceDependencyUsage.ANSWER_CITATION,
+        },
+      }),
+      prisma.aiThread.update({
+        where: { id: hiddenThread.thread.id },
+        data: { activeRunId: null },
+      }),
+      prisma.aiRun.update({
+        where: { id: hiddenThread.run.id },
+        data: {
+          status: AiRunStatus.COMPLETED,
+          resolvedModelId: 'mock/hidden-history-model',
+          startedAt: initialRunCreatedAt,
+          finishedAt: new Date('2026-08-23T05:00:20.000Z'),
+        },
+      }),
+      prisma.aiMessage.create({
+        data: {
+          id: hiddenAssistantMessageId,
+          threadId: hiddenThread.thread.id,
+          runId: hiddenThread.run.id,
+          role: AiMessageRole.ASSISTANT,
+          content: '这段失权来源正文不得返回浏览器。',
+        },
+      }),
+      prisma.aiToolCall.create({
+        data: {
+          runId: hiddenThread.run.id,
+          toolCallId: 'history-revoked-tool',
+          sequence: 1,
+          toolName: 'getDecisionContext',
+          status: AiToolCallStatus.COMPLETED,
+          input: { decisionId: hiddenDecision.id },
+          resultSummary: {
+            decisionId: hiddenDecision.id,
+            decisionTitle: hiddenDecision.title,
+            decisionStatus: 'DISCUSSING',
+            projectTitle: hiddenProject.title,
+            areaName: null,
+            participantCount: 1,
+            sourceIds: [`decision:${hiddenDecision.id}`],
+          },
+          startedAt: initialRunCreatedAt,
+          finishedAt: new Date('2026-08-23T05:00:10.000Z'),
+          durationMs: 10_000,
+        },
+      }),
+      prisma.aiSourceDependency.createMany({
+        data: [
+          {
+            runId: hiddenThread.run.id,
+            sourceId: `decision:${hiddenDecision.id}`,
+            usage: AiSourceDependencyUsage.TOOL_READ,
+          },
+          {
+            runId: hiddenThread.run.id,
+            sourceId: `decision:${hiddenDecision.id}`,
+            usage: AiSourceDependencyUsage.ANSWER_CITATION,
+          },
+        ],
+      }),
       prisma.aiThread.update({
         where: { id: lockedThread.thread.id },
         data: {
+          activeRunId: null,
           scopeState: AiThreadScopeState.LOCKED,
           lockReason: AiThreadLockReason.SCOPE_CHANGED,
           scopeChangedAt: new Date('2026-08-23T05:04:00.000Z'),
+        },
+      }),
+      prisma.aiRun.update({
+        where: { id: lockedThread.run.id },
+        data: {
+          status: AiRunStatus.COMPLETED,
+          resolvedModelId: 'mock/deleted-history-model',
+          startedAt: initialRunCreatedAt,
+          finishedAt: new Date('2026-08-23T05:00:20.000Z'),
+        },
+      }),
+      prisma.aiMessage.create({
+        data: {
+          id: lockedAssistantMessageId,
+          threadId: lockedThread.thread.id,
+          runId: lockedThread.run.id,
+          role: AiMessageRole.ASSISTANT,
+          content: '这段删除来源正文不得返回浏览器。',
+        },
+      }),
+      prisma.aiToolCall.create({
+        data: {
+          runId: lockedThread.run.id,
+          toolCallId: 'history-deleted-tool',
+          sequence: 1,
+          toolName: 'getDecisionContext',
+          status: AiToolCallStatus.COMPLETED,
+          input: { decisionId: 2147483647 },
+          resultSummary: {
+            decisionId: 2147483647,
+            decisionTitle: '已经删除的决策',
+            decisionStatus: 'DISCUSSING',
+            projectTitle: '已经删除的项目',
+            areaName: null,
+            participantCount: 1,
+            sourceIds: ['decision:2147483647'],
+          },
+          startedAt: initialRunCreatedAt,
+          finishedAt: new Date('2026-08-23T05:00:10.000Z'),
+          durationMs: 10_000,
         },
       }),
       prisma.aiSourceDependency.create({
@@ -421,6 +533,13 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
           runId: lockedThread.run.id,
           sourceId: 'decision:2147483647',
           usage: AiSourceDependencyUsage.TOOL_READ,
+        },
+      }),
+      prisma.aiSourceDependency.create({
+        data: {
+          runId: lockedThread.run.id,
+          sourceId: 'decision:2147483647',
+          usage: AiSourceDependencyUsage.ANSWER_CITATION,
         },
       }),
     ]);
@@ -476,6 +595,7 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
       primaryArchivedThreadId: primaryThreads[3].thread.id,
       secondaryThreadId: secondaryThread.thread.id,
       hiddenThreadId: hiddenThread.thread.id,
+      hiddenAssistantMessageId,
       detailThreadId: detailThread.thread.id,
       detailUserMessageId: detailThread.message.id,
       detailAssistantMessageId,
@@ -485,6 +605,7 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
         completedRetryRunId,
       ],
       lockedThreadId: lockedThread.thread.id,
+      lockedAssistantMessageId,
     };
   });
 
@@ -576,7 +697,7 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
     expect(archivedPage.items[0]?.archivedAt).not.toBeNull();
   });
 
-  it('应按 Decision 筛选，并拒绝返回其他用户或已失权项目的 Thread', async () => {
+  it('应按 Decision 筛选、隔离其他用户，并保留已失权来源所在 Thread', async () => {
     const secondaryPage = await historyQueryService.listThreads(
       ownerAuthorization,
       {
@@ -599,10 +720,21 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
     ]);
     expect(viewerPage.items).toEqual([]);
     expect(
-      allOwnerThreads.items.some(
+      allOwnerThreads.items.find(
         (thread) => thread.id === fixture.hiddenThreadId,
       ),
-    ).toBe(false);
+    ).toMatchObject({
+      id: fixture.hiddenThreadId,
+      project: null,
+      decision: null,
+    });
+    expect(
+      (
+        await historyQueryService.listThreads(ownerAuthorization, {
+          decisionId: fixture.hiddenDecisionId,
+        })
+      ).items,
+    ).toEqual([]);
   });
 
   it('应返回真实 Thread 详情，并以 createdAt 和 UUID 确定最近 Run', async () => {
@@ -645,6 +777,7 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
         id: fixture.detailAssistantMessageId,
         role: 'ASSISTANT',
         runId: fixture.detailRunIds[2],
+        visibility: { state: 'VISIBLE', reason: null },
       },
       runs: [],
     });
@@ -683,7 +816,10 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
         failureReason: 'TOOL_ERROR',
         failureCode: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
       },
-      sourceIds: [],
+      citations: {
+        visibility: { state: 'VISIBLE', reason: null },
+        sourceIds: [],
+      },
       toolCalls: [
         {
           toolCallId: 'history-failed-tool',
@@ -693,11 +829,15 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
       ],
     });
     expect(userItem?.runs[2]).toMatchObject({
-      sourceIds: [`decision:${fixture.detailDecisionId}`],
+      citations: {
+        visibility: { state: 'VISIBLE', reason: null },
+        sourceIds: [`decision:${fixture.detailDecisionId}`],
+      },
       toolCalls: [
         {
           toolCallId: 'history-completed-tool',
           status: 'COMPLETED',
+          visibility: { state: 'VISIBLE', reason: null },
           input: { decisionId: fixture.detailDecisionId },
           resultSummary: {
             sourceIds: [`decision:${fixture.detailDecisionId}`],
@@ -792,7 +932,7 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
     expect(restored.thread.archivedAt).toBeNull();
   });
 
-  it('详情、消息和更新都应拒绝他人、失权范围与 LOCKED Thread', async () => {
+  it('详情、消息和更新都应继续拒绝其他用户', async () => {
     const otherUserOperations = [
       () =>
         historyQueryService.getThreadDetail(
@@ -818,49 +958,171 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
         code: API_ERROR_CODES.AI_THREAD_NOT_FOUND,
       });
     }
+  });
 
-    const scopeChangedOperations = [
-      () =>
-        historyQueryService.getThreadDetail(
-          ownerAuthorization,
-          fixture.hiddenThreadId,
-        ),
-      () =>
-        historyQueryService.listThreadMessages(
-          ownerAuthorization,
-          fixture.hiddenThreadId,
-          {},
-        ),
-      () =>
-        historyQueryService.updateThread(
-          ownerAuthorization,
-          fixture.hiddenThreadId,
-          { archived: true },
-        ),
-      () =>
-        historyQueryService.getThreadDetail(
-          ownerAuthorization,
-          fixture.lockedThreadId,
-        ),
-      () =>
-        historyQueryService.listThreadMessages(
-          ownerAuthorization,
-          fixture.lockedThreadId,
-          {},
-        ),
-      () =>
-        historyQueryService.updateThread(
-          ownerAuthorization,
-          fixture.lockedThreadId,
-          { title: '锁定后不得修改' },
-        ),
-    ];
+  it('来源失权后应只隐藏受影响回答、工具和引用，并允许继续创建新 Run', async () => {
+    const detail = await historyQueryService.getThreadDetail(
+      ownerAuthorization,
+      fixture.hiddenThreadId,
+    );
+    const page = await historyQueryService.listThreadMessages(
+      ownerAuthorization,
+      fixture.hiddenThreadId,
+      {},
+    );
+    const assistant = page.items.find(
+      (item) => item.message.id === fixture.hiddenAssistantMessageId,
+    );
+    const user = page.items.find((item) => item.message.role === 'USER');
 
-    for (const operation of scopeChangedOperations) {
-      await expect(operation()).rejects.toMatchObject({
-        code: API_ERROR_CODES.AI_THREAD_SCOPE_CHANGED,
-      });
-    }
+    expect(detail).toMatchObject({ project: null, decision: null });
+    expect(user?.message).toMatchObject({
+      role: 'USER',
+      content: '失权后不得出现的历史',
+      visibility: { state: 'VISIBLE', reason: null },
+    });
+    expect(assistant?.message).toEqual(
+      expect.objectContaining({
+        id: fixture.hiddenAssistantMessageId,
+        role: 'ASSISTANT',
+        visibility: {
+          state: 'HIDDEN',
+          reason: 'SOURCE_ACCESS_REVOKED',
+        },
+      }),
+    );
+    expect(assistant?.message).not.toHaveProperty('content');
+    expect(user?.runs[0]?.toolCalls[0]).toMatchObject({
+      toolCallId: 'history-revoked-tool',
+      visibility: {
+        state: 'HIDDEN',
+        reason: 'SOURCE_ACCESS_REVOKED',
+      },
+    });
+    expect(user?.runs[0]?.toolCalls[0]).not.toHaveProperty('input');
+    expect(user?.runs[0]?.toolCalls[0]).not.toHaveProperty('resultSummary');
+    expect(user?.runs[0]?.citations).toEqual({
+      visibility: {
+        state: 'HIDDEN',
+        reason: 'SOURCE_ACCESS_REVOKED',
+      },
+    });
+    expect(JSON.stringify(page)).not.toContain(
+      '这段失权来源正文不得返回浏览器',
+    );
+    expect(JSON.stringify(page)).not.toContain(
+      `decision:${fixture.hiddenDecisionId}`,
+    );
+
+    const continued = await threadService.createMessageRun({
+      authorization: ownerAuthorization,
+      threadId: fixture.hiddenThreadId,
+      content: '失权后继续提出一个不绑定旧决策的问题',
+      clientRequestId: randomUUID(),
+      modelRole: 'standard',
+    });
+    const continuedScope = await prisma.aiRun.findUniqueOrThrow({
+      where: { id: continued.run.id },
+      select: {
+        scopeStatus: true,
+        decisionScopes: { select: { decisionId: true } },
+      },
+    });
+    expect(continuedScope).toEqual({
+      scopeStatus: 'UNRESOLVED',
+      decisionScopes: [],
+    });
+    await prisma.$transaction([
+      prisma.aiRun.update({
+        where: { id: continued.run.id },
+        data: {
+          status: AiRunStatus.CANCELLED,
+          cancellationReason: AiRunCancellationReason.USER_REQUESTED,
+          finishedAt: new Date(),
+        },
+      }),
+      prisma.aiThread.update({
+        where: { id: fixture.hiddenThreadId },
+        data: { activeRunId: null },
+      }),
+    ]);
+  });
+
+  it('来源权限恢复后应重新展示原回答、工具结果和引用', async () => {
+    await prisma.projectMember.create({
+      data: {
+        projectId: fixture.hiddenProjectId,
+        userId: fixture.ownerUserId,
+        role: ProjectMemberRole.OWNER,
+      },
+    });
+    const page = await historyQueryService.listThreadMessages(
+      ownerAuthorization,
+      fixture.hiddenThreadId,
+      {},
+    );
+    const assistant = page.items.find(
+      (item) => item.message.id === fixture.hiddenAssistantMessageId,
+    );
+    const originalUser = page.items.find(
+      (item) =>
+        'content' in item.message &&
+        item.message.content === '失权后不得出现的历史',
+    );
+
+    expect(assistant?.message).toMatchObject({
+      content: '这段失权来源正文不得返回浏览器。',
+      visibility: { state: 'VISIBLE', reason: null },
+    });
+    expect(originalUser?.runs[0]?.toolCalls[0]).toMatchObject({
+      input: { decisionId: fixture.hiddenDecisionId },
+      visibility: { state: 'VISIBLE', reason: null },
+    });
+    expect(originalUser?.runs[0]?.citations).toEqual({
+      visibility: { state: 'VISIBLE', reason: null },
+      sourceIds: [`decision:${fixture.hiddenDecisionId}`],
+    });
+  });
+
+  it('来源删除和 2.6 遗留锁只隐藏受影响内容，不再锁死 Thread', async () => {
+    const page = await historyQueryService.listThreadMessages(
+      ownerAuthorization,
+      fixture.lockedThreadId,
+      {},
+    );
+    const assistant = page.items.find(
+      (item) => item.message.id === fixture.lockedAssistantMessageId,
+    );
+    const user = page.items.find((item) => item.message.role === 'USER');
+    const persistedThread = await prisma.aiThread.findUniqueOrThrow({
+      where: { id: fixture.lockedThreadId },
+      select: { scopeState: true, lockReason: true, scopeChangedAt: true },
+    });
+
+    expect(assistant?.message).toMatchObject({
+      visibility: { state: 'HIDDEN', reason: 'SOURCE_DELETED' },
+    });
+    expect(assistant?.message).not.toHaveProperty('content');
+    expect(user?.runs[0]?.toolCalls[0]).toMatchObject({
+      visibility: { state: 'HIDDEN', reason: 'SOURCE_DELETED' },
+    });
+    expect(user?.runs[0]?.citations).toEqual({
+      visibility: { state: 'HIDDEN', reason: 'SOURCE_DELETED' },
+    });
+    expect(persistedThread).toEqual({
+      scopeState: AiThreadScopeState.ACTIVE,
+      lockReason: null,
+      scopeChangedAt: null,
+    });
+    await expect(
+      historyQueryService.updateThread(
+        ownerAuthorization,
+        fixture.lockedThreadId,
+        { title: '删除来源后仍可维护会话' },
+      ),
+    ).resolves.toMatchObject({
+      thread: { title: '删除来源后仍可维护会话' },
+    });
   });
 
   it('应以稳定字段错误拒绝损坏的分页游标', async () => {

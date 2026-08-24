@@ -3,17 +3,16 @@
  */
 
 import type {
-  AiMessage,
+  AiHistoryContentHiddenReason,
+  AiHistoryMessage,
+  AiHistoryToolCall,
   AiRunPublicSummary,
   AiThreadMessageHistoryItem,
 } from '@workspace/contracts/ai';
 
 import type { AiDecisionUiMessage } from '../types/ai-message';
 
-import {
-  toHistoricalAiToolCallView,
-  type AiToolCallView,
-} from './ai-tool-call-view';
+import { toHistoricalAiToolCallView, type AiToolCallView } from './ai-tool-call-view';
 
 /** 历史工作区统一消费的结构化时间流部件。 */
 export type AiThreadTimelineItem =
@@ -23,8 +22,20 @@ export type AiThreadTimelineItem =
       /** 稳定消息主键。 */
       id: string;
       /** 持久化消息。 */
-      message: AiMessage;
+      message: Extract<AiHistoryMessage, { visibility: { state: 'VISIBLE' } }>;
       /** ISO 时间用于确定性排序。 */
+      createdAt: string;
+    }
+  | {
+      /** 因来源失权或删除而替代原业务内容的中性占位。 */
+      kind: 'hidden';
+      /** 与原部件保持一致的稳定去重标识。 */
+      id: string;
+      /** 被隐藏的是助手回答、工具结果还是引用。 */
+      contentKind: 'answer' | 'tool' | 'citations';
+      /** 服务端允许前端展示的稳定隐藏原因。 */
+      reason: AiHistoryContentHiddenReason;
+      /** ISO 时间用于保持首次流与历史恢复顺序一致。 */
       createdAt: string;
     }
   | {
@@ -62,40 +73,83 @@ export type AiThreadTimelineItem =
       createdAt: string;
     };
 
+/** 收窄通过服务端来源复核且仍携带正文的历史消息。 */
+function isVisibleHistoryMessage(
+  message: AiHistoryMessage,
+): message is Extract<AiHistoryMessage, { visibility: { state: 'VISIBLE' } }> {
+  return message.visibility.state === 'VISIBLE';
+}
+
+/** 收窄通过服务端来源复核且仍携带输入与结果摘要的历史工具调用。 */
+function isVisibleHistoryToolCall(
+  toolCall: AiHistoryToolCall,
+): toolCall is Extract<AiHistoryToolCall, { visibility: { state: 'VISIBLE' } }> {
+  return toolCall.visibility.state === 'VISIBLE';
+}
+
 /** 将一组历史页条目投影为去重且确定排序的结构化时间流。 */
 export function projectAiThreadTimeline(items: AiThreadMessageHistoryItem[]): AiThreadTimelineItem[] {
   const projected = new Map<string, AiThreadTimelineItem>();
 
   for (const item of items) {
     const messageKey = `message:${item.message.id}`;
-    projected.set(messageKey, {
-      kind: 'message',
-      id: messageKey,
-      message: item.message,
-      createdAt: item.message.createdAt,
-    });
+    if (isVisibleHistoryMessage(item.message)) {
+      projected.set(messageKey, {
+        kind: 'message',
+        id: messageKey,
+        message: item.message,
+        createdAt: item.message.createdAt,
+      });
+    } else {
+      projected.set(messageKey, {
+        kind: 'hidden',
+        id: messageKey,
+        contentKind: 'answer',
+        reason: item.message.visibility.reason,
+        createdAt: item.message.createdAt,
+      });
+    }
 
     for (const history of item.runs) {
-      const { run, sourceIds, toolCalls } = history;
+      const { citations, run, toolCalls } = history;
 
       for (const toolCall of toolCalls) {
         const toolKey = `tool:${run.id}:${toolCall.toolCallId}`;
-        projected.set(toolKey, {
-          kind: 'tool',
-          id: toolKey,
-          runId: run.id,
-          tool: toHistoricalAiToolCallView(toolCall, run),
-          createdAt: toolCall.startedAt ?? toolCall.createdAt,
-        });
+        if (isVisibleHistoryToolCall(toolCall)) {
+          projected.set(toolKey, {
+            kind: 'tool',
+            id: toolKey,
+            runId: run.id,
+            tool: toHistoricalAiToolCallView(toolCall, run),
+            createdAt: toolCall.startedAt ?? toolCall.createdAt,
+          });
+        } else {
+          projected.set(toolKey, {
+            kind: 'hidden',
+            id: toolKey,
+            contentKind: 'tool',
+            reason: toolCall.visibility.reason,
+            createdAt: toolCall.startedAt ?? toolCall.createdAt,
+          });
+        }
       }
 
-      if (sourceIds.length > 0) {
+      if (citations.visibility.state === 'HIDDEN') {
+        const citationKey = `citations:${run.id}`;
+        projected.set(citationKey, {
+          kind: 'hidden',
+          id: citationKey,
+          contentKind: 'citations',
+          reason: citations.visibility.reason,
+          createdAt: run.finishedAt ?? run.updatedAt,
+        });
+      } else if ('sourceIds' in citations && citations.sourceIds.length > 0) {
         const citationKey = `citations:${run.id}`;
         projected.set(citationKey, {
           kind: 'citations',
           id: citationKey,
           runId: run.id,
-          sourceIds: [...new Set(sourceIds)],
+          sourceIds: [...new Set(citations.sourceIds)],
           createdAt: run.finishedAt ?? run.updatedAt,
         });
       }
@@ -126,18 +180,23 @@ export function mergeAiThreadHistoryItems(
 
   return [...merged.values()].sort(
     (left, right) =>
-      left.message.createdAt.localeCompare(right.message.createdAt) ||
-      left.message.id.localeCompare(right.message.id),
+      left.message.createdAt.localeCompare(right.message.createdAt) || left.message.id.localeCompare(right.message.id),
   );
 }
 
 /** 把持久化文本消息转换为 useChat 可恢复和可重试的类型安全消息。 */
 export function toAiDecisionUiMessages(items: AiThreadMessageHistoryItem[]): AiDecisionUiMessage[] {
-  return items.map(({ message }) => ({
-    id: message.id,
-    role: message.role === 'USER' ? 'user' : 'assistant',
-    parts: [{ type: 'text', text: message.content }],
-  }));
+  return items.flatMap(({ message }) =>
+    isVisibleHistoryMessage(message)
+      ? [
+          {
+            id: message.id,
+            role: message.role === 'USER' ? ('user' as const) : ('assistant' as const),
+            parts: [{ type: 'text' as const, text: message.content }],
+          },
+        ]
+      : [],
+  );
 }
 
 /** 同一时间戳下保持消息、工具、引用、Run 状态的稳定业务顺序。 */
@@ -158,6 +217,8 @@ function timelinePriority(item: AiThreadTimelineItem): number {
       return 1;
     case 'citations':
       return 3;
+    case 'hidden':
+      return item.contentKind === 'tool' ? 1 : item.contentKind === 'answer' ? 2 : 3;
     case 'run':
       return 4;
   }
