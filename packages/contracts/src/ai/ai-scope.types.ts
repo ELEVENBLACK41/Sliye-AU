@@ -103,10 +103,41 @@ export type AiResolvedRunScope = {
 };
 
 /** 一次 Run 的动态授权范围解析结果。 */
-export type AiRunScopeResolution =
-  | AiUnresolvedRunScope
-  | AiAwaitingRunScopeConfirmation
-  | AiResolvedRunScope;
+export type AiRunScopeResolution = AiUnresolvedRunScope | AiAwaitingRunScopeConfirmation | AiResolvedRunScope;
+
+/** 按用户问题查询当前账号可访问决策候选的请求。 */
+export type SearchAccessibleDecisionsRequest = {
+  /** 用于匹配决策标题、项目标题或精确决策引用的非空问题文本。 */
+  query: string;
+  /** 最多返回的安全候选数；省略时由服务端使用默认值。 */
+  limit?: number;
+};
+
+/** 授权前置过滤完成后的决策候选查询结果。 */
+export type SearchAccessibleDecisionsResponse = {
+  /** 仅包含当前账号此刻仍有权访问的候选。 */
+  candidates: AiDecisionScopeCandidate[];
+};
+
+/** 为一条尚未执行的 Run 解析决策范围的请求。 */
+export type DiscoverAiRunScopeRequest = {
+  /** 当前用户问题或用于范围发现的明确决策引用。 */
+  query: string;
+};
+
+/** 用户从服务端候选中确认一个或多个决策范围的请求。 */
+export type ConfirmAiRunScopeRequest = {
+  /** 本次确认选择的决策主键；确认时服务端必须重新鉴权。 */
+  decisionIds: number[];
+};
+
+/** Run 范围查询、发现和确认接口共同返回的权威快照。 */
+export type AiRunScopeResolutionResponse = {
+  /** 当前范围所属 Run UUID。 */
+  runId: string;
+  /** 当前持久化的范围解析状态。 */
+  resolution: AiRunScopeResolution;
+};
 
 /** 历史内容因来源变化而不可继续展示时使用的稳定原因。 */
 export type AiHistoryContentHiddenReason = 'SOURCE_ACCESS_REVOKED' | 'SOURCE_DELETED';

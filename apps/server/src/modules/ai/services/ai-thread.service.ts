@@ -11,11 +11,14 @@ import { PrismaService } from '../../../database/prisma.service';
 import {
   AiMessageRole,
   AiRequestOperation,
+  AiRunScopeResolutionMethod,
+  AiRunScopeResolutionStatus,
   AiRunStatus,
   AiThreadScopeState,
-  type Prisma,
+  Prisma,
 } from '../../../generated/prisma';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
+import { AuthorizationService } from '../../auth/services/authorization.service';
 import {
   toAiMessage,
   toAiRunPublicSummary,
@@ -76,6 +79,7 @@ export class AiThreadService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly threadScopeService: AiThreadScopeService,
+    private readonly authorizationService: AuthorizationService,
   ) {}
 
   /** 原子创建绑定 Decision 的 Thread、首条用户消息、首个 Run 和幂等记录。 */
@@ -84,6 +88,9 @@ export class AiThreadService {
   ): Promise<AiRunCreationResult> {
     const content = this.normalizeMessageContent(command.content);
     this.assertUuid(command.clientRequestId, 'clientRequestId');
+    if (command.decisionId === undefined) {
+      return this.createUnboundInitialRun(command, content);
+    }
     const scopeKey = this.createDecisionScopeKey(command.decisionId);
     const fingerprint = this.createRequestFingerprint({
       operation: AiRequestOperation.CREATE_THREAD,
@@ -141,6 +148,17 @@ export class AiThreadService {
                 threadId,
                 userMessageId: messageId,
                 modelRole: toPrismaAiLanguageModelRole(command.modelRole),
+                scopeStatus: AiRunScopeResolutionStatus.RESOLVED,
+                scopeResolutionMethod:
+                  AiRunScopeResolutionMethod.EXACT_REFERENCE,
+                scopeResolvedAt: new Date(),
+                decisionScopes: {
+                  create: {
+                    decisionId: decision.decisionId,
+                    projectId: decision.projectId,
+                    areaId: decision.areaId,
+                  },
+                },
               },
             });
             const thread = await tx.aiThread.update({
@@ -248,12 +266,33 @@ export class AiThreadService {
               content,
             },
           });
+          const legacyDecision = currentThread.decisionId
+            ? await tx.decision.findUniqueOrThrow({
+                where: { id: currentThread.decisionId },
+                select: { id: true, projectId: true, areaId: true },
+              })
+            : null;
           const run = await tx.aiRun.create({
             data: {
               id: runId,
               threadId: currentThread.threadId,
               userMessageId: messageId,
               modelRole: toPrismaAiLanguageModelRole(command.modelRole),
+              ...(legacyDecision
+                ? {
+                    scopeStatus: AiRunScopeResolutionStatus.RESOLVED,
+                    scopeResolutionMethod:
+                      AiRunScopeResolutionMethod.EXACT_REFERENCE,
+                    scopeResolvedAt: new Date(),
+                    decisionScopes: {
+                      create: {
+                        decisionId: legacyDecision.id,
+                        projectId: legacyDecision.projectId,
+                        areaId: legacyDecision.areaId,
+                      },
+                    },
+                  }
+                : {}),
             },
           });
           const thread = await tx.aiThread.update({
@@ -313,7 +352,11 @@ export class AiThreadService {
         async (tx, accessible) => {
           const source = await tx.aiRun.findUniqueOrThrow({
             where: { id: command.runId },
-            include: { userMessage: true },
+            include: {
+              userMessage: true,
+              decisionScopes: true,
+              scopeCandidates: true,
+            },
           });
           if (
             source.status !== AiRunStatus.FAILED &&
@@ -353,6 +396,21 @@ export class AiThreadService {
               userMessageId: source.userMessageId,
               retryOfRunId: source.id,
               modelRole: source.modelRole,
+              scopeStatus: source.scopeStatus,
+              scopeResolutionMethod: source.scopeResolutionMethod,
+              scopeResolvedAt: source.scopeResolvedAt,
+              decisionScopes: {
+                create: source.decisionScopes.map((scope) => ({
+                  decisionId: scope.decisionId,
+                  projectId: scope.projectId,
+                  areaId: scope.areaId,
+                })),
+              },
+              scopeCandidates: {
+                create: source.scopeCandidates.map((candidate) => ({
+                  decisionId: candidate.decisionId,
+                })),
+              },
             },
           });
           const thread = await tx.aiThread.update({
@@ -382,6 +440,119 @@ export class AiThreadService {
       if (!fingerprint) {
         throw error;
       }
+      return this.resolveConcurrentIdempotentRequest(
+        error,
+        command.authorization,
+        idempotency,
+        fingerprint,
+      );
+    }
+  }
+
+  /** 创建不绑定项目或决策的 Thread，并让首个 Run 等待后续范围发现。 */
+  private async createUnboundInitialRun(
+    command: CreateInitialAiRunCommand,
+    content: string,
+  ): Promise<AiRunCreationResult> {
+    this.authorizationService.assertPermission(
+      command.authorization,
+      'ai:chat:use',
+    );
+    this.authorizationService.assertPermission(
+      command.authorization,
+      'decision:read',
+    );
+    const scopeKey = `user:${command.authorization.userId}`;
+    const fingerprint = this.createRequestFingerprint({
+      operation: AiRequestOperation.CREATE_THREAD,
+      scopeKey,
+      content,
+      modelRole: command.modelRole,
+    });
+    const idempotency = {
+      userId: command.authorization.userId,
+      operation: AiRequestOperation.CREATE_THREAD,
+      scopeKey,
+      clientRequestId: command.clientRequestId,
+    } as const;
+    const threadId = randomUUID();
+    const messageId = randomUUID();
+    const runId = randomUUID();
+    const expiresAt = new Date(Date.now() + AI_IDEMPOTENCY_TTL_MILLISECONDS);
+
+    try {
+      const outcome =
+        await this.prisma.$transaction<AiInitialRunTransactionOutcome>(
+          async (tx) => {
+            const existing = await this.prepareIdempotentReference(
+              tx,
+              idempotency,
+            );
+            if (existing) {
+              return { kind: 'replay', threadId: existing.threadId };
+            }
+
+            await tx.aiThread.create({
+              data: {
+                id: threadId,
+                ownerUserId: command.authorization.userId,
+                title: this.createThreadTitle(content),
+              },
+            });
+            const message = await tx.aiMessage.create({
+              data: {
+                id: messageId,
+                threadId,
+                authorUserId: command.authorization.userId,
+                role: AiMessageRole.USER,
+                content,
+              },
+            });
+            const run = await tx.aiRun.create({
+              data: {
+                id: runId,
+                threadId,
+                userMessageId: messageId,
+                modelRole: toPrismaAiLanguageModelRole(command.modelRole),
+              },
+            });
+            const thread = await tx.aiThread.update({
+              where: { id: threadId },
+              data: { activeRunId: runId },
+            });
+            await tx.aiRequestDeduplication.create({
+              data: {
+                ...idempotency,
+                requestFingerprint: fingerprint,
+                threadId,
+                messageId,
+                runId,
+                expiresAt,
+              },
+            });
+
+            return {
+              kind: 'created',
+              value: {
+                thread: toAiThread(thread),
+                message: toAiMessage(message),
+                run: toAiRunPublicSummary(run),
+                replayed: false,
+              },
+            };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+
+      return outcome.kind === 'created'
+        ? outcome.value
+        : this.readAccessibleIdempotentResult(
+            command.authorization,
+            outcome.threadId,
+            idempotency,
+            fingerprint,
+          );
+    } catch (error) {
       return this.resolveConcurrentIdempotentRequest(
         error,
         command.authorization,

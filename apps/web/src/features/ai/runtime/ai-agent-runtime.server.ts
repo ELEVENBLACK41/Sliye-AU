@@ -15,6 +15,7 @@ import { API_ERROR_CODES, type ApiErrorCode } from '@workspace/contracts/common'
 import { createDecisionHubAgent } from '../agents/decision-hub-agent';
 import { routeDecisionAgentRequest } from '../agents/decision-agent-scope-policy';
 import { buildAiAgentContext } from '../context/agent-context-builder.server';
+import { getDecisionContextModelInputSchema } from '../tools/decision/get-decision-context.schema';
 import { serializeAiThreadScopeChangedError } from '../utils/ai-workspace-state';
 import { toAiContextUiMessages } from './ai-authoritative-context';
 import { normalizeAiModelError } from './ai-model-error';
@@ -28,6 +29,7 @@ import {
   confirmAiRunCancellation,
   failAiRun,
   finishAiToolCall,
+  getAiRunScope,
   listAiThreadMessages,
   recordAiModelStep,
   renewAiRun,
@@ -76,11 +78,12 @@ export async function startAiRunExecution(options: {
     });
   }
 
-  const uiMessages = await resolveAuthoritativeContextMessages(
-    identity,
-    creation,
-    options.contextSource,
-  );
+  const scope = await getAiRunScope(identity, creation.run.id);
+  if (scope.resolution.status !== 'RESOLVED') {
+    throw new Error('AI Run 必须先完成决策范围解析才能启动执行');
+  }
+
+  const uiMessages = await resolveAuthoritativeContextMessages(identity, creation, options.contextSource);
 
   const lease = await claimAiRun(identity, creation.run.id, {
     leaseDurationMs: AI_EXECUTION_LEASE_DURATION_MS,
@@ -97,6 +100,7 @@ export async function startAiRunExecution(options: {
     executionLeaseId: lease.executionLeaseId,
     handle,
     uiMessages,
+    decisionIds: scope.resolution.scopes.map((item) => item.decisionId),
   });
 }
 
@@ -139,6 +143,7 @@ async function createClaimedRunResponse(options: {
   executionLeaseId: string;
   handle: AiExecutorHandle;
   uiMessages: UIMessage[];
+  decisionIds: number[];
 }): Promise<Response> {
   const { creation, executionLeaseId, handle, identity } = options;
   const assistantMessageId = crypto.randomUUID();
@@ -171,6 +176,7 @@ async function createClaimedRunResponse(options: {
   const persistToolCallStatus = async (
     toolCallId: string,
     status: 'WAITING' | 'RUNNING',
+    decisionId: number,
   ): Promise<void> => {
     let sequence = toolSequences.get(toolCallId);
     if (sequence === undefined) {
@@ -184,7 +190,7 @@ async function createClaimedRunResponse(options: {
       sequence,
       status,
       toolName: 'getDecisionContext',
-      input: { decisionId: creation.thread.decisionId },
+      input: { decisionId },
     });
 
     if (status === 'RUNNING') {
@@ -267,7 +273,7 @@ async function createClaimedRunResponse(options: {
         accessToken: identity.accessToken,
         runId: creation.run.id,
         executionLeaseId,
-        decisionId: creation.thread.decisionId,
+        allowedDecisionIds: options.decisionIds,
       },
       scopeRoute,
     );
@@ -308,7 +314,9 @@ async function createClaimedRunResponse(options: {
       },
       onToolExecutionStart: async ({ toolCall }) => {
         try {
-          await persistToolCallStatus(toolCall.toolCallId, 'RUNNING');
+          const input = getDecisionContextModelInputSchema.parse(toolCall.input);
+          await persistToolCallStatus(toolCall.toolCallId, 'WAITING', input.decisionId);
+          await persistToolCallStatus(toolCall.toolCallId, 'RUNNING', input.decisionId);
         } catch (error) {
           stopForFatalError(error, 'INTERNAL_ERROR', 'TOOL_AUDIT_START_FAILED');
         }
@@ -359,18 +367,6 @@ async function createClaimedRunResponse(options: {
               controller.enqueue({ type: 'error', error: fatalError });
             }
             return;
-          }
-
-          if (part.type === 'tool-input-start' && part.toolName === 'getDecisionContext') {
-            try {
-              await persistToolCallStatus(part.id, 'WAITING');
-            } catch (error) {
-              fatalError = error;
-              fatalFailureReason = 'INTERNAL_ERROR';
-              handle.abortController.abort('TOOL_AUDIT_WAITING_FAILED');
-              controller.enqueue({ type: 'error', error });
-              return;
-            }
           }
 
           if (part.type === 'text-delta' && part.text) {

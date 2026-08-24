@@ -35,9 +35,9 @@ export type AiToolDefinitionMetadata = {
   allowParallel: false;
 };
 
-/** `getDecisionContext` 由 BFF 根据 Thread 写入的权威安全输入快照，不接受模型指定范围。 */
+/** `getDecisionContext` 允许模型从本次 Run 已确认范围中选择一项决策。 */
 export type GetDecisionContextToolInput = {
-  /** 当前 Thread 在服务端实际绑定的决策主键。 */
+  /** 必须属于当前 Run 已确认范围，NestJS 会在每次读取时重新鉴权。 */
   decisionId: number;
 };
 

@@ -44,7 +44,7 @@ export type DecisionAgentStepPolicy =
 const EXPLICITLY_UNRELATED_PATTERN =
   /(?:与|和)?当前(?:\s*thread|\s*会话|\s*决策).{0,12}(?:无关|不相关)|(?:无关|不相关).{0,12}当前(?:\s*thread|\s*会话|\s*决策)/iu;
 
-/** 能明确证明用户正在询问当前决策形成过程的业务词。 */
+/** 能明确证明用户正在询问一项或多项决策形成过程的业务词。 */
 const DECISION_SCOPE_PATTERN =
   /当前\s*(?:thread|会话|决策)|(?:这项|该|本次|这个)\s*决策|决策(?:标题|状态|过程|范围|参与|风险|结论)|提案|投票|决议|议题|讨论记录|会议记录|时间线|过程回放|参与人/iu;
 
@@ -61,9 +61,9 @@ const SOFTWARE_SUBJECT_PATTERN =
 const SOFTWARE_HELP_INTENT_PATTERN = /怎么|如何|写|生成|实现|教程|示例|入门|学习|调试|报错|解释|帮我/iu;
 
 /** 明显离题时使用独立指令，确保模型看不到工具也不继续回答无关知识。 */
-export const DECISION_AGENT_SCOPE_REFUSAL_INSTRUCTIONS = `当前请求已经过 NextNest 的固定产品范围门禁，明确不属于当前 Thread 绑定决策的形成过程。
+export const DECISION_AGENT_SCOPE_REFUSAL_INSTRUCTIONS = `当前请求已经过 NextNest 的固定产品范围门禁，明确不属于决策形成过程。
 
-只回复一条简短中文提示：说明你只能协助当前决策的讨论、提案、投票、决议和过程回放，并引导用户改问当前决策。不得回答原问题，不得生成代码或通用内容，不得声称读取了任何业务工具。`;
+只回复一条简短中文提示：说明你只能协助已确认范围内决策的讨论、提案、投票、决议和过程回放，并引导用户改问相关决策。不得回答原问题，不得生成代码或通用内容，不得声称读取了任何业务工具。`;
 
 /** 对当前用户问题执行保守的高置信度范围路由。 */
 export function routeDecisionAgentRequest(question: string): DecisionAgentScopeRoute {

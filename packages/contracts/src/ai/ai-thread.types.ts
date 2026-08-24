@@ -1,6 +1,6 @@
 /**
- * 本文件定义绑定单项 Decision 的 AI Thread 共享契约。
- * Thread 只承担会话容器、权限范围和当前运行门禁，不保存模型执行细节。
+ * 本文件定义不强制绑定业务数据的 AI Thread 共享契约。
+ * Thread 只承担会话容器、归属和当前运行门禁；权威业务范围由每次 Run 独立保存。
  */
 
 import type { AiRunPublicSummary } from './ai-run.types.ts';
@@ -14,16 +14,16 @@ export type AiThreadScopeState = (typeof AI_THREAD_SCOPE_STATES)[number];
 /** 第一版 AI Thread 的锁定原因。 */
 export type AiThreadLockReason = 'SCOPE_CHANGED';
 
-/** 一条绑定单项 Decision、归属于创建用户的持久化 AI 会话。 */
+/** 一条归属于创建用户、允许不同 Run 使用不同决策范围的持久化 AI 会话。 */
 export type AiThread = {
   /** 对外稳定且不可推断业务数量的 Thread 标识。 */
   id: string;
   /** Thread 创建者和唯一拥有者的用户主键。 */
   ownerUserId: number;
-  /** 由服务端根据 Decision 解析并固化的项目主键。 */
-  projectId: number;
-  /** 第一版 Thread 唯一绑定且不可在会话内切换的决策主键。 */
-  decisionId: number;
+  /** 2.6 旧会话的项目兼容提示；新会话未绑定时为 `null`。 */
+  projectId: number | null;
+  /** 2.6 旧会话的决策兼容提示；新会话未绑定时为 `null`。 */
+  decisionId: number | null;
   /** 默认由首条用户问题截断生成、允许用户后续修改的会话标题。 */
   title: string;
   /** 当前非终态 Run 标识；没有正在处理的 Run 时为 `null`。 */
@@ -58,14 +58,14 @@ export type AiThreadListItem = {
     id: number;
     /** 项目当前真实标题。 */
     title: string;
-  };
-  /** Thread 唯一绑定决策的真实公开标识与标题。 */
+  } | null;
+  /** 2.6 旧会话兼容决策；新会话没有固定决策时为 `null`。 */
   decision: {
     /** 决策主键。 */
     id: number;
     /** 决策当前真实标题。 */
     title: string;
-  };
+  } | null;
   /** 用户可修改的会话标题。 */
   title: string;
   /** 当前非终态 Run；没有运行时为空。 */
@@ -90,14 +90,14 @@ export type AiThreadDetail = {
     id: number;
     /** 项目当前真实标题。 */
     title: string;
-  };
-  /** Thread 唯一绑定决策的真实公开标识与标题。 */
+  } | null;
+  /** 2.6 旧会话兼容决策；新会话没有固定决策时为 `null`。 */
   decision: {
     /** 决策主键。 */
     id: number;
     /** 决策当前真实标题。 */
     title: string;
-  };
+  } | null;
   /** 用户可修改的会话标题。 */
   title: string;
   /** 当前非终态 Run；没有运行时为空。 */

@@ -29,7 +29,14 @@ export class AiToolCallService {
       command.authorization,
       command.runId,
       [],
-      async (tx) => {
+      async (tx, accessible) => {
+        if (!accessible.decisionIds.includes(command.input.decisionId)) {
+          throw new BusinessException({
+            code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
+            message: '工具请求的决策不在当前 AI Run 已确认范围内',
+            status: HttpStatus.BAD_REQUEST,
+          });
+        }
         const now = new Date();
         const fenced = await tx.aiRun.updateMany({
           where: {

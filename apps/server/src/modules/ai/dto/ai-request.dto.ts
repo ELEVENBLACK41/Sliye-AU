@@ -44,11 +44,12 @@ function trimString({ value }: { value: unknown }): unknown {
 
 /** 创建首个 AI Thread 和 Run 的 DTO。 */
 export class CreateAiThreadRunDto implements CreateAiThreadRunRequest {
-  /** Thread 唯一绑定的决策主键。 */
-  @ApiProperty({ minimum: 1 })
+  /** 2.6 兼容调用提供的精确决策主键；新流程允许省略。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
   @IsInt()
   @Min(1)
-  decisionId!: number;
+  decisionId?: number;
 
   /** 用户提交的首条问题。 */
   @ApiProperty({ minLength: 1, maxLength: 20_000 })
@@ -307,7 +308,7 @@ export class ConfirmAiRunCancellationDto implements ConfirmAiRunCancellationRequ
 
 /** getDecisionContext 工具经过全局白名单校验的嵌套输入 DTO。 */
 export class GetDecisionContextToolInputDto implements GetDecisionContextToolInput {
-  /** 当前 AI Thread 唯一绑定的决策主键。 */
+  /** 必须属于当前 AI Run 已确认范围的决策主键。 */
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)

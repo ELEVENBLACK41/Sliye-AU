@@ -21,8 +21,8 @@ import type { AuthorizationContext } from '../../auth/types/auth.types';
 export type CreateInitialAiRunCommand = {
   /** 当前请求实时计算出的认证与授权上下文。 */
   authorization: AuthorizationContext;
-  /** 第一版 Thread 唯一绑定的决策主键。 */
-  decisionId: number;
+  /** 2.6 兼容调用可提供的精确决策主键；新流程允许省略。 */
+  decisionId?: number;
   /** 用户提交并需要持久化的首条问题。 */
   content: string;
   /** 浏览器为本次业务操作生成的 UUID 幂等键。 */

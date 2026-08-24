@@ -7,11 +7,7 @@ import type { MutableRefObject } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { ArchiveRestore, Bot, History, LoaderCircle, Send, Square } from 'lucide-react';
 
-import type {
-  AiRunPublicSummary,
-  AiThreadDetail,
-  AiThreadMessageHistoryItem,
-} from '@workspace/contracts/ai';
+import type { AiRunPublicSummary, AiThreadDetail, AiThreadMessageHistoryItem } from '@workspace/contracts/ai';
 import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -88,24 +84,17 @@ export function AiChatPanel({
   disconnectRef,
 }: AiChatPanelProps) {
   const [input, setInput] = useState('');
-  const [decisionIdInput, setDecisionIdInput] = useState(
-    initialDecisionId ? String(initialDecisionId) : '',
-  );
+  const [decisionIdInput, setDecisionIdInput] = useState(initialDecisionId ? String(initialDecisionId) : '');
   const [actionError, setActionError] = useState<string | null>(null);
   const initialMessages = useMemo(() => toAiDecisionUiMessages(historyItems), [historyItems]);
   const timeline = useMemo(() => projectAiThreadTimeline(historyItems), [historyItems]);
-  const persistedMessageIds = useMemo(
-    () => new Set(historyItems.map((item) => item.message.id)),
-    [historyItems],
-  );
+  const persistedMessageIds = useMemo(() => new Set(historyItems.map((item) => item.message.id)), [historyItems]);
   const persistedToolCallKeys = useMemo(
     () =>
       new Set(
         historyItems.flatMap((item) =>
           item.runs.flatMap((history) =>
-            history.toolCalls.map((toolCall) =>
-              createAiToolCallIdentity(history.run.id, toolCall.toolCallId),
-            ),
+            history.toolCalls.map((toolCall) => createAiToolCallIdentity(history.run.id, toolCall.toolCallId)),
           ),
         ),
       ),
@@ -122,7 +111,7 @@ export function AiChatPanel({
   const isBrowserStreaming = chat.status === 'submitted' || chat.status === 'streaming';
   const isBusy = isBrowserStreaming || Boolean(thread?.activeRunId);
   const isArchived = Boolean(thread?.archivedAt);
-  const decisionId = thread?.decision.id ?? Number(decisionIdInput);
+  const decisionId = thread?.decision?.id ?? Number(decisionIdInput);
   const hasDecisionId = Number.isInteger(decisionId) && decisionId > 0;
 
   useEffect(() => {
@@ -171,7 +160,10 @@ export function AiChatPanel({
   };
 
   return (
-    <section className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden bg-background" aria-label="AI 对话工作区">
+    <section
+      className="flex size-full min-h-0 min-w-0 flex-col overflow-hidden bg-background"
+      aria-label="AI 对话工作区"
+    >
       <header className="flex shrink-0 items-center gap-3 border-b px-3 py-2.5 sm:px-4">
         <Button
           type="button"
@@ -195,9 +187,7 @@ export function AiChatPanel({
             ) : null}
           </div>
           <p className="truncate text-xs text-muted-foreground">
-            {thread
-              ? getAiThreadScopeLabel(thread)
-              : '发送首条消息时才会创建 Thread，不保存空白草稿'}
+            {thread ? getAiThreadScopeLabel(thread) : '发送首条消息时才会创建 Thread，不保存空白草稿'}
           </p>
         </div>
         {isArchived ? (
@@ -219,9 +209,7 @@ export function AiChatPanel({
               disabled={historyLoading}
               onClick={onLoadOlderMessages}
             >
-              {historyLoading ? (
-                <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" />
-              ) : null}
+              {historyLoading ? <LoaderCircle aria-hidden className="animate-spin motion-reduce:animate-none" /> : null}
               {historyLoading ? '正在加载' : '加载更早消息'}
             </Button>
           ) : null}
@@ -290,9 +278,7 @@ export function AiChatPanel({
       </Conversation>
 
       <footer className="shrink-0 border-t bg-card p-3 sm:p-4">
-        {isArchived ? (
-          <p className="mb-2 text-xs text-muted-foreground">当前会话已归档，恢复后才能继续提问。</p>
-        ) : null}
+        {isArchived ? <p className="mb-2 text-xs text-muted-foreground">当前会话已归档，恢复后才能继续提问。</p> : null}
         <form
           className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
           onSubmit={(event) => {
@@ -342,16 +328,15 @@ export function AiChatPanel({
                 {chat.stopping ? '正在停止' : '停止'}
               </Button>
             ) : null}
-            <Button
-              type="submit"
-              disabled={!input.trim() || !hasDecisionId || isBusy || isArchived || historyLoading}
-            >
+            <Button type="submit" disabled={!input.trim() || !hasDecisionId || isBusy || isArchived || historyLoading}>
               <Send aria-hidden />
               发送
             </Button>
           </div>
         </form>
-        <p className="mt-2 text-xs text-muted-foreground">Ctrl/⌘ + Enter 发送；AI 只回答当前 Thread 绑定决策的形成过程。</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Ctrl/⌘ + Enter 发送；AI 只回答当前 Thread 绑定决策的形成过程。
+        </p>
       </footer>
     </section>
   );

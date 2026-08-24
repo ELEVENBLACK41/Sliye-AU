@@ -21,6 +21,8 @@ import {
 import { AiModule } from '../src/modules/ai/ai.module';
 import { AiEventService } from '../src/modules/ai/services/ai-event.service';
 import { AiRunLeaseService } from '../src/modules/ai/services/ai-run-lease.service';
+import { AiRunScopeService } from '../src/modules/ai/services/ai-run-scope.service';
+import { AiRuntimeQueryService } from '../src/modules/ai/services/ai-runtime-query.service';
 import { AiStepService } from '../src/modules/ai/services/ai-step.service';
 import { AiThreadService } from '../src/modules/ai/services/ai-thread.service';
 import type { AuthorizationContext } from '../src/modules/auth/types/auth.types';
@@ -103,6 +105,8 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
   let threadService: AiThreadService;
   let eventService: AiEventService;
   let runLeaseService: AiRunLeaseService;
+  let runScopeService: AiRunScopeService;
+  let runtimeQueryService: AiRuntimeQueryService;
   let stepService: AiStepService;
   let fixture: AiStateFixture;
   let authorization: AuthorizationContext;
@@ -122,6 +126,8 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
     threadService = moduleFixture.get(AiThreadService);
     eventService = moduleFixture.get(AiEventService);
     runLeaseService = moduleFixture.get(AiRunLeaseService);
+    runScopeService = moduleFixture.get(AiRunScopeService);
+    runtimeQueryService = moduleFixture.get(AiRuntimeQueryService);
     stepService = moduleFixture.get(AiStepService);
     await cleanupStaleAiStateFixtures(prisma);
 
@@ -230,6 +236,138 @@ describe('AI 状态持久化（真实 PostgreSQL）', () => {
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.AI_IDEMPOTENCY_CONFLICT,
     });
+  });
+
+  it('未绑定 Thread 应等待候选确认，并允许一个 Run 读取跨项目的多个授权决策', async () => {
+    const unique = randomUUID();
+    const otherDepartment = await prisma.department.create({
+      data: {
+        code: `AI-E2E-SCOPE-${unique}`,
+        name: 'AI 动态范围测试部门',
+      },
+    });
+    const otherProject = await prisma.project.create({
+      data: {
+        title: 'AI 动态范围跨部门项目',
+        createdById: fixture.userId,
+        ownerId: fixture.userId,
+        deptId: otherDepartment.id,
+        members: {
+          create: {
+            userId: fixture.userId,
+            role: ProjectMemberRole.OWNER,
+          },
+        },
+      },
+    });
+    const [currentProjectDecision, otherProjectDecision] = await Promise.all([
+      prisma.decision.create({
+        data: {
+          title: 'AI 动态范围同名候选',
+          projectId: fixture.projectId,
+          creatorId: fixture.userId,
+          ownerId: fixture.userId,
+          deptId: fixture.departmentId,
+        },
+      }),
+      prisma.decision.create({
+        data: {
+          title: 'AI 动态范围同名候选',
+          projectId: otherProject.id,
+          creatorId: fixture.userId,
+          ownerId: fixture.userId,
+          deptId: otherDepartment.id,
+        },
+      }),
+    ]);
+    const creation = await threadService.createInitialRun({
+      authorization,
+      content: '请比较 AI 动态范围同名候选',
+      clientRequestId: randomUUID(),
+      modelRole: 'standard',
+    });
+
+    try {
+      expect(creation.thread.projectId).toBeNull();
+      expect(creation.thread.decisionId).toBeNull();
+      await expect(
+        runLeaseService.claim({
+          authorization,
+          runId: creation.run.id,
+          leaseDurationMs: 60_000,
+        }),
+      ).rejects.toMatchObject({
+        code: API_ERROR_CODES.AI_RUN_SCOPE_UNRESOLVED,
+      });
+
+      const discovered = await runScopeService.discoverRunScope(
+        authorization,
+        creation.run.id,
+        'AI 动态范围同名候选',
+      );
+      expect(discovered.resolution.status).toBe('AWAITING_CONFIRMATION');
+      if (discovered.resolution.status !== 'AWAITING_CONFIRMATION') {
+        throw new Error('测试候选范围没有进入等待确认状态');
+      }
+      expect(
+        discovered.resolution.candidates.map(
+          (candidate) => candidate.decision.id,
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          currentProjectDecision.id,
+          otherProjectDecision.id,
+        ]),
+      );
+
+      const confirmed = await runScopeService.confirmRunScope(
+        authorization,
+        creation.run.id,
+        [currentProjectDecision.id, otherProjectDecision.id],
+      );
+      expect(confirmed.resolution.status).toBe('RESOLVED');
+      if (confirmed.resolution.status !== 'RESOLVED') {
+        throw new Error('测试候选范围没有完成确认');
+      }
+      expect(confirmed.resolution.scopes).toHaveLength(2);
+      const replayedConfirmation = await runScopeService.confirmRunScope(
+        authorization,
+        creation.run.id,
+        [otherProjectDecision.id, currentProjectDecision.id],
+      );
+      expect(replayedConfirmation.resolution.status).toBe('RESOLVED');
+
+      const lease = await runLeaseService.claim({
+        authorization,
+        runId: creation.run.id,
+        leaseDurationMs: 60_000,
+      });
+      const [currentContext, otherContext] = await Promise.all([
+        runtimeQueryService.getDecisionContext(
+          authorization,
+          creation.run.id,
+          lease.executionLeaseId,
+          currentProjectDecision.id,
+        ),
+        runtimeQueryService.getDecisionContext(
+          authorization,
+          creation.run.id,
+          lease.executionLeaseId,
+          otherProjectDecision.id,
+        ),
+      ]);
+      expect(currentContext.project.id).toBe(fixture.projectId);
+      expect(otherContext.project.id).toBe(otherProject.id);
+    } finally {
+      await prisma.aiThread.deleteMany({ where: { id: creation.thread.id } });
+      await prisma.decision.deleteMany({
+        where: {
+          id: { in: [currentProjectDecision.id, otherProjectDecision.id] },
+        },
+      });
+      await prisma.project.deleteMany({ where: { id: otherProject.id } });
+      await prisma.department.deleteMany({ where: { id: otherDepartment.id } });
+    }
   });
 
   it('并发追加事件时应分配不重不漏的 Run 内单调序号', async () => {

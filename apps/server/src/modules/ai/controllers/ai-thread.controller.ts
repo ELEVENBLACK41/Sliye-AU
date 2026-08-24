@@ -96,10 +96,10 @@ export class AiThreadController {
     );
   }
 
-  /** 原子创建 Thread、首条用户消息和排队 Run。 */
+  /** 原子创建不强制绑定业务数据的 Thread、首条用户消息和排队 Run。 */
   @Post()
   @RequirePermissions('ai:chat:use', 'decision:read')
-  @ApiOperation({ summary: '创建绑定决策的 AI Thread 与首个 Run' })
+  @ApiOperation({ summary: '创建 AI Thread 与首个待解析或精确范围 Run' })
   createInitialRun(
     @CurrentAuthorization() authorization: AuthorizationContext,
     @Body() body: CreateAiThreadRunDto,

@@ -11,10 +11,10 @@ import type { AiRun, AiRunFailureReason, AiRunPublicSummary } from './ai-run.typ
 import type { AiThread } from './ai-thread.types.ts';
 import type { GetDecisionContextToolInput, GetDecisionContextToolResultSummary } from './ai-tool.types.ts';
 
-/** 创建绑定单项决策的 AI Thread 与首个 Run 的请求。 */
+/** 创建不强制绑定业务数据的 AI Thread 与首个 Run 的请求。 */
 export type CreateAiThreadRunRequest = {
-  /** 第一版 Thread 唯一绑定的决策主键。 */
-  decisionId: number;
+  /** 2.6 调用方使用的兼容决策主键；新流程省略并通过范围发现解析。 */
+  decisionId?: number;
   /** 用户提交并需要持久化的首条消息。 */
   content: string;
   /** 浏览器生成的 UUID 幂等键。 */

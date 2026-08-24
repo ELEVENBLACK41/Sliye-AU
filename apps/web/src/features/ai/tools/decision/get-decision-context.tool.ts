@@ -15,21 +15,24 @@ export const getDecisionContextToolContextSchema = z.object({
   accessToken: z.string().min(1),
   runId: z.string().uuid(),
   executionLeaseId: z.string().uuid(),
-  decisionId: z.number().int().positive(),
+  allowedDecisionIds: z.array(z.number().int().positive()).min(1).max(10),
 });
 
 /** getDecisionContext 的服务端工具定义。 */
 export const getDecisionContextTool = tool({
   description:
-    '读取当前 AI Thread 绑定决策的标题、状态、所属项目/区域、责任部门和参与人数。回答任何决策基础事实前必须先调用；不要用它查询提案、投票、决议正文或讨论消息。',
+    '读取当前 AI Run 已确认范围内一项决策的标题、状态、所属项目/区域、责任部门和参与人数。比较多项决策时分别调用；不要用它查询提案、投票、决议正文或讨论消息。',
   inputSchema: getDecisionContextModelInputSchema,
   contextSchema: getDecisionContextToolContextSchema,
-  execute: async (_input, { context }) => {
+  execute: async ({ decisionId }, { context }) => {
+    if (!context.allowedDecisionIds.includes(decisionId)) {
+      throw new Error('工具请求的决策不在当前 Run 已确认范围内');
+    }
     return getAiDecisionContext(
       { userId: context.userId, accessToken: context.accessToken },
       context.runId,
       context.executionLeaseId,
-      context.decisionId,
+      decisionId,
     );
   },
 });

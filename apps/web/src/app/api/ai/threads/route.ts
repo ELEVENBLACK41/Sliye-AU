@@ -4,7 +4,12 @@
 
 import { aiChatStreamRequestSchema, getLatestUserMessageText } from '@/features/ai/schemas/ai-request.schema';
 import { startAiRunExecution } from '@/features/ai/runtime/ai-agent-runtime.server';
-import { createInitialAiRun, listAiThreads, stopAiRun } from '@/features/ai/runtime/ai-nest-client.server';
+import {
+  createInitialAiRun,
+  discoverAiRunScope,
+  listAiThreads,
+  stopAiRun,
+} from '@/features/ai/runtime/ai-nest-client.server';
 import { authenticateAiRoute, handleAiRouteError } from '@/features/ai/runtime/ai-route.server';
 import { apiError, apiSuccess } from '@/app/api/_utils/response';
 import type { ListAiThreadsQuery } from '@workspace/contracts/ai';
@@ -76,6 +81,23 @@ export async function POST(request: Request): Promise<Response> {
       modelRole: 'standard',
     });
     createdRunId = creation.replayed ? null : creation.run.id;
+
+    if (parsed.data.decisionId === undefined) {
+      const scope = await discoverAiRunScope(authentication.identity, creation.run.id, { query: content });
+      if (scope.resolution.status !== 'RESOLVED') {
+        return apiSuccess({
+          data: {
+            threadId: creation.thread.id,
+            messageId: creation.message.id,
+            ...scope,
+          },
+          message:
+            scope.resolution.status === 'AWAITING_CONFIRMATION'
+              ? '请确认本次对话要使用的决策候选'
+              : '未找到可用决策，请补充更明确的决策名称',
+        });
+      }
+    }
 
     return await startAiRunExecution({
       identity: authentication.identity,

@@ -117,8 +117,42 @@ export class AiThreadHistoryQueryService {
                 archivedAt: archiveState === 'archived' ? { not: null } : null,
                 ...(query.decisionId === undefined
                   ? {}
-                  : { decisionId: query.decisionId }),
-                decision: { is: decisionWhere },
+                  : {
+                      OR: [
+                        { decisionId: query.decisionId },
+                        {
+                          runs: {
+                            some: {
+                              decisionScopes: {
+                                some: { decisionId: query.decisionId },
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    }),
+                AND: [
+                  {
+                    OR: [
+                      { decision: { is: decisionWhere } },
+                      {
+                        runs: {
+                          some: {
+                            decisionScopes: {
+                              some: { decision: { is: decisionWhere } },
+                            },
+                          },
+                        },
+                      },
+                      {
+                        decisionId: null,
+                        runs: {
+                          none: { decisionScopes: { some: {} } },
+                        },
+                      },
+                    ],
+                  },
+                ],
               },
               ...(cursorWhere ? [cursorWhere] : []),
             ],

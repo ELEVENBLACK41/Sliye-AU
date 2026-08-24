@@ -7,6 +7,7 @@ import type {
   AiAssistantTextDeltaEvent,
   AiDecisionContext,
   AiEvent,
+  AiRunCreation,
   AiRunEventPage,
   AiRunStatusChangedEvent,
 } from '@workspace/contracts/ai';
@@ -18,7 +19,11 @@ import {
   type AiEvent as PrismaAiEvent,
 } from '../../../generated/prisma';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
-import { toAiRunPublicSummary } from '../ai-state.mapper';
+import {
+  toAiMessage,
+  toAiRunPublicSummary,
+  toAiThread,
+} from '../ai-state.mapper';
 import { AiThreadScopeService } from './ai-thread-scope.service';
 
 /** 单次事件补拉允许返回的最大条数。 */
@@ -29,12 +34,36 @@ export class AiRuntimeQueryService {
   /** 注入数据库与统一授权查询能力。 */
   constructor(private readonly threadScopeService: AiThreadScopeService) {}
 
-  /** 断言当前用户仍可访问指定 Run 绑定的 Thread 与 Decision。 */
+  /** 断言当前用户仍可访问指定 Run 的 Thread 与全部已确认 Decision。 */
   async assertAccessibleRun(
     authorization: AuthorizationContext,
     runId: string,
-  ): Promise<{ threadId: string; decisionId: number }> {
+  ): Promise<{ threadId: string; decisionIds: number[] }> {
     return this.threadScopeService.assertAccessibleRun(authorization, runId);
+  }
+
+  /** 为已创建的排队 Run 恢复 BFF 启动执行所需的权威 Thread、消息和 Run。 */
+  async getRunExecutionPreparation(
+    authorization: AuthorizationContext,
+    runId: string,
+  ): Promise<AiRunCreation> {
+    return this.threadScopeService.withAccessibleRun(
+      authorization,
+      runId,
+      [],
+      async (tx) => {
+        const run = await tx.aiRun.findUniqueOrThrow({
+          where: { id: runId },
+          include: { thread: true, userMessage: true },
+        });
+        return {
+          thread: toAiThread(run.thread),
+          message: toAiMessage(run.userMessage),
+          run: toAiRunPublicSummary(run),
+          replayed: run.status !== AiRunStatus.QUEUED,
+        };
+      },
+    );
   }
 
   /** 重新鉴权后按序补拉指定 Run 的持久化事件，且绝不启动执行器。 */
@@ -76,8 +105,8 @@ export class AiRuntimeQueryService {
   }
 
   /**
-   * 在用户权限、Thread 绑定和执行租约都有效时返回窄决策上下文。
-   * 工具不能借由输入 decisionId 切换到当前 Thread 之外的业务范围。
+   * 在用户权限、Run 已确认范围和执行租约都有效时返回窄决策上下文。
+   * 工具只能从当前 Run 的一个或多个已确认 Decision 中选择。
    */
   async getDecisionContext(
     authorization: AuthorizationContext,
@@ -86,10 +115,10 @@ export class AiRuntimeQueryService {
     decisionId: number,
   ): Promise<AiDecisionContext> {
     const boundScope = await this.assertAccessibleRun(authorization, runId);
-    if (boundScope.decisionId !== decisionId) {
+    if (!boundScope.decisionIds.includes(decisionId)) {
       throw new BusinessException({
         code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
-        message: '工具请求的决策与当前 AI Thread 不一致',
+        message: '工具请求的决策不在当前 AI Run 已确认范围内',
         status: HttpStatus.BAD_REQUEST,
       });
     }

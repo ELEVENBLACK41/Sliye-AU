@@ -15,6 +15,7 @@ import type {
   RenewAiRunLeaseCommand,
 } from '../types/ai-state-persistence.types';
 import { AiThreadScopeService } from './ai-thread-scope.service';
+import { AiRunScopeService } from './ai-run-scope.service';
 
 /** 第一版租约最短允许一秒，避免零时长租约制造不可解释竞态。 */
 const MIN_EXECUTION_LEASE_MILLISECONDS = 1_000;
@@ -27,12 +28,19 @@ const UUID_PATTERN =
 @Injectable()
 export class AiRunLeaseService {
   /** 注入 Thread 范围服务以在同一事务内复核权限并执行租约写入。 */
-  constructor(private readonly threadScopeService: AiThreadScopeService) {}
+  constructor(
+    private readonly threadScopeService: AiThreadScopeService,
+    private readonly runScopeService: AiRunScopeService,
+  ) {}
 
   /** 原子把一个排队中 Run 领取为运行态，并签发唯一 UUID 执行租约。 */
   async claim(command: ClaimAiRunCommand): Promise<AiRunLeaseResult> {
     this.assertUuid(command.runId, 'runId');
     this.assertLeaseDuration(command.leaseDurationMs);
+    await this.runScopeService.assertResolvedRunScope(
+      command.authorization,
+      command.runId,
+    );
     const now = new Date();
     const executionLeaseId = randomUUID();
     const executionLeaseExpiresAt = new Date(

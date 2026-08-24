@@ -19,11 +19,12 @@ export function createDecisionHubAgent(
   scopeRoute: DecisionAgentScopeRoute,
 ) {
   const { configuration } = resolvedModel;
+  const allowedDecisionIds = toolContext.allowedDecisionIds.join(', ');
 
   return new ToolLoopAgent({
     id: 'nextnest-decision-hub-v1',
     model: resolvedModel.model,
-    instructions: DECISION_AGENT_INSTRUCTIONS,
+    instructions: `${DECISION_AGENT_INSTRUCTIONS}\n\n当前 Run 已确认且可供工具选择的 Decision ID：${allowedDecisionIds}。这些 ID 只用于选择工具目标，不代表可以跳过工具读取。`,
     tools: createDecisionAgentTools(),
     toolsContext: { getDecisionContext: toolContext },
     stopWhen: isStepCount(8),

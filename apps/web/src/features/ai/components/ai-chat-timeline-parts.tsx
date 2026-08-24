@@ -26,12 +26,7 @@ type AiHistoricalTimelinePartProps = {
 };
 
 /** 使用与首次流相同的组件渲染一条持久化时间流部件。 */
-export function AiHistoricalTimelinePart({
-  item,
-  thread,
-  retrying,
-  onRetry,
-}: AiHistoricalTimelinePartProps) {
+export function AiHistoricalTimelinePart({ item, thread, retrying, onRetry }: AiHistoricalTimelinePartProps) {
   switch (item.kind) {
     case 'message':
       return (
@@ -47,13 +42,12 @@ export function AiHistoricalTimelinePart({
       return thread ? (
         <AiCitationList
           sourceIds={item.sourceIds}
-          projectId={thread.project.id}
-          decisionId={thread.decision.id}
+          projectId={thread.project?.id ?? 0}
+          decisionId={thread.decision?.id ?? 0}
         />
       ) : null;
     case 'run': {
-      const isLatestRetryableRun =
-        thread?.activeRunId === null && thread.latestRun?.id === item.run.id;
+      const isLatestRetryableRun = thread?.activeRunId === null && thread.latestRun?.id === item.run.id;
       return (
         <AiRunStatusCard
           run={item.run}
@@ -126,8 +120,8 @@ export function AiLiveMessageParts({
         <AiToolCallCard tool={tool} />
         <AiCitationList
           sourceIds={tool.sourceIds}
-          projectId={thread?.project.id ?? 0}
-          decisionId={thread?.decision.id ?? fallbackDecisionId}
+          projectId={thread?.project?.id ?? 0}
+          decisionId={thread?.decision?.id ?? fallbackDecisionId}
         />
       </div>
     );

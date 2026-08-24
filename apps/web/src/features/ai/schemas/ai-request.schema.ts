@@ -34,6 +34,9 @@ type AiIncomingUiMessage = z.infer<typeof aiIncomingUiMessageSchema>;
 /** AI Thread 动态路由只接受标准 UUID，避免把任意路径片段透传给 NestJS。 */
 export const aiThreadIdSchema = z.string().uuid();
 
+/** AI Run 动态路由只接受标准 UUID。 */
+export const aiRunIdSchema = z.string().uuid();
+
 /** AI Thread 消息历史 BFF 允许透传的分页查询白名单。 */
 export const aiThreadMessagesQuerySchema = z
   .object({
@@ -45,11 +48,7 @@ export const aiThreadMessagesQuerySchema = z
 /** AI Thread 标题和归档状态 BFF 允许透传的更新白名单。 */
 export const aiThreadUpdateRequestSchema = z
   .object({
-    title: z
-      .string()
-      .transform(trimAiThreadTitle)
-      .refine(hasValidAiThreadTitleLength)
-      .optional(),
+    title: z.string().transform(trimAiThreadTitle).refine(hasValidAiThreadTitleLength).optional(),
     archived: z.boolean().optional(),
   })
   .strict()
@@ -57,10 +56,29 @@ export const aiThreadUpdateRequestSchema = z
 
 /** 首次消息和后续消息共同使用的 UI 流请求 Schema。 */
 export const aiChatStreamRequestSchema = z.object({
-  decisionId: z.number().int().positive(),
+  decisionId: z.number().int().positive().optional(),
   clientRequestId: z.string().uuid(),
   messages: z.array(aiIncomingUiMessageSchema).min(1).max(50),
 });
+
+/** 授权决策候选搜索 BFF 的白名单请求。 */
+export const aiDecisionScopeSearchRequestSchema = z
+  .object({
+    query: z.string().trim().min(1).max(500),
+    limit: z.number().int().min(1).max(20).optional(),
+  })
+  .strict();
+
+/** 用户候选确认 BFF 的白名单请求。 */
+export const aiRunScopeConfirmationRequestSchema = z
+  .object({
+    decisionIds: z
+      .array(z.number().int().positive())
+      .min(1)
+      .max(10)
+      .refine((ids) => new Set(ids).size === ids.length),
+  })
+  .strict();
 
 /** 重试请求只需要幂等键，原用户消息从 NestJS 权威状态返回。 */
 export const aiRetryStreamRequestSchema = z.object({
@@ -88,8 +106,8 @@ export function getLatestUserMessageText(messages: AiIncomingUiMessage[]): strin
 function isIncomingTextPart(part: unknown): part is { type: 'text'; text: string } {
   return Boolean(
     part &&
-      typeof part === 'object' &&
-      (part as { type?: unknown }).type === 'text' &&
-      typeof (part as { text?: unknown }).text === 'string',
+    typeof part === 'object' &&
+    (part as { type?: unknown }).type === 'text' &&
+    typeof (part as { text?: unknown }).text === 'string',
   );
 }

@@ -6,6 +6,7 @@ import 'server-only';
 
 import type {
   AiDecisionContext,
+  AiRunScopeResolutionResponse,
   AiRun,
   AiRunPublicSummary,
   AiRunCreation,
@@ -20,6 +21,8 @@ import type {
   ConfirmAiRunCancellationRequest,
   CreateAiThreadMessageRunRequest,
   CreateAiThreadRunRequest,
+  ConfirmAiRunScopeRequest,
+  DiscoverAiRunScopeRequest,
   FailAiRunExecutionRequest,
   RecordAiModelStepRequest,
   RenewAiRunExecutionRequest,
@@ -28,6 +31,8 @@ import type {
   FinishAiToolCallRequest,
   ListAiThreadsQuery,
   ListAiThreadMessagesQuery,
+  SearchAccessibleDecisionsRequest,
+  SearchAccessibleDecisionsResponse,
   AiToolCall,
   UpdateAiThreadRequest,
   UpdateAiThreadResponse,
@@ -69,6 +74,54 @@ export function createInitialAiRun(
   request: CreateAiThreadRunRequest,
 ): Promise<AiRunCreation> {
   return requestAiNest('/ai/threads', identity, { method: 'POST', body: request });
+}
+
+/** 按当前用户问题搜索经过 NestJS 对象级权限过滤的决策候选。 */
+export function searchAccessibleAiDecisions(
+  identity: AiNestIdentity,
+  request: SearchAccessibleDecisionsRequest,
+): Promise<SearchAccessibleDecisionsResponse> {
+  return requestAiNest('/ai/scope/decisions/search', identity, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+/** 读取指定 Run 当前权威动态范围快照。 */
+export function getAiRunScope(identity: AiNestIdentity, runId: string): Promise<AiRunScopeResolutionResponse> {
+  return requestAiNest(`/ai/runs/${runId}/scope`, identity, { method: 'GET' });
+}
+
+/** 按用户问题为排队 Run 发现精确范围或安全候选。 */
+export function discoverAiRunScope(
+  identity: AiNestIdentity,
+  runId: string,
+  request: DiscoverAiRunScopeRequest,
+): Promise<AiRunScopeResolutionResponse> {
+  return requestAiNest(`/ai/runs/${runId}/scope/discover`, identity, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+/** 重新鉴权并确认指定 Run 的一个或多个决策候选。 */
+export function confirmAiRunScope(
+  identity: AiNestIdentity,
+  runId: string,
+  request: ConfirmAiRunScopeRequest,
+): Promise<AiRunScopeResolutionResponse> {
+  return requestAiNest(`/ai/runs/${runId}/scope/confirm`, identity, {
+    method: 'POST',
+    body: request,
+  });
+}
+
+/** 在候选确认后恢复同一排队 Run 的权威执行准备快照。 */
+export function getAiRunExecutionPreparation(identity: AiNestIdentity, runId: string): Promise<AiRunCreation> {
+  return requestAiNest(`/ai/runs/${runId}/execution/preparation`, identity, {
+    method: 'GET',
+    internal: true,
+  });
 }
 
 /** 分页读取当前用户仍有 Decision 权限的 AI Thread 历史。 */

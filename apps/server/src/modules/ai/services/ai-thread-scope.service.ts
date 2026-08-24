@@ -22,14 +22,16 @@ import type { AuthorizationContext } from '../../auth/types/auth.types';
 export type AiAccessibleThreadScope = {
   /** 已重新鉴权的 Thread UUID。 */
   threadId: string;
-  /** Thread 唯一绑定的 Decision 主键。 */
-  decisionId: number;
+  /** 2.6 旧会话的兼容 Decision 主键；新会话为空。 */
+  decisionId: number | null;
 };
 
 /** Run 执行写入额外需要的稳定定位信息。 */
 export type AiAccessibleRunScope = AiAccessibleThreadScope & {
   /** 已重新鉴权的 Run UUID。 */
   runId: string;
+  /** 当前 Run 已确认且在本次事务中重新鉴权的决策主键。 */
+  decisionIds: number[];
 };
 
 /** 新建 Thread 前在同一事务内校验得到的 Decision 绑定信息。 */
@@ -38,6 +40,8 @@ export type AiAccessibleDecisionScope = {
   decisionId: number;
   /** Decision 当前所属的项目主键。 */
   projectId: number;
+  /** 小组级决策所属分区；项目级决策为空。 */
+  areaId: number | null;
 };
 
 /** 权限事务执行成功或需要在提交锁定后拒绝调用的结果。 */
@@ -164,7 +168,7 @@ export class AiThreadScopeService {
     return this.runSerializableTransaction(async (tx) => {
       const decision = await tx.decision.findFirst({
         where: { AND: [{ id: decisionId }, decisionWhere] },
-        select: { id: true, projectId: true },
+        select: { id: true, projectId: true, areaId: true },
       });
       if (!decision) {
         throw new BusinessException({
@@ -177,6 +181,7 @@ export class AiThreadScopeService {
       return action(tx, {
         decisionId: decision.id,
         projectId: decision.projectId,
+        areaId: decision.areaId,
       });
     });
   }
@@ -210,6 +215,7 @@ export class AiThreadScopeService {
             },
             select: {
               id: true,
+              decisionScopes: { select: { decisionId: true } },
               thread: { select: aiThreadScopeSelect },
             },
           });
@@ -221,7 +227,12 @@ export class AiThreadScopeService {
             tx,
             decisionWhere,
             run.thread,
-            candidateSourceIds,
+            [
+              ...candidateSourceIds,
+              ...run.decisionScopes.map(
+                (scope) => `decision:${scope.decisionId}`,
+              ),
+            ],
           );
           if (!accessible) {
             await this.lockThreadScope(tx, run.thread);
@@ -235,6 +246,7 @@ export class AiThreadScopeService {
               runId: run.id,
               threadId: run.thread.id,
               decisionId: run.thread.decisionId,
+              decisionIds: run.decisionScopes.map((scope) => scope.decisionId),
             }),
           };
         },
@@ -321,7 +333,20 @@ export class AiThreadScopeService {
       const threads = await tx.aiThread.findMany({
         where: {
           ownerUserId: authorization.userId,
-          ...(decisionId === undefined ? {} : { decisionId }),
+          ...(decisionId === undefined
+            ? {}
+            : {
+                OR: [
+                  { decisionId },
+                  {
+                    runs: {
+                      some: {
+                        decisionScopes: { some: { decisionId } },
+                      },
+                    },
+                  },
+                ],
+              }),
         },
         select: aiThreadScopeSelect,
       });
@@ -402,10 +427,11 @@ export class AiThreadScopeService {
     thread: AiThreadScopeRecord,
     candidateSourceIds: readonly string[],
   ): string[] {
-    const sourceIds = new Set<string>([
-      `decision:${thread.decisionId}`,
-      ...candidateSourceIds,
-    ]);
+    const sourceIds = new Set<string>(candidateSourceIds);
+
+    if (thread.decisionId !== null) {
+      sourceIds.add(`decision:${thread.decisionId}`);
+    }
 
     for (const run of thread.runs) {
       run.sourceDependencies.forEach((dependency) => {
@@ -614,11 +640,19 @@ export class AiThreadScopeService {
 
   /** 跨 Prisma 运行时包边界按稳定错误码识别可重试的事务写冲突。 */
   private isRetryableTransactionError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) {
+      return false;
+    }
+
+    const record = error as {
+      code?: unknown;
+      name?: unknown;
+      cause?: { kind?: unknown };
+    };
     return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'P2034'
+      record.code === 'P2034' ||
+      (record.name === 'DriverAdapterError' &&
+        record.cause?.kind === 'TransactionWriteConflict')
     );
   }
 

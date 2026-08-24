@@ -2,7 +2,7 @@
  * 本文件提供用户停止/重试和 BFF Agent Runtime 的受保护执行写入接口。
  */
 
-import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuthorization } from '../../auth/decorators/current-authorization.decorator';
 import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
@@ -23,6 +23,7 @@ import { AiRuntimeServiceGuard } from '../guards/ai-runtime-service.guard';
 import { AiEventService } from '../services/ai-event.service';
 import { AiRunLeaseService } from '../services/ai-run-lease.service';
 import { AiRunService } from '../services/ai-run.service';
+import { AiRuntimeQueryService } from '../services/ai-runtime-query.service';
 import { AiStepService } from '../services/ai-step.service';
 import { AiThreadService } from '../services/ai-thread.service';
 import { AiToolCallService } from '../services/ai-tool-call.service';
@@ -36,10 +37,26 @@ export class AiRunController {
     private readonly aiThreadService: AiThreadService,
     private readonly aiRunLeaseService: AiRunLeaseService,
     private readonly aiRunService: AiRunService,
+    private readonly aiRuntimeQueryService: AiRuntimeQueryService,
     private readonly aiEventService: AiEventService,
     private readonly aiStepService: AiStepService,
     private readonly aiToolCallService: AiToolCallService,
   ) {}
+
+  /** BFF 在候选确认后恢复启动同一排队 Run 所需的权威状态。 */
+  @Get(':runId/execution/preparation')
+  @UseGuards(AiRuntimeServiceGuard)
+  @RequirePermissions('ai:chat:use', 'decision:read')
+  @ApiOperation({ summary: '内部执行器恢复 AI Run 启动上下文' })
+  getExecutionPreparation(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('runId') runId: string,
+  ) {
+    return this.aiRuntimeQueryService.getRunExecutionPreparation(
+      authorization,
+      runId,
+    );
+  }
 
   /** 用户请求停止排队或执行中的 Run。 */
   @Post(':runId/stop')
