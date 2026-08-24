@@ -1,6 +1,6 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 @source "../../../../packages/ui/**/*.tsx";
 
 :root {
@@ -54,11 +54,7 @@
   --decision-proposal: oklch(0.72 0.14 38);
   --decision-vote: oklch(0.74 0.15 82);
   --decision-resolution: oklch(0.66 0.12 155);
-  --relationship-graph-link-highlight: color-mix(
-    in oklch,
-    var(--decision-meeting) 65%,
-    var(--decision-proposal)
-  );
+  --relationship-graph-link-highlight: color-mix(in oklch, var(--decision-meeting) 65%, var(--decision-proposal));
   --meeting-accent: oklch(0.86 0.18 91);
   --meeting-accent-foreground: oklch(0.22 0.015 93);
   --meeting-accent-soft: oklch(0.97 0.06 92);
@@ -226,5 +222,48 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
+  }
+}
+
+@keyframes ai-tool-execution-text-wave {
+  from {
+    transform: translateX(-125%);
+  }
+
+  to {
+    transform: translateX(125%);
+  }
+}
+
+@layer utilities {
+  .ai-tool-execution-text-wave {
+    position: relative;
+    display: inline-block;
+    overflow: hidden;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+
+  .ai-tool-execution-text-wave::after {
+    position: absolute;
+    inset: 0;
+    color: var(--primary-foreground);
+    content: attr(data-wave-text);
+    transform: translateX(-125%);
+    will-change: transform;
+    mask-image: linear-gradient(90deg, transparent, var(--foreground) 48%, transparent 52%);
+    mask-repeat: no-repeat;
+    animation: ai-tool-execution-text-wave 3.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ai-tool-execution-text-wave {
+      overflow: visible;
+    }
+
+    .ai-tool-execution-text-wave::after {
+      content: none;
+      animation: none;
+    }
   }
 }
