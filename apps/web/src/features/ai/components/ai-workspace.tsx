@@ -15,10 +15,7 @@ import {
   updateAiThread,
   type AiThreadSnapshot,
 } from '../services/ai-thread.service';
-import {
-  AI_THREAD_MESSAGE_PAGE_SIZE,
-  useAiThreadContent,
-} from '../hooks/use-ai-thread-content';
+import { AI_THREAD_MESSAGE_PAGE_SIZE, useAiThreadContent } from '../hooks/use-ai-thread-content';
 import type { AiDecisionUiMessage } from '../types/ai-message';
 import type { AiRunLocatedMetadata, AiRunRequestContext } from '../utils/ai-chat-session';
 import { toAiDecisionUiMessages } from '../utils/ai-thread-timeline';
@@ -44,12 +41,10 @@ const AI_ACTIVE_RUN_REFRESH_INTERVAL_MS = 1_000;
 export type AiWorkspaceProps = {
   /** 深链接中需要恢复的 Thread；新会话为空。 */
   initialThreadId: string | null;
-  /** 从决策页面跳转时预填的 Decision 主键。 */
-  initialDecisionId?: number;
 };
 
 /** 渲染桌面双栏与移动历史抽屉，并维持 Thread 级状态隔离。 */
-export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceProps) {
+export function AiWorkspace({ initialThreadId }: AiWorkspaceProps) {
   const router = useRouter();
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(initialThreadId);
   const selectedThreadIdRef = useRef<string | null>(initialThreadId);
@@ -99,11 +94,7 @@ export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceP
 
   /** 读取当前归档筛选的 Thread 首屏或下一页。 */
   const loadThreadList = useCallback(
-    async (
-      targetArchiveState: AiThreadArchiveState,
-      append: boolean,
-      cursor: string | null = null,
-    ): Promise<void> => {
+    async (targetArchiveState: AiThreadArchiveState, append: boolean, cursor: string | null = null): Promise<void> => {
       const requestSequence = ++listRequestSequence.current;
       setThreadListLoading(true);
       setThreadListError(null);
@@ -111,7 +102,7 @@ export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceP
       try {
         const page = await listAiThreadHistory({
           archiveState: targetArchiveState,
-          cursor: append ? cursor ?? undefined : undefined,
+          cursor: append ? (cursor ?? undefined) : undefined,
           limit: AI_THREAD_PAGE_SIZE,
         });
         if (requestSequence !== listRequestSequence.current) {
@@ -173,15 +164,14 @@ export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceP
   }, [reloadThread, selectedThreadId]);
 
   useEffect(() => {
-    if (!selectedThreadId || !thread?.activeRunId) {
+    if (!selectedThreadId || !thread?.activeRunId || thread.latestRun?.status === 'QUEUED') {
       return;
     }
 
     let cancelled = false;
     const pollingScopeVersion = getThreadScopeVersion();
     void runSerialAiActiveRunPoll({
-      shouldContinue: () =>
-        !cancelled && canApplyThreadResult(selectedThreadId, pollingScopeVersion),
+      shouldContinue: () => !cancelled && canApplyThreadResult(selectedThreadId, pollingScopeVersion),
       wait: () => waitForAiAuthoritativeState(AI_ACTIVE_RUN_REFRESH_INTERVAL_MS),
       refresh: async () => {
         await reloadThread(selectedThreadId, true, true);
@@ -197,6 +187,7 @@ export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceP
     reloadThread,
     selectedThreadId,
     thread?.activeRunId,
+    thread?.latestRun?.status,
   ]);
 
   /** 只断开浏览器当前流，不把显式 Thread 切换解释成取消 Run。 */
@@ -264,87 +255,91 @@ export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceP
   );
 
   /** 只为发起回调的同一 Run 短轮询权威终态，旧会话结果返回空应用信号。 */
-  const handleRunSettled = useCallback(async (
-    context: AiRunRequestContext,
-  ): Promise<AiDecisionUiMessage[] | null> => {
-    const requestScopeVersion = getThreadScopeVersion();
-    if (
-      !isCurrentAiWorkspaceRun(context, sessionIdRef.current, selectedThreadIdRef.current) ||
-      !canApplyThreadResult(context.threadId, requestScopeVersion)
-    ) {
-      return null;
-    }
-
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      let snapshot: AiThreadSnapshot;
-      try {
-        snapshot = await getAiThreadSnapshot(context.threadId, AI_THREAD_MESSAGE_PAGE_SIZE);
-      } catch (error) {
-        if (invalidateThreadScope(context.threadId, error)) {
-          return null;
-        }
-        if (
-          isCurrentAiWorkspaceRun(context, sessionIdRef.current, selectedThreadIdRef.current) &&
-          canApplyThreadResult(context.threadId, requestScopeVersion)
-        ) {
-          showThreadError(toAiWorkspaceErrorMessage(error, 'AI 运行状态刷新失败，请稍后重试'));
-        }
-        return null;
-      }
-
+  const handleRunSettled = useCallback(
+    async (context: AiRunRequestContext): Promise<AiDecisionUiMessage[] | null> => {
+      const requestScopeVersion = getThreadScopeVersion();
       if (
-        !canApplyAiRunSettlementSnapshot(
-          context,
-          sessionIdRef.current,
-          selectedThreadIdRef.current,
-          snapshot.detail.activeRunId,
-        ) ||
-        !canApplyThreadResult(context.threadId, requestScopeVersion) ||
-        !applyThreadSnapshot(context.threadId, snapshot, true, requestScopeVersion)
+        !isCurrentAiWorkspaceRun(context, sessionIdRef.current, selectedThreadIdRef.current) ||
+        !canApplyThreadResult(context.threadId, requestScopeVersion)
       ) {
         return null;
       }
 
-      if (snapshot.detail.activeRunId === null) {
-        await loadThreadList(archiveState, false);
-        return toAiDecisionUiMessages(snapshot.items);
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        let snapshot: AiThreadSnapshot;
+        try {
+          snapshot = await getAiThreadSnapshot(context.threadId, AI_THREAD_MESSAGE_PAGE_SIZE);
+        } catch (error) {
+          if (invalidateThreadScope(context.threadId, error)) {
+            return null;
+          }
+          if (
+            isCurrentAiWorkspaceRun(context, sessionIdRef.current, selectedThreadIdRef.current) &&
+            canApplyThreadResult(context.threadId, requestScopeVersion)
+          ) {
+            showThreadError(toAiWorkspaceErrorMessage(error, 'AI 运行状态刷新失败，请稍后重试'));
+          }
+          return null;
+        }
+
+        if (
+          !canApplyAiRunSettlementSnapshot(
+            context,
+            sessionIdRef.current,
+            selectedThreadIdRef.current,
+            snapshot.detail.activeRunId,
+          ) ||
+          !canApplyThreadResult(context.threadId, requestScopeVersion) ||
+          !applyThreadSnapshot(context.threadId, snapshot, true, requestScopeVersion)
+        ) {
+          return null;
+        }
+
+        if (snapshot.detail.activeRunId === null) {
+          await loadThreadList(archiveState, false);
+          return toAiDecisionUiMessages(snapshot.items);
+        }
+
+        await waitForAiAuthoritativeState();
       }
 
-      await waitForAiAuthoritativeState();
-    }
-
-    return null;
-  }, [
-    applyThreadSnapshot,
-    archiveState,
-    canApplyThreadResult,
-    getThreadScopeVersion,
-    invalidateThreadScope,
-    loadThreadList,
-    showThreadError,
-  ]);
+      return null;
+    },
+    [
+      applyThreadSnapshot,
+      archiveState,
+      canApplyThreadResult,
+      getThreadScopeVersion,
+      invalidateThreadScope,
+      loadThreadList,
+      showThreadError,
+    ],
+  );
 
   /** 重命名 Thread，并同步当前详情与历史列表。 */
-  const renameThread = useCallback(async (threadId: string, title: string): Promise<boolean> => {
-    setPendingThreadId(threadId);
-    try {
-      const response = await updateAiThread(threadId, { title });
-      setThreads((current) =>
-        current.map((item) => (item.id === threadId ? toAiThreadListItem(response.thread) : item)),
-      );
-      if (selectedThreadIdRef.current === threadId) {
-        setThreadDetail(response.thread);
+  const renameThread = useCallback(
+    async (threadId: string, title: string): Promise<boolean> => {
+      setPendingThreadId(threadId);
+      try {
+        const response = await updateAiThread(threadId, { title });
+        setThreads((current) =>
+          current.map((item) => (item.id === threadId ? toAiThreadListItem(response.thread) : item)),
+        );
+        if (selectedThreadIdRef.current === threadId) {
+          setThreadDetail(response.thread);
+        }
+        toast.success('会话标题已更新');
+        return true;
+      } catch (error) {
+        invalidateThreadScope(threadId, error);
+        toast.error(toAiWorkspaceErrorMessage(error, '会话标题更新失败'));
+        return false;
+      } finally {
+        setPendingThreadId(null);
       }
-      toast.success('会话标题已更新');
-      return true;
-    } catch (error) {
-      invalidateThreadScope(threadId, error);
-      toast.error(toAiWorkspaceErrorMessage(error, '会话标题更新失败'));
-      return false;
-    } finally {
-      setPendingThreadId(null);
-    }
-  }, [invalidateThreadScope, setThreadDetail]);
+    },
+    [invalidateThreadScope, setThreadDetail],
+  );
 
   /** 归档或恢复 Thread；归档当前会话后返回未保存的新草稿。 */
   const setThreadArchived = useCallback(
@@ -375,22 +370,13 @@ export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceP
         return true;
       } catch (error) {
         invalidateThreadScope(threadId, error);
-        toast.error(
-          toAiWorkspaceErrorMessage(error, archived ? '会话归档失败' : '会话恢复失败'),
-        );
+        toast.error(toAiWorkspaceErrorMessage(error, archived ? '会话归档失败' : '会话恢复失败'));
         return false;
       } finally {
         setPendingThreadId(null);
       }
     },
-    [
-      archiveState,
-      changeArchiveState,
-      createDraft,
-      invalidateThreadScope,
-      loadThreadList,
-      setThreadDetail,
-    ],
+    [archiveState, changeArchiveState, createDraft, invalidateThreadScope, loadThreadList, setThreadDetail],
   );
 
   /** 从聊天区恢复当前深链接指向的已归档 Thread。 */
@@ -438,7 +424,6 @@ export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceP
           historyLoading={historyLoading}
           historyError={historyError}
           hasOlderMessages={hasOlderMessages}
-          initialDecisionId={initialDecisionId}
           onOpenHistory={() => setHistorySheetOpen(true)}
           onRunLocated={handleRunLocated}
           onRunSettled={handleRunSettled}
@@ -451,7 +436,6 @@ export function AiWorkspace({ initialThreadId, initialDecisionId }: AiWorkspaceP
           disconnectRef={disconnectRef}
         />
       )}
-
     </div>
   );
 }

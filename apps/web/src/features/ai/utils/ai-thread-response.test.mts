@@ -39,6 +39,17 @@ test('当前 Thread 历史契约应通过浏览器服务边界', () => {
   assert.equal(getAiThreadScopeLabel(page.items[0]), '真实项目 · 真实决策');
 });
 
+test('2.7 无固定业务绑定的 Thread 应通过边界并显示动态范围标签', () => {
+  const page = createCurrentThreadPage();
+  const dynamicPage = {
+    ...page,
+    items: page.items.map((item) => ({ ...item, project: null, decision: null })),
+  };
+
+  assert.equal(parseAiThreadPageResponse(dynamicPage), dynamicPage);
+  assert.equal(getAiThreadScopeLabel(dynamicPage.items[0]), '动态范围会话 · 每次提问按实时权限确定数据范围');
+});
+
 test('缺少 project 和 decision 对象的旧响应应转换为稳定错误而不是组件异常', () => {
   const currentPage = createCurrentThreadPage();
   const legacyPage: unknown = {
@@ -55,8 +66,7 @@ test('缺少 project 和 decision 对象的旧响应应转换为稳定错误而�
 
   assert.throws(
     () => parseAiThreadPageResponse(legacyPage),
-    (error: unknown) =>
-      error instanceof Error && error.message === AI_THREAD_HISTORY_CONTRACT_ERROR_MESSAGE,
+    (error: unknown) => error instanceof Error && error.message === AI_THREAD_HISTORY_CONTRACT_ERROR_MESSAGE,
   );
   assert.equal(getAiThreadScopeLabel((legacyPage as { items: unknown[] }).items[0]), AI_THREAD_SCOPE_LABEL_UNAVAILABLE);
 });

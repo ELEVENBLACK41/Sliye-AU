@@ -6,13 +6,13 @@ import type {
   AiHistoryContentHiddenReason,
   AiHistoryMessage,
   AiHistoryToolCall,
-  AiRunPublicSummary,
   AiThreadMessageHistoryItem,
 } from '@workspace/contracts/ai';
 
 import type { AiDecisionUiMessage } from '../types/ai-message';
 
-import { toHistoricalAiToolCallView, type AiToolCallView } from './ai-tool-call-view';
+import { createHistoricalAiActivityGroup, type AiActivityGroupView } from './ai-activity-view';
+import { toHistoricalAiToolCallView } from './ai-tool-call-view';
 
 /** 历史工作区统一消费的结构化时间流部件。 */
 export type AiThreadTimelineItem =
@@ -39,14 +39,14 @@ export type AiThreadTimelineItem =
       createdAt: string;
     }
   | {
-      /** 一次结构化工具调用。 */
-      kind: 'tool';
-      /** 工具调用 ID。 */
+      /** 一个 Run 及其可见工具步骤组成的紧凑活动组。 */
+      kind: 'activity';
+      /** 使用 Run 主键形成的稳定活动组 ID。 */
       id: string;
       /** 所属 Run 主键。 */
       runId: string;
-      /** 安全工具卡数据。 */
-      tool: AiToolCallView;
+      /** 首次流与历史恢复共用的安全活动组数据。 */
+      activity: AiActivityGroupView;
       /** ISO 时间用于确定性排序。 */
       createdAt: string;
     }
@@ -59,16 +59,8 @@ export type AiThreadTimelineItem =
       runId: string;
       /** 去重后的来源 ID。 */
       sourceIds: string[];
-      /** ISO 时间用于确定性排序。 */
-      createdAt: string;
-    }
-  | {
-      /** Run 的真实状态反馈。 */
-      kind: 'run';
-      /** Run 主键。 */
-      id: string;
-      /** 不含执行租约的公开状态摘要。 */
-      run: AiRunPublicSummary;
+      /** 来源 ID 到项目与决策的安全定位信息。 */
+      sourceLocations: Record<string, { projectId: number; decisionId: number }>;
       /** ISO 时间用于确定性排序。 */
       createdAt: string;
     };
@@ -113,17 +105,27 @@ export function projectAiThreadTimeline(items: AiThreadMessageHistoryItem[]): Ai
     for (const history of item.runs) {
       const { citations, run, toolCalls } = history;
 
+      const visibleTools = [
+        ...new Map(
+          toolCalls
+            .filter(isVisibleHistoryToolCall)
+            .sort(compareHistoryToolCalls)
+            .map((toolCall) => [toolCall.toolCallId, toolCall] as const),
+        ).values(),
+      ].map((toolCall) => toHistoricalAiToolCallView(toolCall, run));
+
+      const activityKey = `activity:${run.id}`;
+      projected.set(activityKey, {
+        kind: 'activity',
+        id: activityKey,
+        runId: run.id,
+        activity: createHistoricalAiActivityGroup(run, visibleTools),
+        createdAt: run.startedAt ?? run.createdAt,
+      });
+
       for (const toolCall of toolCalls) {
         const toolKey = `tool:${run.id}:${toolCall.toolCallId}`;
-        if (isVisibleHistoryToolCall(toolCall)) {
-          projected.set(toolKey, {
-            kind: 'tool',
-            id: toolKey,
-            runId: run.id,
-            tool: toHistoricalAiToolCallView(toolCall, run),
-            createdAt: toolCall.startedAt ?? toolCall.createdAt,
-          });
-        } else {
+        if (!isVisibleHistoryToolCall(toolCall)) {
           projected.set(toolKey, {
             kind: 'hidden',
             id: toolKey,
@@ -145,22 +147,33 @@ export function projectAiThreadTimeline(items: AiThreadMessageHistoryItem[]): Ai
         });
       } else if ('sourceIds' in citations && citations.sourceIds.length > 0) {
         const citationKey = `citations:${run.id}`;
+        const sourceLocations = Object.fromEntries(
+          toolCalls.flatMap((toolCall) => {
+            if (!isVisibleHistoryToolCall(toolCall)) {
+              return [];
+            }
+            const summary = toolCall.resultSummary;
+            const projectId = summary?.projectId;
+            if (!summary || !projectId) return [];
+
+            return summary.sourceIds.map((sourceId) => [
+              sourceId,
+              {
+                projectId,
+                decisionId: summary.decisionId,
+              },
+            ]);
+          }),
+        );
         projected.set(citationKey, {
           kind: 'citations',
           id: citationKey,
           runId: run.id,
           sourceIds: [...new Set(citations.sourceIds)],
+          sourceLocations,
           createdAt: run.finishedAt ?? run.updatedAt,
         });
       }
-
-      const runKey = `run:${run.id}`;
-      projected.set(runKey, {
-        kind: 'run',
-        id: runKey,
-        run,
-        createdAt: run.finishedAt ?? run.updatedAt,
-      });
     }
   }
 
@@ -199,7 +212,7 @@ export function toAiDecisionUiMessages(items: AiThreadMessageHistoryItem[]): AiD
   );
 }
 
-/** 同一时间戳下保持消息、工具、引用、Run 状态的稳定业务顺序。 */
+/** 同一时间戳下保持消息、活动、正文和引用的稳定业务顺序。 */
 function compareTimelineItems(left: AiThreadTimelineItem, right: AiThreadTimelineItem): number {
   return (
     left.createdAt.localeCompare(right.createdAt) ||
@@ -213,13 +226,20 @@ function timelinePriority(item: AiThreadTimelineItem): number {
   switch (item.kind) {
     case 'message':
       return item.message.role === 'USER' ? 0 : 2;
-    case 'tool':
+    case 'activity':
       return 1;
     case 'citations':
       return 3;
     case 'hidden':
       return item.contentKind === 'tool' ? 1 : item.contentKind === 'answer' ? 2 : 3;
-    case 'run':
-      return 4;
   }
+}
+
+/** 按后端审计序号、创建时间和工具调用 ID 保持活动步骤的确定顺序。 */
+function compareHistoryToolCalls(left: AiHistoryToolCall, right: AiHistoryToolCall): number {
+  return (
+    left.sequence - right.sequence ||
+    left.createdAt.localeCompare(right.createdAt) ||
+    left.toolCallId.localeCompare(right.toolCallId)
+  );
 }

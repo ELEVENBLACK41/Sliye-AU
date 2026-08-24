@@ -960,6 +960,42 @@ describe('AI Thread 历史接口（真实 PostgreSQL）', () => {
     }
   });
 
+  it('2.6 旧 Thread 的新消息也应创建未解析 Run，不再继承旧决策绑定', async () => {
+    const continued = await threadService.createMessageRun({
+      authorization: ownerAuthorization,
+      threadId: fixture.detailThreadId,
+      content: '继续比较另一个组织里有权访问的决策',
+      clientRequestId: randomUUID(),
+      modelRole: 'standard',
+    });
+    const continuedScope = await prisma.aiRun.findUniqueOrThrow({
+      where: { id: continued.run.id },
+      select: {
+        scopeStatus: true,
+        decisionScopes: { select: { decisionId: true } },
+      },
+    });
+
+    expect(continuedScope).toEqual({
+      scopeStatus: 'UNRESOLVED',
+      decisionScopes: [],
+    });
+    await prisma.$transaction([
+      prisma.aiRun.update({
+        where: { id: continued.run.id },
+        data: {
+          status: AiRunStatus.CANCELLED,
+          cancellationReason: AiRunCancellationReason.USER_REQUESTED,
+          finishedAt: new Date(),
+        },
+      }),
+      prisma.aiThread.update({
+        where: { id: fixture.detailThreadId },
+        data: { activeRunId: null },
+      }),
+    ]);
+  });
+
   it('来源失权后应只隐藏受影响回答、工具和引用，并允许继续创建新 Run', async () => {
     const detail = await historyQueryService.getThreadDetail(
       ownerAuthorization,

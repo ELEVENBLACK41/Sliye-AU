@@ -266,33 +266,12 @@ export class AiThreadService {
               content,
             },
           });
-          const legacyDecision = currentThread.decisionId
-            ? await tx.decision.findUniqueOrThrow({
-                where: { id: currentThread.decisionId },
-                select: { id: true, projectId: true, areaId: true },
-              })
-            : null;
           const run = await tx.aiRun.create({
             data: {
               id: runId,
               threadId: currentThread.threadId,
               userMessageId: messageId,
               modelRole: toPrismaAiLanguageModelRole(command.modelRole),
-              ...(legacyDecision
-                ? {
-                    scopeStatus: AiRunScopeResolutionStatus.RESOLVED,
-                    scopeResolutionMethod:
-                      AiRunScopeResolutionMethod.EXACT_REFERENCE,
-                    scopeResolvedAt: new Date(),
-                    decisionScopes: {
-                      create: {
-                        decisionId: legacyDecision.id,
-                        projectId: legacyDecision.projectId,
-                        areaId: legacyDecision.areaId,
-                      },
-                    },
-                  }
-                : {}),
             },
           });
           const thread = await tx.aiThread.update({

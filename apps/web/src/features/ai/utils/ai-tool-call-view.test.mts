@@ -117,6 +117,7 @@ test('首次流工具状态应覆盖等待、运行、审批、成功、失败�
   assert.deepEqual(success.inputSummary, { decisionId: 7 });
   assert.deepEqual(success.resultSummary, {
     decisionId: 7,
+    projectId: 3,
     decisionTitle: '客服平台供应商选型',
     decisionStatus: 'DISCUSSING',
     projectTitle: 'NextNest',
@@ -132,26 +133,14 @@ test('首次流工具状态应覆盖等待、运行、审批、成功、失败�
 test('历史工具状态应由审计状态和父 Run 终态共同恢复', () => {
   const historicalCases = [
     [createToolCall(), createRun(), 'running'],
-    [
-      createToolCall({ status: 'WAITING', startedAt: null }),
-      createRun({ status: 'RUNNING' }),
-      'waiting',
-    ],
-    [
-      createToolCall({ status: 'COMPLETED' }),
-      createRun({ status: 'COMPLETED', finishedAt: TIMESTAMP }),
-      'success',
-    ],
+    [createToolCall({ status: 'WAITING', startedAt: null }), createRun({ status: 'RUNNING' }), 'waiting'],
+    [createToolCall({ status: 'COMPLETED' }), createRun({ status: 'COMPLETED', finishedAt: TIMESTAMP }), 'success'],
     [
       createToolCall({ status: 'FAILED', errorCode: 'AI_TOOL_FAILED' }),
       createRun({ status: 'FAILED', failureReason: 'TOOL_ERROR', finishedAt: TIMESTAMP }),
       'failed',
     ],
-    [
-      createToolCall(),
-      createRun({ status: 'FAILED', failureReason: 'MODEL_ERROR', finishedAt: TIMESTAMP }),
-      'failed',
-    ],
+    [createToolCall(), createRun({ status: 'FAILED', failureReason: 'MODEL_ERROR', finishedAt: TIMESTAMP }), 'failed'],
     [
       createToolCall(),
       createRun({
@@ -172,9 +161,7 @@ test('历史工具状态应由审计状态和父 Run 终态共同恢复', () => 
 
 test('持久化等待态应以同一工具调用 ID 恢复首次流卡片', () => {
   const toolCallId = 'stable-waiting-tool-call';
-  const live = toLiveAiToolCallView(
-    createLivePart('input-streaming', { toolCallId }),
-  );
+  const live = toLiveAiToolCallView(createLivePart('input-streaming', { toolCallId }));
   const historical = toHistoricalAiToolCallView(
     createToolCall({
       toolCallId,
@@ -194,6 +181,7 @@ test('持久化等待态应以同一工具调用 ID 恢复首次流卡片', () =
 test('历史工具成功摘要和排队等待卡只能暴露受控字段', () => {
   const resultSummary = {
     decisionId: 7,
+    projectId: 3,
     decisionTitle: '客服平台供应商选型',
     decisionStatus: 'DISCUSSING',
     projectTitle: 'NextNest',

@@ -1,12 +1,17 @@
 /**
- * 本文件创建绑定单项决策的 AI Thread，并启动第一个真实 Agent Run 流。
+ * 本文件创建不预绑定业务数据的 AI Thread，并在动态范围明确后启动第一个真实 Agent Run 流。
  */
 
 import { aiChatStreamRequestSchema, getLatestUserMessageText } from '@/features/ai/schemas/ai-request.schema';
 import { startAiRunExecution } from '@/features/ai/runtime/ai-agent-runtime.server';
 import {
+  createAiRecoveryStreamResponse,
+  createAiScopeResolutionStreamResponse,
+} from '@/features/ai/runtime/ai-stream.server';
+import {
   createInitialAiRun,
   discoverAiRunScope,
+  getAiRunScope,
   listAiThreads,
   stopAiRun,
 } from '@/features/ai/runtime/ai-nest-client.server';
@@ -75,28 +80,40 @@ export async function POST(request: Request): Promise<Response> {
   let createdRunId: string | null = null;
   try {
     const creation = await createInitialAiRun(authentication.identity, {
-      decisionId: parsed.data.decisionId,
       content,
       clientRequestId: parsed.data.clientRequestId,
       modelRole: 'standard',
     });
     createdRunId = creation.replayed ? null : creation.run.id;
 
-    if (parsed.data.decisionId === undefined) {
-      const scope = await discoverAiRunScope(authentication.identity, creation.run.id, { query: content });
-      if (scope.resolution.status !== 'RESOLVED') {
-        return apiSuccess({
-          data: {
-            threadId: creation.thread.id,
-            messageId: creation.message.id,
-            ...scope,
-          },
-          message:
-            scope.resolution.status === 'AWAITING_CONFIRMATION'
-              ? '请确认本次对话要使用的决策候选'
-              : '未找到可用决策，请补充更明确的决策名称',
-        });
-      }
+    const scope = creation.replayed
+      ? await getAiRunScope(authentication.identity, creation.run.id)
+      : await discoverAiRunScope(authentication.identity, creation.run.id, { query: content });
+    if (scope.resolution.status !== 'RESOLVED') {
+      return createAiScopeResolutionStreamResponse({
+        metadata: {
+          threadId: creation.thread.id,
+          messageId: creation.message.id,
+          runId: creation.run.id,
+          replayed: creation.replayed,
+        },
+        scope,
+      });
+    }
+
+    if (creation.replayed && creation.run.status !== 'QUEUED') {
+      return createAiRecoveryStreamResponse({
+        identity: authentication.identity,
+        threadId: creation.thread.id,
+        runId: creation.run.id,
+        afterSequence: 0,
+        metadata: {
+          threadId: creation.thread.id,
+          messageId: creation.message.id,
+          runId: creation.run.id,
+          replayed: true,
+        },
+      });
     }
 
     return await startAiRunExecution({

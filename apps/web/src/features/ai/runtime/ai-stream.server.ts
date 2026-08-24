@@ -11,7 +11,7 @@ import {
   type TextStreamPart,
   type UIMessageChunk,
 } from 'ai';
-import type { AiRunEventPage, AiRunStreamMetadata } from '@workspace/contracts/ai';
+import type { AiRunEventPage, AiRunScopeResolutionResponse, AiRunStreamMetadata } from '@workspace/contracts/ai';
 
 import type { AiDecisionUiMessage } from '../types/ai-message';
 import type { createDecisionAgentTools } from '../tools/registry';
@@ -56,6 +56,29 @@ export function createAiExecutionStreamResponse(options: {
   });
 }
 
+/** 返回合法的 AI SDK 瞬时范围流，让候选等待不会退化成普通 JSON 或空助手消息。 */
+export function createAiScopeResolutionStreamResponse(options: {
+  metadata: AiRunStreamMetadata;
+  scope: AiRunScopeResolutionResponse;
+}): Response {
+  const stream = createUIMessageStream<AiDecisionUiMessage>({
+    execute: ({ writer }) => {
+      writer.write({
+        type: 'data-run',
+        data: options.metadata,
+        transient: true,
+      });
+      writer.write({
+        type: 'data-scope',
+        data: options.scope,
+        transient: true,
+      });
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream });
+}
+
 /**
  * 轮询 NestJS 已持久化事件并生成恢复流。
  * 该函数只读取指定 Run，不领取租约、不创建消息、也不启动 Agent。
@@ -65,9 +88,18 @@ export function createAiRecoveryStreamResponse(options: {
   threadId: string;
   runId: string;
   afterSequence: number;
+  /** 幂等重放首次响应时补发的公开定位元数据；普通 GET 补拉省略。 */
+  metadata?: AiRunStreamMetadata;
 }): Response {
   const stream = new ReadableStream<UIMessageChunk>({
     start(controller) {
+      if (options.metadata) {
+        controller.enqueue({
+          type: 'data-run',
+          data: options.metadata,
+          transient: true,
+        });
+      }
       void pumpPersistedEvents(controller, options);
     },
   });
@@ -124,8 +156,7 @@ async function pumpPersistedEvents(
     controller.enqueue({
       type: 'error',
       errorText:
-        serializeAiThreadScopeChangedError(error) ??
-        (error instanceof Error ? error.message : 'AI 运行恢复失败'),
+        serializeAiThreadScopeChangedError(error) ?? (error instanceof Error ? error.message : 'AI 运行恢复失败'),
     });
     controller.close();
   }

@@ -5,8 +5,7 @@
 import type { AiRunStatus, AiThreadListItem, AiThreadPage } from '@workspace/contracts/ai';
 
 /** 历史接口与当前 Web 契约不一致时展示的稳定处理提示。 */
-export const AI_THREAD_HISTORY_CONTRACT_ERROR_MESSAGE =
-  'AI 会话历史数据版本不兼容，请重启 NestJS 服务后重试';
+export const AI_THREAD_HISTORY_CONTRACT_ERROR_MESSAGE = 'AI 会话历史数据版本不兼容，请重启 NestJS 服务后重试';
 /** 已经进入组件的异常摘要使用中性文案，避免再次读取缺失字段。 */
 export const AI_THREAD_SCOPE_LABEL_UNAVAILABLE = '会话范围信息不可用，请重新加载';
 
@@ -42,11 +41,13 @@ export function parseAiThreadPageResponse(value: unknown): AiThreadPage {
 
 /** 安全生成项目与决策标签，为热更新前已存在的旧状态提供最后一道防崩溃保护。 */
 export function getAiThreadScopeLabel(value: unknown): string {
-  if (!isRecord(value) || !isBusinessLabel(value.project) || !isBusinessLabel(value.decision)) {
+  if (!isRecord(value) || !isOptionalBusinessLabel(value.project) || !isOptionalBusinessLabel(value.decision)) {
     return AI_THREAD_SCOPE_LABEL_UNAVAILABLE;
   }
 
-  return `${value.project.title} · ${value.decision.title}`;
+  return value.project && value.decision
+    ? `${value.project.title} · ${value.decision.title}`
+    : '动态范围会话 · 每次提问按实时权限确定数据范围';
 }
 
 /** 确认一条历史摘要包含当前界面实际消费的全部真实字段。 */
@@ -58,8 +59,8 @@ function isAiThreadListItem(value: unknown): value is AiThreadListItem {
   return (
     typeof value.id === 'string' &&
     typeof value.title === 'string' &&
-    isBusinessLabel(value.project) &&
-    isBusinessLabel(value.decision) &&
+    isOptionalBusinessLabel(value.project) &&
+    isOptionalBusinessLabel(value.decision) &&
     (value.activeRunId === null || typeof value.activeRunId === 'string') &&
     isLatestRun(value.latestRun) &&
     (value.archivedAt === null || typeof value.archivedAt === 'string') &&
@@ -78,6 +79,11 @@ function isBusinessLabel(value: unknown): value is { id: number; title: string }
     typeof value.title === 'string' &&
     value.title.trim().length > 0
   );
+}
+
+/** 允许 2.7 新会话没有固定业务绑定，同时继续严格校验 2.6 兼容摘要。 */
+function isOptionalBusinessLabel(value: unknown): value is { id: number; title: string } | null {
+  return value === null || isBusinessLabel(value);
 }
 
 /** 历史列表只消费最近 Run 的稳定状态，其余字段仍由共享契约约束。 */

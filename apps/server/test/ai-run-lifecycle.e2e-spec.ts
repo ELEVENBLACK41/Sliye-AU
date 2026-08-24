@@ -689,6 +689,7 @@ describe('AI Run 租约与故障收敛（真实 PostgreSQL）', () => {
       toolCallId,
       resultSummary: {
         decisionId: decisionContext.decision.id,
+        projectId: decisionContext.project.id,
         decisionTitle: decisionContext.decision.title,
         decisionStatus: decisionContext.decision.status,
         projectTitle: decisionContext.project.title,

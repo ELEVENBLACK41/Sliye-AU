@@ -3,14 +3,15 @@
  */
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 
-import type { AiRunPublicSummary } from '@workspace/contracts/ai';
+import type { AiRunPublicSummary, AiRunScopeResolutionResponse, AiRunStatus } from '@workspace/contracts/ai';
 
 import { requestData } from '@/services/request';
 
+import { getAiRunScopeResolution, rediscoverAiRunScope } from '../services/ai-thread.service';
 import type { AiDecisionUiMessage } from '../types/ai-message';
 import {
   abandonAiRequestForNavigation,
@@ -35,6 +36,8 @@ export type UseAiChatOptions = {
   initialThreadId: string | null;
   /** 刷新页面时仍处于非终态的 Run。 */
   initialRunId: string | null;
+  /** 刷新时活跃 Run 的权威状态，用于区分候选等待与可恢复模型流。 */
+  initialRunStatus: AiRunStatus | null;
   /** 从数据库恢复的纯文本消息，用于继续提问与重试定位。 */
   initialMessages: AiDecisionUiMessage[];
   /** 首个瞬时元数据到达时同步真实 Thread 路径。 */
@@ -47,8 +50,6 @@ export type UseAiChatOptions = {
 type PendingSubmission = {
   /** 用户本次提交的规范化正文。 */
   text: string;
-  /** 本次消息绑定的决策。 */
-  decisionId: number;
   /** 网络结果不明确时必须复用的幂等键。 */
   clientRequestId: string;
 };
@@ -66,6 +67,7 @@ export function useAiChat({
   sessionId,
   initialThreadId,
   initialRunId,
+  initialRunStatus,
   initialMessages,
   onRunLocated,
   onRunSettled,
@@ -74,7 +76,11 @@ export function useAiChat({
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [stopping, setStopping] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const [shouldResume] = useState(Boolean(initialThreadId && initialRunId));
+  const [scopeResolution, setScopeResolution] = useState<AiRunScopeResolutionResponse | null>(null);
+  const [scopeLoading, setScopeLoading] = useState(Boolean(initialRunId && initialRunStatus === 'QUEUED'));
+  const [scopeAction, setScopeAction] = useState<'confirming' | 'searching' | 'starting' | null>(null);
+  const [scopeError, setScopeError] = useState<string | null>(null);
+  const [shouldResume] = useState(Boolean(initialThreadId && initialRunId && initialRunStatus !== 'QUEUED'));
   const threadIdRef = useRef<string | null>(initialThreadId);
   const runIdRef = useRef<string | null>(initialRunId);
   const requestContextRef = useRef<AiRunRequestContext | null>(
@@ -90,9 +96,11 @@ export function useAiChat({
         api: '/api/ai/threads',
         prepareSendMessagesRequest: ({ messages, trigger, body }) => {
           const requestBody = body as {
-            decisionId?: number;
             clientRequestId?: string;
             retryRunId?: string;
+            confirmScopeRunId?: string;
+            startScopeRunId?: string;
+            decisionIds?: number[];
           };
 
           if (trigger === 'regenerate-message' && requestBody.retryRunId) {
@@ -102,12 +110,23 @@ export function useAiChat({
             };
           }
 
+          if (requestBody.confirmScopeRunId) {
+            return {
+              api: `/api/ai/runs/${encodeURIComponent(requestBody.confirmScopeRunId)}/scope/confirm`,
+              body: { decisionIds: requestBody.decisionIds },
+            };
+          }
+
+          if (requestBody.startScopeRunId) {
+            return {
+              api: `/api/ai/runs/${encodeURIComponent(requestBody.startScopeRunId)}/start`,
+              body: {},
+            };
+          }
+
           return {
-            api: threadId
-              ? `/api/ai/threads/${encodeURIComponent(threadId)}/messages`
-              : '/api/ai/threads',
+            api: threadId ? `/api/ai/threads/${encodeURIComponent(threadId)}/messages` : '/api/ai/threads',
             body: {
-              decisionId: requestBody.decisionId,
               clientRequestId: requestBody.clientRequestId,
               messages: selectLatestAiUserMessage(messages),
             },
@@ -125,6 +144,48 @@ export function useAiChat({
       }),
     [runId, threadId],
   );
+
+  /** 从持久化范围恢复刷新前等待用户处理的候选或空结果。 */
+  const reloadScopeResolution = async (): Promise<void> => {
+    const currentRunId = runIdRef.current;
+    if (!currentRunId) {
+      return;
+    }
+
+    setScopeLoading(true);
+    setScopeError(null);
+    try {
+      setScopeResolution(await getAiRunScopeResolution(currentRunId));
+    } catch (error) {
+      setScopeError(toSafeAiScopeErrorMessage(error, 'AI 决策范围恢复失败，请稍后重试'));
+    } finally {
+      setScopeLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!initialRunId || initialRunStatus !== 'QUEUED') {
+      return;
+    }
+
+    let cancelled = false;
+    void getAiRunScopeResolution(initialRunId)
+      .then((scope) => {
+        if (!cancelled) setScopeResolution(scope);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setScopeError(toSafeAiScopeErrorMessage(error, 'AI 决策范围恢复失败，请稍后重试'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setScopeLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialRunId, initialRunStatus]);
 
   /** 让当前请求在错误、成功或用户停止后只刷新一次权威历史。 */
   const settleCurrentRequest = (): void => {
@@ -180,6 +241,13 @@ export function useAiChat({
     resume: shouldResume,
     transport,
     onData: (part) => {
+      if (part.type === 'data-scope') {
+        setScopeResolution(part.data);
+        setScopeLoading(false);
+        setScopeError(null);
+        return;
+      }
+
       if (part.type !== 'data-run') {
         return;
       }
@@ -206,7 +274,7 @@ export function useAiChat({
   });
 
   /** 发送消息，并只在服务端 `data-run` 确认持久化后返回成功。 */
-  const send = (text: string, decisionId: number): Promise<boolean> => {
+  const send = (text: string): Promise<boolean> => {
     setRetrying(false);
     beginAiRequestSettlementCycle(settlementGateRef.current);
     requestContextRef.current = null;
@@ -214,11 +282,8 @@ export function useAiChat({
     setRunId(null);
 
     const pending = pendingSubmissionRef.current;
-    const clientRequestId =
-      pending?.text === text && pending.decisionId === decisionId
-        ? pending.clientRequestId
-        : crypto.randomUUID();
-    pendingSubmissionRef.current = { text, decisionId, clientRequestId };
+    const clientRequestId = pending?.text === text ? pending.clientRequestId : crypto.randomUUID();
+    pendingSubmissionRef.current = { text, clientRequestId };
     pendingReceiptRef.current?.complete(false);
     const receipt = createAiPersistenceReceipt();
     pendingReceiptRef.current = receipt;
@@ -228,7 +293,6 @@ export function useAiChat({
         { text },
         {
           body: {
-            decisionId,
             clientRequestId,
           },
         },
@@ -240,6 +304,77 @@ export function useAiChat({
       });
 
     return receipt.promise;
+  };
+
+  /** 确认一个或多个权限过滤后的候选，并继续原 Run 的模型流。 */
+  const confirmScope = async (decisionIds: number[]): Promise<void> => {
+    const currentRunId = runIdRef.current;
+    if (!currentRunId || scopeAction) {
+      return;
+    }
+
+    beginAiRequestSettlementCycle(settlementGateRef.current);
+    setScopeAction('confirming');
+    setScopeError(null);
+    chat.clearError();
+    pendingReceiptRef.current?.complete(false);
+    const receipt = createAiPersistenceReceipt();
+    pendingReceiptRef.current = receipt;
+    try {
+      await chat.sendMessage(undefined, {
+        body: { confirmScopeRunId: currentRunId, decisionIds },
+      });
+      if (await receipt.promise) setScopeResolution(null);
+    } catch (error) {
+      setScopeError(toSafeAiScopeErrorMessage(error, '决策候选确认失败，请稍后重试'));
+      throw error;
+    } finally {
+      setScopeAction(null);
+    }
+  };
+
+  /** 使用补充说明重新发现同一排队 Run 的最小授权范围。 */
+  const rediscoverScope = async (query: string): Promise<void> => {
+    const currentRunId = runIdRef.current;
+    if (!currentRunId || scopeAction) {
+      return;
+    }
+
+    setScopeAction('searching');
+    setScopeError(null);
+    try {
+      setScopeResolution(await rediscoverAiRunScope(currentRunId, query));
+    } catch (error) {
+      setScopeError(toSafeAiScopeErrorMessage(error, 'AI 决策范围查找失败，请稍后重试'));
+      throw error;
+    } finally {
+      setScopeAction(null);
+    }
+  };
+
+  /** 启动已经精确解析或历史恢复到明确范围的同一条排队 Run。 */
+  const startResolvedScope = async (): Promise<void> => {
+    const currentRunId = runIdRef.current;
+    if (!currentRunId || scopeAction) {
+      return;
+    }
+
+    beginAiRequestSettlementCycle(settlementGateRef.current);
+    setScopeAction('starting');
+    setScopeError(null);
+    chat.clearError();
+    pendingReceiptRef.current?.complete(false);
+    const receipt = createAiPersistenceReceipt();
+    pendingReceiptRef.current = receipt;
+    try {
+      await chat.sendMessage(undefined, { body: { startScopeRunId: currentRunId } });
+      if (await receipt.promise) setScopeResolution(null);
+    } catch (error) {
+      setScopeError(toSafeAiScopeErrorMessage(error, 'AI 运行继续失败，请稍后重试'));
+      throw error;
+    } finally {
+      setScopeAction(null);
+    }
   };
 
   /** 先推进服务端取消状态，再停止当前浏览器流；后台执行器负责安全收敛。 */
@@ -256,6 +391,8 @@ export function useAiChat({
         method: 'POST',
         errorMessage: '停止 AI 运行失败，请稍后重试',
       });
+      setScopeResolution(null);
+      setScopeError(null);
 
       if (hasBrowserStream) {
         await chat.stop();
@@ -280,8 +417,7 @@ export function useAiChat({
     setRunId(null);
     setRetrying(true);
     const pending = pendingRetryRef.current;
-    const clientRequestId =
-      pending?.targetRunId === targetRunId ? pending.clientRequestId : crypto.randomUUID();
+    const clientRequestId = pending?.targetRunId === targetRunId ? pending.clientRequestId : crypto.randomUUID();
     pendingRetryRef.current = { targetRunId, clientRequestId };
 
     try {
@@ -315,9 +451,17 @@ export function useAiChat({
     ...chat,
     threadId,
     runId,
+    scopeResolution,
+    scopeLoading,
+    scopeAction,
+    scopeError,
     stopping,
     retrying,
     send,
+    confirmScope,
+    rediscoverScope,
+    reloadScopeResolution,
+    startResolvedScope,
     stop,
     retry,
     disconnect,
@@ -355,4 +499,17 @@ async function refreshSettledHistory({
 /** 把未知拒绝值收敛为 Error，避免 Promise 永久等待。 */
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error('AI 对话请求未完成');
+}
+
+/** 从 AI SDK 的 JSON 错误正文提取安全消息，避免候选卡展示原始响应结构。 */
+function toSafeAiScopeErrorMessage(error: unknown, fallback: string): string {
+  const message = toError(error).message.trim();
+  if (!message) return fallback;
+
+  try {
+    const parsed = JSON.parse(message) as { message?: unknown };
+    return typeof parsed.message === 'string' && parsed.message.trim() ? parsed.message : fallback;
+  } catch {
+    return message;
+  }
 }

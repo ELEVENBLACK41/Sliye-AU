@@ -420,6 +420,7 @@ async function createClaimedRunResponse(options: {
 function summarizeDecisionContext(context: AiDecisionContext): GetDecisionContextToolResultSummary {
   return {
     decisionId: context.decision.id,
+    projectId: context.project.id,
     decisionTitle: context.decision.title,
     decisionStatus: context.decision.status,
     projectTitle: context.project.title,

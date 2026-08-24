@@ -297,6 +297,10 @@ function toSafeToolResultSummary(
 
   return {
     decisionId: record.decisionId as number,
+    projectId:
+      Number.isInteger(record.projectId) && (record.projectId as number) > 0
+        ? (record.projectId as number)
+        : null,
     decisionTitle: record.decisionTitle,
     decisionStatus: record.decisionStatus,
     projectTitle: record.projectTitle,

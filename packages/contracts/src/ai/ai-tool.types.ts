@@ -45,6 +45,8 @@ export type GetDecisionContextToolInput = {
 export type GetDecisionContextToolResultSummary = {
   /** 工具真正读取的决策主键。 */
   decisionId: number;
+  /** 决策所属项目主键；2.6 旧审计摘要恢复时可能为空。 */
+  projectId: number | null;
   /** 决策标题。 */
   decisionTitle: string;
   /** 决策状态。 */

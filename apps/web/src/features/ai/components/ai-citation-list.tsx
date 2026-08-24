@@ -1,5 +1,5 @@
 /**
- * 本文件使用 AI Elements Sources 展示稳定来源 ID，并仅定位当前 Thread 绑定的决策。
+ * 本文件使用 AI Elements Sources 展示稳定来源 ID，并按每次 Run 的真实跨项目范围定位决策。
  */
 'use client';
 
@@ -7,21 +7,18 @@ import { BookOpen, CircleAlert } from 'lucide-react';
 
 import { Badge } from '@workspace/ui/components/badge';
 
-import {
-  Source,
-  Sources,
-  SourcesContent,
-  SourcesTrigger,
-} from '@/components/ai-elements/sources';
+import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai-elements/sources';
 
-/** 引用列表定位当前绑定决策所需的公开业务范围。 */
+/** 引用列表定位本次 Run 来源所需的公开业务范围。 */
 export type AiCitationListProps = {
   /** Run 返回并持久化的稳定来源 ID。 */
   sourceIds: readonly string[];
-  /** 当前 Thread 所属项目主键。 */
-  projectId: number;
-  /** 当前 Thread 唯一绑定的决策主键。 */
-  decisionId: number;
+  /** 每个来源在本次工具结果中的真实项目与决策定位。 */
+  sourceLocations?: Record<string, { projectId: number; decisionId: number }>;
+  /** 2.6 旧 Thread 在旧工具摘要缺少项目主键时使用的兼容项目。 */
+  fallbackProjectId?: number | null;
+  /** 2.6 旧 Thread 在旧工具摘要缺少项目主键时使用的兼容决策。 */
+  fallbackDecisionId?: number | null;
 };
 
 /** 引用列表内部的安全定位结果。 */
@@ -37,9 +34,14 @@ type AiCitationView = {
 };
 
 /** 渲染去重后的引用列表；无引用时不占用消息空间。 */
-export function AiCitationList({ sourceIds, projectId, decisionId }: AiCitationListProps) {
+export function AiCitationList({
+  sourceIds,
+  sourceLocations = {},
+  fallbackProjectId = null,
+  fallbackDecisionId = null,
+}: AiCitationListProps) {
   const citations = [...new Set(sourceIds)].map((sourceId) =>
-    resolveCitationView(sourceId, projectId, decisionId),
+    resolveCitationView(sourceId, sourceLocations[sourceId], fallbackProjectId, fallbackDecisionId),
   );
 
   if (citations.length === 0) {
@@ -63,9 +65,7 @@ export function AiCitationList({ sourceIds, projectId, decisionId }: AiCitationL
               <BookOpen aria-hidden className="size-4 shrink-0 text-primary" />
               <span className="min-w-0 flex-1">
                 <span className="block font-medium">{citation.label}</span>
-                <code className="block break-all text-xs text-muted-foreground">
-                  {citation.sourceId}
-                </code>
+                <code className="block break-all text-xs text-muted-foreground">{citation.sourceId}</code>
               </span>
               <Badge variant="outline">可定位</Badge>
             </Source>
@@ -93,8 +93,9 @@ export function AiCitationList({ sourceIds, projectId, decisionId }: AiCitationL
 /** 将稳定来源 ID 解析成当前决策范围内可安全使用的内部链接。 */
 function resolveCitationView(
   sourceId: string,
-  projectId: number,
-  decisionId: number,
+  location: { projectId: number; decisionId: number } | undefined,
+  fallbackProjectId: number | null,
+  fallbackDecisionId: number | null,
 ): AiCitationView {
   const decisionMatch = /^decision:([1-9]\d*)$/.exec(sourceId);
 
@@ -108,9 +109,13 @@ function resolveCitationView(
   }
 
   const sourceDecisionId = Number(decisionMatch[1]);
+  const projectId = location?.projectId ?? fallbackProjectId;
+  const decisionId = location?.decisionId ?? fallbackDecisionId;
   const hasValidScope =
+    typeof projectId === 'number' &&
     Number.isSafeInteger(projectId) &&
     projectId > 0 &&
+    typeof decisionId === 'number' &&
     Number.isSafeInteger(decisionId) &&
     decisionId > 0 &&
     sourceDecisionId === decisionId;

@@ -2,11 +2,7 @@
  * 本文件把首次流和持久化历史中的工具调用投影为同一套安全展示模型。
  */
 
-import type {
-  AiRunPublicSummary,
-  AiToolCall,
-  GetDecisionContextToolResultSummary,
-} from '@workspace/contracts/ai';
+import type { AiRunPublicSummary, AiToolCall, GetDecisionContextToolResultSummary } from '@workspace/contracts/ai';
 
 import type { AiDecisionUiMessage } from '../types/ai-message';
 
@@ -17,13 +13,7 @@ export type AiLiveDecisionContextToolPart = Extract<
 >;
 
 /** 2.6 工作区可以明确反馈的工具展示状态。 */
-export type AiToolDisplayState =
-  | 'waiting'
-  | 'running'
-  | 'success'
-  | 'failed'
-  | 'cancelled'
-  | 'waiting_approval';
+export type AiToolDisplayState = 'waiting' | 'running' | 'success' | 'failed' | 'cancelled' | 'waiting_approval';
 
 /** 工具卡只允许消费的脱敏安全字段。 */
 export type AiToolCallView = {
@@ -63,10 +53,7 @@ export function toLiveAiToolCallView(part: AiLiveDecisionContextToolPart): AiToo
 }
 
 /** 把数据库工具审计和父 Run 终态投影为同一张工具卡。 */
-export function toHistoricalAiToolCallView(
-  toolCall: AiToolCall,
-  run: AiRunPublicSummary,
-): AiToolCallView {
+export function toHistoricalAiToolCallView(toolCall: AiToolCall, run: AiRunPublicSummary): AiToolCallView {
   return {
     id: toolCall.toolCallId,
     title: '读取决策基础上下文',
@@ -109,6 +96,7 @@ function summarizeLiveDecisionContext(
 ): GetDecisionContextToolResultSummary {
   return {
     decisionId: output.decision.id,
+    projectId: output.project.id,
     decisionTitle: output.decision.title,
     decisionStatus: output.decision.status,
     projectTitle: output.project.title,

@@ -12,8 +12,13 @@ import {
 } from '@/features/ai/schemas/ai-request.schema';
 import { startAiRunExecution } from '@/features/ai/runtime/ai-agent-runtime.server';
 import {
+  createAiRecoveryStreamResponse,
+  createAiScopeResolutionStreamResponse,
+} from '@/features/ai/runtime/ai-stream.server';
+import {
   createAiMessageRun,
   discoverAiRunScope,
+  getAiRunScope,
   listAiThreadMessages,
   stopAiRun,
 } from '@/features/ai/runtime/ai-nest-client.server';
@@ -90,21 +95,34 @@ export async function POST(request: Request, context: { params: Promise<{ thread
     });
     createdRunId = creation.replayed ? null : creation.run.id;
 
-    if (creation.thread.decisionId === null) {
-      const scope = await discoverAiRunScope(authentication.identity, creation.run.id, { query: content });
-      if (scope.resolution.status !== 'RESOLVED') {
-        return apiSuccess({
-          data: {
-            threadId: creation.thread.id,
-            messageId: creation.message.id,
-            ...scope,
-          },
-          message:
-            scope.resolution.status === 'AWAITING_CONFIRMATION'
-              ? '请确认本次对话要使用的决策候选'
-              : '未找到可用决策，请补充更明确的决策名称',
-        });
-      }
+    const scope = creation.replayed
+      ? await getAiRunScope(authentication.identity, creation.run.id)
+      : await discoverAiRunScope(authentication.identity, creation.run.id, { query: content });
+    if (scope.resolution.status !== 'RESOLVED') {
+      return createAiScopeResolutionStreamResponse({
+        metadata: {
+          threadId: creation.thread.id,
+          messageId: creation.message.id,
+          runId: creation.run.id,
+          replayed: creation.replayed,
+        },
+        scope,
+      });
+    }
+
+    if (creation.replayed && creation.run.status !== 'QUEUED') {
+      return createAiRecoveryStreamResponse({
+        identity: authentication.identity,
+        threadId: creation.thread.id,
+        runId: creation.run.id,
+        afterSequence: 0,
+        metadata: {
+          threadId: creation.thread.id,
+          messageId: creation.message.id,
+          runId: creation.run.id,
+          replayed: true,
+        },
+      });
     }
 
     return await startAiRunExecution({

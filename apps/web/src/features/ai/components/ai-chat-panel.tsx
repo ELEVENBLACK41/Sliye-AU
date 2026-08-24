@@ -11,7 +11,6 @@ import type { AiRunPublicSummary, AiThreadDetail, AiThreadMessageHistoryItem } f
 import { Alert, AlertDescription, AlertTitle } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
-import { Input } from '@workspace/ui/components/input';
 import { Skeleton } from '@workspace/ui/components/skeleton';
 import { Textarea } from '@workspace/ui/components/textarea';
 
@@ -25,14 +24,11 @@ import { ApiClientError } from '@/services/request';
 
 import { useAiChat } from '../hooks/use-ai-chat';
 import type { AiDecisionUiMessage } from '../types/ai-message';
-import {
-  createAiToolCallIdentity,
-  type AiRunLocatedMetadata,
-  type AiRunRequestContext,
-} from '../utils/ai-chat-session';
+import type { AiRunLocatedMetadata, AiRunRequestContext } from '../utils/ai-chat-session';
 import { getAiThreadScopeLabel } from '../utils/ai-thread-response';
 import { projectAiThreadTimeline, toAiDecisionUiMessages } from '../utils/ai-thread-timeline';
 import { AiHistoricalTimelinePart, AiLiveMessageParts } from './ai-chat-timeline-parts';
+import { AiScopeCandidateCard } from './ai-scope-candidate-card';
 
 /** 对话面板属性。 */
 export type AiChatPanelProps = {
@@ -48,8 +44,6 @@ export type AiChatPanelProps = {
   historyError: string | null;
   /** 是否仍有更早的持久化消息。 */
   hasOlderMessages: boolean;
-  /** 新会话从业务页面跳转时预填的决策主键。 */
-  initialDecisionId?: number;
   /** 移动端打开历史抽屉。 */
   onOpenHistory: () => void;
   /** 首个流元数据到达时同步路由和 Thread 详情。 */
@@ -74,7 +68,6 @@ export function AiChatPanel({
   historyLoading,
   historyError,
   hasOlderMessages,
-  initialDecisionId,
   onOpenHistory,
   onRunLocated,
   onRunSettled,
@@ -84,35 +77,26 @@ export function AiChatPanel({
   disconnectRef,
 }: AiChatPanelProps) {
   const [input, setInput] = useState('');
-  const [decisionIdInput, setDecisionIdInput] = useState(initialDecisionId ? String(initialDecisionId) : '');
   const [actionError, setActionError] = useState<string | null>(null);
   const initialMessages = useMemo(() => toAiDecisionUiMessages(historyItems), [historyItems]);
   const timeline = useMemo(() => projectAiThreadTimeline(historyItems), [historyItems]);
   const persistedMessageIds = useMemo(() => new Set(historyItems.map((item) => item.message.id)), [historyItems]);
-  const persistedToolCallKeys = useMemo(
-    () =>
-      new Set(
-        historyItems.flatMap((item) =>
-          item.runs.flatMap((history) =>
-            history.toolCalls.map((toolCall) => createAiToolCallIdentity(history.run.id, toolCall.toolCallId)),
-          ),
-        ),
-      ),
-    [historyItems],
-  );
   const chat = useAiChat({
     sessionId,
     initialThreadId: thread?.id ?? null,
     initialRunId: thread?.activeRunId ?? null,
+    initialRunStatus:
+      thread?.activeRunId && thread.latestRun?.id === thread.activeRunId ? thread.latestRun.status : null,
     initialMessages,
     onRunLocated,
     onRunSettled,
   });
   const isBrowserStreaming = chat.status === 'submitted' || chat.status === 'streaming';
-  const isBusy = isBrowserStreaming || Boolean(thread?.activeRunId);
+  const liveActivityStatus =
+    chat.status === 'submitted' ? 'submitted' : chat.status === 'streaming' ? 'streaming' : null;
+  const isScopePending = Boolean(chat.scopeResolution || chat.scopeLoading || chat.scopeAction);
+  const isBusy = isBrowserStreaming || Boolean(thread?.activeRunId) || isScopePending;
   const isArchived = Boolean(thread?.archivedAt);
-  const decisionId = thread?.decision?.id ?? Number(decisionIdInput);
-  const hasDecisionId = Number.isInteger(decisionId) && decisionId > 0;
 
   useEffect(() => {
     disconnectRef.current = chat.disconnect;
@@ -124,13 +108,13 @@ export function AiChatPanel({
   /** 校验输入后提交消息；失败时保留原输入供用户修正或重试。 */
   const handleSubmit = async (): Promise<void> => {
     const message = input.trim();
-    if (!message || !hasDecisionId || isBusy || isArchived) {
+    if (!message || isBusy || isArchived) {
       return;
     }
 
     setActionError(null);
     try {
-      const isPersisted = await chat.send(message, decisionId);
+      const isPersisted = await chat.send(message);
       if (isPersisted) {
         setInput('');
       }
@@ -232,19 +216,24 @@ export function AiChatPanel({
             <ConversationEmptyState
               icon={<Bot aria-hidden className="size-7" />}
               title="开始记录一段决策分析"
-              description="可以询问当前决策的背景、状态或形成过程；离题问题会被简短拒绝。"
+              description="直接描述要查询或比较的决策过程；AI 会按你的实时权限查找范围，遇到同名候选时请你确认。"
             />
           ) : null}
 
-          {timeline.map((item) => (
-            <AiHistoricalTimelinePart
-              key={item.id}
-              item={item}
-              thread={thread}
-              retrying={chat.retrying}
-              onRetry={handleRetry}
-            />
-          ))}
+          {timeline
+            .filter(
+              (item) =>
+                !(item.kind === 'activity' && isBrowserStreaming && item.runId === chat.runId),
+            )
+            .map((item) => (
+              <AiHistoricalTimelinePart
+                key={item.kind === 'activity' ? `${item.id}:${item.activity.state}` : item.id}
+                item={item}
+                thread={thread}
+                retrying={chat.retrying}
+                onRetry={handleRetry}
+              />
+            ))}
 
           {chat.messages
             .filter((message) => !persistedMessageIds.has(message.id))
@@ -252,13 +241,26 @@ export function AiChatPanel({
               <AiLiveMessageParts
                 key={message.id}
                 message={message}
-                streaming={isBrowserStreaming}
+                activityStatus={liveActivityStatus}
                 runId={chat.runId}
                 thread={thread}
-                fallbackDecisionId={hasDecisionId ? decisionId : 0}
-                persistedToolCallKeys={persistedToolCallKeys}
+                fallbackDecisionId={thread?.decision?.id ?? 0}
               />
             ))}
+
+          {isScopePending || chat.scopeError ? (
+            <AiScopeCandidateCard
+              key={`${chat.scopeResolution?.runId ?? 'scope-loading'}-${chat.scopeResolution?.resolution.status ?? 'loading'}`}
+              scope={chat.scopeResolution}
+              loading={chat.scopeLoading}
+              action={chat.scopeAction}
+              error={chat.scopeError}
+              onReload={chat.reloadScopeResolution}
+              onConfirm={chat.confirmScope}
+              onRediscover={chat.rediscoverScope}
+              onStart={chat.startResolvedScope}
+            />
+          ) : null}
 
           {historyError && historyItems.length > 0 ? (
             <Alert variant="destructive">
@@ -287,20 +289,10 @@ export function AiChatPanel({
           }}
         >
           <div className="grid min-w-0 gap-2">
-            {!thread ? (
-              <Input
-                value={decisionIdInput}
-                inputMode="numeric"
-                aria-label="决策 ID"
-                placeholder="输入要分析的决策 ID"
-                disabled={isBusy}
-                onChange={(event) => setDecisionIdInput(event.currentTarget.value)}
-              />
-            ) : null}
             <Textarea
               value={input}
               aria-label="AI 对话消息"
-              placeholder="询问这项决策是如何形成的……"
+              placeholder="例如：比较官网改版与移动端重构两项决策的形成过程……"
               className="max-h-40 min-h-16 resize-none overflow-y-auto"
               disabled={isBusy || isArchived || Boolean(historyError && !thread)}
               onChange={(event) => setInput(event.currentTarget.value)}
@@ -328,14 +320,14 @@ export function AiChatPanel({
                 {chat.stopping ? '正在停止' : '停止'}
               </Button>
             ) : null}
-            <Button type="submit" disabled={!input.trim() || !hasDecisionId || isBusy || isArchived || historyLoading}>
+            <Button type="submit" disabled={!input.trim() || isBusy || isArchived || historyLoading}>
               <Send aria-hidden />
               发送
             </Button>
           </div>
         </form>
         <p className="mt-2 text-xs text-muted-foreground">
-          Ctrl/⌘ + Enter 发送；AI 只回答当前 Thread 绑定决策的形成过程。
+          Ctrl/⌘ + Enter 发送；每次提问独立按你的实时权限确定决策范围，不会固定绑定当前 Thread。
         </p>
       </footer>
     </section>

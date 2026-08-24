@@ -89,6 +89,7 @@ function createToolCall(overrides: Partial<AiVisibleHistoryToolCall> = {}): AiVi
     input: { decisionId: 7 },
     resultSummary: {
       decisionId: 7,
+      projectId: 3,
       decisionTitle: '客服平台供应商选型',
       decisionStatus: 'DISCUSSING',
       projectTitle: 'NextNest',
@@ -138,7 +139,7 @@ function createHistoryItem(
   return { message, runs };
 }
 
-test('历史时间流应按消息、工具、助手正文、引用和 Run 排序并去重', () => {
+test('历史时间流应按消息、活动组、助手正文和引用排序并去重', () => {
   const run = createRun();
   const toolCall = createToolCall();
   const userItem = createHistoryItem(createMessage(), [
@@ -167,18 +168,26 @@ test('历史时间流应按消息、工具、助手正文、引用和 Run 排序
     timeline.map((item) => item.id),
     [
       'message:message-user-1',
-      'tool:run-1:shared-tool-call',
+      'activity:run-1',
       'message:message-assistant-1',
       'citations:run-1',
-      'run:run-1',
     ],
+  );
+
+  const activity = timeline.find((item) => item.kind === 'activity');
+  assert.deepEqual(
+    activity?.activity.steps.map((step) => step.id),
+    ['run:run-1', 'tool:shared-tool-call'],
   );
 
   const citation = timeline.find((item) => item.kind === 'citations');
   assert.deepEqual(citation?.sourceIds, ['decision:7']);
+  assert.deepEqual(citation?.sourceLocations, {
+    'decision:7': { projectId: 3, decisionId: 7 },
+  });
 });
 
-test('重试链复用工具调用 ID 时仍应按 Run 隔离工具、引用和状态', () => {
+test('重试链复用工具调用 ID 时仍应按 Run 隔离活动组和引用', () => {
   const firstRun = createRun({ id: 'run-first', status: 'FAILED', finishedAt: TIMESTAMP });
   const retryRun = createRun({
     id: 'run-retry',
@@ -229,20 +238,23 @@ test('重试链复用工具调用 ID 时仍应按 Run 隔离工具、引用和�
   ]);
 
   const timeline = projectAiThreadTimeline([item]);
-  const tools = timeline.filter((timelineItem) => timelineItem.kind === 'tool');
+  const activities = timeline.filter((timelineItem) => timelineItem.kind === 'activity');
   const citations = timeline.filter((timelineItem) => timelineItem.kind === 'citations');
-  const runs = timeline.filter((timelineItem) => timelineItem.kind === 'run');
 
   assert.deepEqual(
-    tools.map((tool) => ({ id: tool.id, runId: tool.runId, sourceIds: tool.tool.sourceIds })),
+    activities.map((activity) => ({
+      id: activity.id,
+      runId: activity.runId,
+      sourceIds: activity.activity.steps.flatMap((step) => step.tool?.sourceIds ?? []),
+    })),
     [
       {
-        id: 'tool:run-first:shared-tool-call',
+        id: 'activity:run-first',
         runId: 'run-first',
         sourceIds: [],
       },
       {
-        id: 'tool:run-retry:shared-tool-call',
+        id: 'activity:run-retry',
         runId: 'run-retry',
         sourceIds: ['decision:7@retry'],
       },
@@ -255,10 +267,10 @@ test('重试链复用工具调用 ID 时仍应按 Run 隔离工具、引用和�
       { runId: 'run-retry', sourceIds: ['decision:7@retry'] },
     ],
   );
-  assert.equal(runs[1]?.run.retryOfRunId, firstRun.id);
+  assert.equal(activities[1]?.activity.run?.retryOfRunId, firstRun.id);
 });
 
-test('没有工具记录的排队 Run 不应伪造工具卡', () => {
+test('没有工具记录的排队 Run 只展示真实 Run 步骤，不伪造工具步骤', () => {
   const queuedRun = createRun({
     id: 'run-queued',
     status: 'QUEUED',
@@ -281,12 +293,10 @@ test('没有工具记录的排队 Run 不应伪造工具卡', () => {
 
   assert.deepEqual(
     timeline.map((item) => item.id),
-    ['message:message-user-1', 'run:run-queued'],
+    ['message:message-user-1', 'activity:run-queued'],
   );
-  assert.equal(
-    timeline.some((item) => item.kind === 'tool'),
-    false,
-  );
+  const activity = timeline.find((item) => item.kind === 'activity');
+  assert.deepEqual(activity?.activity.steps.map((step) => step.kind), ['run']);
 });
 
 test('等待执行的工具应使用创建时间恢复稳定排序', () => {
@@ -310,11 +320,12 @@ test('等待执行的工具应使用创建时间恢复稳定排序', () => {
       },
     ]),
   ]);
-  const tool = timeline.find((item) => item.kind === 'tool');
+  const activity = timeline.find((item) => item.kind === 'activity');
+  const tool = activity?.activity.steps.find((step) => step.kind === 'tool');
 
-  assert.equal(tool?.id, `tool:${runningRun.id}:${waitingTool.toolCallId}`);
-  assert.equal(tool?.createdAt, waitingTool.createdAt);
-  assert.equal(tool?.tool.state, 'waiting');
+  assert.equal(activity?.createdAt, runningRun.startedAt);
+  assert.equal(tool?.id, `tool:${waitingTool.toolCallId}`);
+  assert.equal(tool?.tool?.state, 'waiting');
 });
 
 test('消息分页合并应按稳定 ID 去重并让较新快照覆盖旧快照', () => {

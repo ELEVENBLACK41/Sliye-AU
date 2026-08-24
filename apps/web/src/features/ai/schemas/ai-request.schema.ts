@@ -56,7 +56,6 @@ export const aiThreadUpdateRequestSchema = z
 
 /** 首次消息和后续消息共同使用的 UI 流请求 Schema。 */
 export const aiChatStreamRequestSchema = z.object({
-  decisionId: z.number().int().positive().optional(),
   clientRequestId: z.string().uuid(),
   messages: z.array(aiIncomingUiMessageSchema).min(1).max(50),
 });

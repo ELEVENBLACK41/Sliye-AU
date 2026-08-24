@@ -3,6 +3,7 @@
  */
 
 import type {
+  AiRunScopeResolutionResponse,
   AiThreadDetail,
   AiThreadMessageHistoryItem,
   AiThreadMessagePage,
@@ -64,10 +65,7 @@ export function getAiThreadDetail(threadId: string): Promise<AiThreadDetail> {
 }
 
 /** 分页读取指定 Thread 的持久化消息、运行、工具调用与来源关联。 */
-export function getAiThreadMessages(
-  threadId: string,
-  query: ListAiThreadMessagesQuery,
-): Promise<AiThreadMessagePage> {
+export function getAiThreadMessages(threadId: string, query: ListAiThreadMessagesQuery): Promise<AiThreadMessagePage> {
   const searchParams = new URLSearchParams();
 
   if (query.cursor) {
@@ -78,20 +76,14 @@ export function getAiThreadMessages(
   }
 
   const suffix = searchParams.size > 0 ? `?${searchParams}` : '';
-  return requestData<AiThreadMessagePage>(
-    `/api/ai/threads/${encodeURIComponent(threadId)}/messages${suffix}`,
-    {
-      method: 'GET',
-      errorMessage: 'AI 会话消息获取失败，请稍后重试',
-    },
-  );
+  return requestData<AiThreadMessagePage>(`/api/ai/threads/${encodeURIComponent(threadId)}/messages${suffix}`, {
+    method: 'GET',
+    errorMessage: 'AI 会话消息获取失败，请稍后重试',
+  });
 }
 
 /** 并行读取 Thread 详情与最新消息页，供深链接恢复和状态轮询使用。 */
-export async function getAiThreadSnapshot(
-  threadId: string,
-  messageLimit: number,
-): Promise<AiThreadSnapshot> {
+export async function getAiThreadSnapshot(threadId: string, messageLimit: number): Promise<AiThreadSnapshot> {
   const [detail, page] = await Promise.all([
     getAiThreadDetail(threadId),
     getAiThreadMessages(threadId, { limit: messageLimit }),
@@ -105,17 +97,31 @@ export async function getAiThreadSnapshot(
   };
 }
 
-/** 通过 BFF 白名单更新指定 Thread 的标题或归档状态。 */
-export function updateAiThread(
-  threadId: string,
-  request: UpdateAiThreadRequest,
-): Promise<UpdateAiThreadResponse> {
-  return requestData<UpdateAiThreadResponse, UpdateAiThreadRequest>(
-    `/api/ai/threads/${encodeURIComponent(threadId)}`,
+/** 读取仍在排队的 Run 范围，用于刷新后恢复候选确认或继续执行入口。 */
+export function getAiRunScopeResolution(runId: string): Promise<AiRunScopeResolutionResponse> {
+  return requestData<AiRunScopeResolutionResponse>(`/api/ai/runs/${encodeURIComponent(runId)}/scope`, {
+    method: 'GET',
+    errorMessage: 'AI 决策范围恢复失败，请稍后重试',
+  });
+}
+
+/** 使用用户补充的名称重新发现同一条排队 Run 的授权范围。 */
+export function rediscoverAiRunScope(runId: string, query: string): Promise<AiRunScopeResolutionResponse> {
+  return requestData<AiRunScopeResolutionResponse, { query: string }>(
+    `/api/ai/runs/${encodeURIComponent(runId)}/scope/discover`,
     {
-      method: 'PATCH',
-      body: request,
-      errorMessage: 'AI 会话更新失败，请稍后重试',
+      method: 'POST',
+      body: { query },
+      errorMessage: 'AI 决策范围查找失败，请稍后重试',
     },
   );
+}
+
+/** 通过 BFF 白名单更新指定 Thread 的标题或归档状态。 */
+export function updateAiThread(threadId: string, request: UpdateAiThreadRequest): Promise<UpdateAiThreadResponse> {
+  return requestData<UpdateAiThreadResponse, UpdateAiThreadRequest>(`/api/ai/threads/${encodeURIComponent(threadId)}`, {
+    method: 'PATCH',
+    body: request,
+    errorMessage: 'AI 会话更新失败，请稍后重试',
+  });
 }

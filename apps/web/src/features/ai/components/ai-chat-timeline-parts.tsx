@@ -5,14 +5,13 @@
 import type { AiRunPublicSummary, AiThreadDetail } from '@workspace/contracts/ai';
 
 import type { AiDecisionUiMessage } from '../types/ai-message';
-import { createAiToolCallIdentity } from '../utils/ai-chat-session';
+import { createLiveAiActivityGroup, type AiActivityTransportState } from '../utils/ai-activity-view';
 import type { AiThreadTimelineItem } from '../utils/ai-thread-timeline';
 import { toLiveAiToolCallView } from '../utils/ai-tool-call-view';
+import { AiActivityGroup } from './ai-activity-group';
 import { AiCitationList } from './ai-citation-list';
 import { AiHistoryHiddenNotice } from './ai-history-hidden-notice';
 import { AiMessage } from './ai-message';
-import { AiRunStatusCard } from './ai-run-status-card';
-import { AiToolCallCard } from './ai-tool-call-card';
 
 /** 历史时间流部件属性。 */
 type AiHistoricalTimelinePartProps = {
@@ -37,28 +36,27 @@ export function AiHistoricalTimelinePart({ item, thread, retrying, onRetry }: Ai
           content={item.message.content}
         />
       );
-    case 'tool':
-      return <AiToolCallCard tool={item.tool} />;
+    case 'activity': {
+      const isLatestRetryableRun = thread?.activeRunId === null && thread.latestRun?.id === item.activity.runId;
+      return (
+        <AiActivityGroup
+          activity={item.activity}
+          retrying={retrying}
+          onRetry={isLatestRetryableRun ? onRetry : undefined}
+        />
+      );
+    }
     case 'citations':
       return thread ? (
         <AiCitationList
           sourceIds={item.sourceIds}
-          projectId={thread.project?.id ?? 0}
-          decisionId={thread.decision?.id ?? 0}
+          sourceLocations={item.sourceLocations}
+          fallbackProjectId={thread.project?.id ?? null}
+          fallbackDecisionId={thread.decision?.id ?? null}
         />
       ) : null;
     case 'hidden':
       return <AiHistoryHiddenNotice contentKind={item.contentKind} reason={item.reason} />;
-    case 'run': {
-      const isLatestRetryableRun = thread?.activeRunId === null && thread.latestRun?.id === item.run.id;
-      return (
-        <AiRunStatusCard
-          run={item.run}
-          isRetrying={retrying}
-          onRetry={isLatestRetryableRun ? () => onRetry(item.run) : undefined}
-        />
-      );
-    }
   }
 }
 
@@ -66,26 +64,23 @@ export function AiHistoricalTimelinePart({ item, thread, retrying, onRetry }: Ai
 type AiLiveMessagePartsProps = {
   /** AI SDK 当前消息。 */
   message: AiDecisionUiMessage;
-  /** 当前浏览器流是否仍在生成正文。 */
-  streaming: boolean;
+  /** 当前浏览器首次流的真实传输状态；准备完成后为空。 */
+  activityStatus: AiActivityTransportState | null;
   /** 当前实时消息所属的 Run 主键。 */
   runId: string | null;
   /** 已加载的 Thread 业务范围。 */
   thread: AiThreadDetail | null;
   /** Thread 详情到达前使用的已校验 Decision 主键。 */
   fallbackDecisionId: number;
-  /** 已由历史恢复展示的 `Run + 工具调用` 复合键，避免同一 Run 重复卡片。 */
-  persistedToolCallKeys: ReadonlySet<string>;
 };
 
-/** 按 AI SDK 部件原顺序渲染实时正文、工具状态和稳定来源。 */
+/** 将首次流投影为活动组、助手正文和独立引用，保持与历史恢复一致的信息层级。 */
 export function AiLiveMessageParts({
   message,
-  streaming,
+  activityStatus,
   runId,
   thread,
   fallbackDecisionId,
-  persistedToolCallKeys,
 }: AiLiveMessagePartsProps) {
   if (message.role === 'user') {
     const content = message.parts
@@ -95,38 +90,64 @@ export function AiLiveMessageParts({
     return content ? <AiMessage id={message.id} role="user" content={content} /> : null;
   }
 
-  return message.parts.map((part, index) => {
-    if (part.type === 'text') {
-      return part.text ? (
-        <AiMessage
-          key={`${message.id}-text-${index}`}
-          id={`${message.id}-text-${index}`}
-          role="assistant"
-          content={part.text}
-          streaming={streaming}
-        />
-      ) : null;
-    }
+  const tools = message.parts
+    .filter(
+      (part): part is Extract<typeof part, { type: 'tool-getDecisionContext' }> =>
+        part.type === 'tool-getDecisionContext',
+    )
+    .map(toLiveAiToolCallView);
+  const sourceIds = [...new Set(tools.flatMap((tool) => tool.sourceIds))];
+  const sourceLocations = Object.assign(
+    {},
+    ...tools.map((tool) => createLiveSourceLocations(tool.resultSummary)),
+  ) as Record<string, { projectId: number; decisionId: number }>;
+  const activity = activityStatus
+    ? createLiveAiActivityGroup({
+        runId: runId ?? `pending-${message.id}`,
+        status: activityStatus,
+        tools,
+      })
+    : null;
 
-    if (part.type !== 'tool-getDecisionContext') {
-      return null;
-    }
-
-    const toolCallKey = createAiToolCallIdentity(runId ?? 'pending', part.toolCallId);
-    if (runId && persistedToolCallKeys.has(toolCallKey)) {
-      return null;
-    }
-
-    const tool = toLiveAiToolCallView(part);
-    return (
-      <div key={toolCallKey}>
-        <AiToolCallCard tool={tool} />
+  return (
+    <>
+      {activity ? <AiActivityGroup key={`${activity.id}:${activity.state}`} activity={activity} /> : null}
+      {message.parts.map((part, index) => {
+        if (part.type !== 'text' || !part.text) return null;
+        return (
+          <AiMessage
+            key={`${message.id}-text-${index}`}
+            id={`${message.id}-text-${index}`}
+            role="assistant"
+            content={part.text}
+            streaming={Boolean(activityStatus)}
+          />
+        );
+      })}
+      {sourceIds.length > 0 ? (
         <AiCitationList
-          sourceIds={tool.sourceIds}
-          projectId={thread?.project?.id ?? 0}
-          decisionId={thread?.decision?.id ?? fallbackDecisionId}
+          sourceIds={sourceIds}
+          sourceLocations={sourceLocations}
+          fallbackProjectId={thread?.project?.id ?? null}
+          fallbackDecisionId={(thread?.decision?.id ?? fallbackDecisionId) || null}
         />
-      </div>
-    );
-  });
+      ) : null}
+    </>
+  );
+}
+
+/** 从当前工具受控摘要建立跨项目引用定位，不依赖 Thread 兼容绑定。 */
+function createLiveSourceLocations(
+  summary: ReturnType<typeof toLiveAiToolCallView>['resultSummary'],
+): Record<string, { projectId: number; decisionId: number }> {
+  if (!summary?.projectId) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    summary.sourceIds.map((sourceId) => [
+      sourceId,
+      { projectId: summary.projectId as number, decisionId: summary.decisionId },
+    ]),
+  );
 }
