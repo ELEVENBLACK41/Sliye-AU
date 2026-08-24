@@ -13,6 +13,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Textarea } from '@workspace/ui/components/textarea';
 
 import { AiRunActivityLabel, AiToolCallGroup, type AiToolMessagePart } from './ai-tool-call-card';
+import { MessageResponse } from '@/components/ai-elements/message';
 
 /** 渲染复用既有 `/api/chat` 流式测试机器人的 AI 对话主画布。 */
 export function AiChatSurface({ userName }: { userName: string }) {
@@ -80,8 +81,12 @@ function AiConversation({ messages, isRunning }: { messages: UIMessage[]; isRunn
       className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-5 overflow-y-auto py-5"
       aria-live="polite"
     >
-      {messages.map((message) => (
-        <AiConversationMessage key={message.id} message={message} />
+      {messages.map((message, index) => (
+        <AiConversationMessage
+          key={message.id}
+          message={message}
+          isStreaming={isRunning && index === messages.length - 1}
+        />
       ))}
       {isRunning && !hasLatestAssistantText && !hasLatestToolCall ? <AiRunningIndicator /> : null}
     </div>
@@ -89,7 +94,7 @@ function AiConversation({ messages, isRunning }: { messages: UIMessage[]; isRunn
 }
 
 /** 按用户或 AI 的不同信息密度，渲染一条聊天消息及其工具轨迹。 */
-function AiConversationMessage({ message }: { message: UIMessage }) {
+function AiConversationMessage({ message, isStreaming }: { message: UIMessage; isStreaming: boolean }) {
   const hasAssistantText =
     message.role === 'assistant' && message.parts.some((part) => part.type === 'text' && part.text.trim());
   const toolParts = message.parts.filter((part) => part.type.startsWith('tool-')) as AiToolMessagePart[];
@@ -114,9 +119,9 @@ function AiConversationMessage({ message }: { message: UIMessage }) {
       {message.parts.map((part, index) => {
         if (part.type === 'text') {
           return (
-            <p key={`${message.id}-${index}`} className="whitespace-pre-wrap">
+            <MessageResponse key={`${message.id}-${index}`} isAnimating={isStreaming}>
               {part.text}
-            </p>
+            </MessageResponse>
           );
         }
 
