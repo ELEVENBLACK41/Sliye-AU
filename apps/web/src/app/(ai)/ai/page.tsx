@@ -1,20 +1,9 @@
-/*
- * @Author: shaoliye elevenblack41@gmail.com
- * @Date: 2026-08-20 15:03:41
- * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-08-21 10:31:57
- * @FilePath: \NextNest\apps\web\src\app\(ai)\ai\page.tsx
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+/**
+ * 本文件提供 AI 实验室入口；当前仅渲染静态页面，后续接入 AI Thread 和业务上下文数据。
  */
-import React from 'react'
-import { AiChatPanel } from '@/features/ai/components/ai-chat-panel'
-const Ai = () => {
-  return (
-    <div>
-      用来测试AI页面
-      <AiChatPanel />
-    </div>
-  )
-}
+import { AiWorkspaceStatic } from '@/features/ai/components/ai-workspace-static';
 
-export default Ai
+/** 渲染 AI 实验室的首屏静态工作台。 */
+export default function AiPage() {
+  return <AiWorkspaceStatic />;
+}
