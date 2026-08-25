@@ -4,6 +4,7 @@
  */
 
 import type {
+  AiEventType,
   AiLanguageModelRole,
   AiRunCancellationReason,
   AiMessageDispatchState,
@@ -12,6 +13,7 @@ import type {
 } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import type { Prisma } from '../../../generated/prisma';
+import type { AiToolSourceRef } from './ai-tool-source.types';
 
 /** 原子创建 Thread、首条用户消息和首个 Run 的服务输入。 */
 export type CreateAiThreadRunInput = {
@@ -95,6 +97,11 @@ export type CompleteAiRunInput = {
   failureReason: string | null;
   /** 失败路径的稳定业务错误码；非失败终态传入 `null`。 */
   failureCode: ApiErrorCode | null;
+  /**
+   * 助手最终回答正文；与终态在同一事务写入，避免出现"消息已完成但 Run 失败"的中间态。
+   * 没有生成正文（例如模型失败）时传入 `null` 或省略。
+   */
+  assistantMessageContent?: string | null;
 };
 
 /** 用户请求停止当前 Run 的服务端输入；该操作不会直接向模型流注入新的文本。 */
@@ -128,7 +135,77 @@ export type AppendAiEventInput = {
   /** 事件归属的 Run 标识。 */
   runId: string;
   /** 当前已冻结的事件类型。 */
-  type: 'RUN_STATUS_CHANGED' | 'ASSISTANT_TEXT_DELTA';
+  type: AiEventType;
   /** 可安全落库的结构化事件负载。 */
   data: Prisma.InputJsonValue;
+};
+
+/** 执行器记录一次模型步骤时使用的内部输入；序号由持有租约的唯一执行器自行递增。 */
+export type RecordAiStepInput = {
+  /** 步骤归属的 Run 标识。 */
+  runId: string;
+  /** 只有持有当前有效执行租约的执行器可以写入步骤。 */
+  executionLeaseId: string;
+  /** Run 内从 1 开始且严格递增的模型步骤序号。 */
+  sequence: number;
+  /** Gateway 实际执行本步骤的供应商模型标识；未取得时为 `null`。 */
+  resolvedModelId: string | null;
+  /** 模型步骤结束原因；未取得时为 `null`。 */
+  finishReason: string | null;
+  /** 本步骤输入 Token 数；供应商未返回时为 `null`。 */
+  inputTokens: number | null;
+  /** 本步骤输出 Token 数；供应商未返回时为 `null`。 */
+  outputTokens: number | null;
+  /** 本步骤 Token 总数；供应商未返回时为 `null`。 */
+  totalTokens: number | null;
+  /** 本步骤开始时间。 */
+  startedAt: Date;
+  /** 本步骤结束时间。 */
+  finishedAt: Date;
+};
+
+/** 执行器发起一次只读工具调用时使用的内部输入。 */
+export type StartAiToolCallInput = {
+  /** 工具调用归属的 Run 标识。 */
+  runId: string;
+  /** 只有持有当前有效执行租约的执行器可以发起工具调用。 */
+  executionLeaseId: string;
+  /** 模型侧生成的工具调用标识，用于幂等重放和与模型消息对齐。 */
+  providerToolCallId: string;
+  /** 中心工具注册表中的稳定工具名称。 */
+  toolName: string;
+  /** 工具窄输入的受控快照。 */
+  input: Prisma.InputJsonValue;
+};
+
+/** 执行器结束一次只读工具调用时使用的内部输入。 */
+export type SettleAiToolCallInput = {
+  /** 工具调用归属的 Run 标识。 */
+  runId: string;
+  /** 只有持有当前有效执行租约的执行器可以结束工具调用。 */
+  executionLeaseId: string;
+  /** 已持久化的工具调用标识。 */
+  toolCallId: string;
+  /** 工具调用的最终状态。 */
+  status: 'SUCCEEDED' | 'FAILED';
+  /** 成功时的工具窄输出受控摘要；失败时为 `null`。 */
+  outputSummary: Prisma.InputJsonValue | null;
+  /** 失败时的稳定业务错误码；成功时为 `null`。 */
+  failureCode: ApiErrorCode | null;
+  /** 失败时的稳定原因说明；成功时为 `null`。 */
+  failureReason: string | null;
+  /** 本次调用实际读取的业务来源；失败时通常为空数组。 */
+  sources: readonly AiToolSourceRef[];
+  /** 工具执行耗时，单位毫秒。 */
+  durationMs: number;
+};
+
+/** 执行器写入最终助手消息并把 Run 收敛为完成终态时使用的内部输入。 */
+export type FinishAiAssistantMessageInput = {
+  /** 助手消息归属的 Run 标识。 */
+  runId: string;
+  /** 只有持有当前有效执行租约的执行器可以写入最终助手消息。 */
+  executionLeaseId: string;
+  /** 助手最终回答正文。 */
+  content: string;
 };

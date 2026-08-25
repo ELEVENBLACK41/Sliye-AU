@@ -304,6 +304,27 @@ enum AiRunStatus {
 enum AiEventType {
   RUN_STATUS_CHANGED
   ASSISTANT_TEXT_DELTA
+  TOOL_CALL_STARTED
+  TOOL_CALL_SETTLED
+}
+
+/// 一次只读工具调用的持久化生命周期状态。
+enum AiToolCallStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+/// Run 实际读取或引用的稳定业务来源类型。
+enum AiSourceType {
+  DECISION
+  DECISION_RESOLUTION
+}
+
+/// 来源被本次 Run 使用的方式：读取用于推理，或在最终回答中被引用。
+enum AiSourceUsage {
+  READ
+  CITED
 }
 
 /// AI Run 使用的逻辑语言模型角色，不记录具体供应商模型标识。
@@ -1525,6 +1546,9 @@ model AiRun {
   retries          AiRun[]    @relation("AiRunRetries")
   activeForThread  AiThread?  @relation("AiThreadActiveRun")
   events           AiEvent[]
+  steps            AiStep[]
+  toolCalls        AiToolCall[]
+  sources          AiSourceDependency[]
 
   @@unique([retryOfRunId, retryIdempotencyKey])
   @@index([threadId, status])
@@ -1545,4 +1569,94 @@ model AiEvent {
   run AiRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@unique([runId, sequence])
+}
+
+/// 一次模型步骤的可审计记录；同一 Run 内序号严格递增，只保存受控 Token 摘要。
+model AiStep {
+  id String @id @default(cuid())
+
+  runId String
+  /// Run 内从 1 开始且严格递增的模型步骤序号。
+  sequence Int
+
+  /// Gateway 实际执行本步骤的供应商模型标识；调用未成功时可能为空。
+  resolvedModelId String?
+  /// 模型步骤结束原因，例如 stop、tool-calls、length 或 error。
+  finishReason    String?
+  /// 本步骤的输入 Token 数；供应商未返回时为空。
+  inputTokens     Int?
+  /// 本步骤的输出 Token 数；供应商未返回时为空。
+  outputTokens    Int?
+  /// 本步骤输入与输出 Token 的总数；供应商未返回时为空。
+  totalTokens     Int?
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  run       AiRun        @relation(fields: [runId], references: [id], onDelete: Cascade)
+  toolCalls AiToolCall[]
+
+  @@unique([runId, sequence])
+}
+
+/// 一次只读工具调用的受控摘要；不保存密钥、凭据或来源正文。
+model AiToolCall {
+  id String @id @default(cuid())
+
+  runId  String
+  /// 触发本次调用的模型步骤；步骤记录尚未落库时为空。
+  stepId String?
+  /// 模型侧生成的工具调用标识，用于把持久化记录与模型消息稳定对齐。
+  providerToolCallId String
+
+  /// 中心工具注册表中的稳定工具名称。
+  toolName String
+  status   AiToolCallStatus @default(RUNNING)
+  /// 工具窄输入的受控快照。
+  input    Json
+  /// 工具窄输出的受控摘要；大结果只保存来源引用和计数。
+  outputSummary Json?
+  /// 失败时的稳定业务错误码。
+  failureCode   String?
+  /// 失败时的稳定原因说明。
+  failureReason String?
+  /// 工具执行耗时，单位毫秒。
+  durationMs    Int?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  run     AiRun                @relation(fields: [runId], references: [id], onDelete: Cascade)
+  step    AiStep?              @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  sources AiSourceDependency[]
+
+  @@unique([runId, providerToolCallId])
+  @@index([runId, createdAt])
+  @@index([toolName])
+}
+
+/// Run 实际读取或引用的业务来源，可按来源反查全部受影响 Run。
+model AiSourceDependency {
+  id String @id @default(cuid())
+
+  runId String
+  /// 产生该来源的工具调用；来源由非工具路径登记时为空。
+  toolCallId String?
+
+  sourceType AiSourceType
+  /// 来源在自身业务表中的主键，统一保存为字符串以兼容不同主键类型。
+  sourceId   String
+  usage      AiSourceUsage @default(READ)
+  /// 登记时的来源名称快照，便于来源失权后说明受影响范围而不再回查业务表。
+  label      String
+
+  createdAt DateTime @default(now())
+
+  run      AiRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  toolCall AiToolCall? @relation(fields: [toolCallId], references: [id], onDelete: SetNull)
+
+  @@unique([runId, sourceType, sourceId, usage])
+  @@index([sourceType, sourceId])
 }

@@ -14,6 +14,7 @@ import type {
   CompleteAiRunInput,
   RequestAiRunStopInput,
 } from '../types/ai-persistence.types';
+import { AiAssistantMessageService } from './ai-assistant-message.service';
 import { AiEventService } from './ai-event.service';
 import { AiExecutionLeaseService } from './ai-execution-lease.service';
 import { AiQueueService } from './ai-queue.service';
@@ -38,12 +39,13 @@ export type ReconcileExpiredAiRunsResult = {
 
 @Injectable()
 export class AiRunControlService {
-  /** 注入状态事件、队列和租约服务，确保各状态变更与后续分发具有单一事务边界。 */
+  /** 注入状态事件、队列、租约和助手消息服务，确保状态变更与最终正文共用同一事务边界。 */
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventService: AiEventService,
     private readonly queueService: AiQueueService,
     private readonly executionLeaseService: AiExecutionLeaseService,
+    private readonly assistantMessageService: AiAssistantMessageService,
   ) {}
 
   /** 仅允许当前有效执行器将 RUNNING Run 收敛为完成或失败终态。 */
@@ -86,6 +88,19 @@ export class AiRunControlService {
       });
       if (completed.count !== 1) {
         throw this.createExecutionLeaseInvalidException();
+      }
+      if (
+        input.assistantMessageContent !== undefined &&
+        input.assistantMessageContent !== null
+      ) {
+        await this.assistantMessageService.writeFinalContentInTransaction(
+          transaction,
+          {
+            runId: run.id,
+            threadId: run.threadId,
+            content: input.assistantMessageContent,
+          },
+        );
       }
 
       return this.settleTerminalRunInTransaction(transaction, {

@@ -9,6 +9,7 @@ import {
   AI_TOOL_VALUE_TYPES,
   type AiToolDataContract,
   type AiToolDescriptor,
+  type AiToolDiscoveryRequirement,
   type AiToolFieldDescriptor,
 } from '../types/ai-tool-registry.types';
 
@@ -80,6 +81,36 @@ export class AiToolRegistryService {
 
     this.assertDataContract(descriptor.name, '输入', descriptor.input);
     this.assertDataContract(descriptor.name, '输出', descriptor.output);
+    this.assertDiscoveryRequirement(descriptor);
+  }
+
+  /** 校验前置发现声明指向的字段真实存在，避免编排层拿到无法执行的规则。 */
+  private assertDiscoveryRequirement(descriptor: AiToolDescriptor): void {
+    const requirement = descriptor.discoveryRequirement;
+    if (!requirement) {
+      return;
+    }
+    if (!AI_TOOL_NAME_PATTERN.test(requirement.discoveryToolName)) {
+      throw new Error(`AI 工具前置发现工具名称非法：${descriptor.name}`);
+    }
+    if (requirement.discoveryToolName === descriptor.name) {
+      throw new Error(`AI 工具不能把自己声明为前置发现工具：${descriptor.name}`);
+    }
+    if (
+      !descriptor.input.fields.some(
+        (field) => field.name === requirement.targetInputField,
+      )
+    ) {
+      throw new Error(
+        `AI 工具前置发现声明的目标字段未在输入中定义：${descriptor.name}.${requirement.targetInputField}`,
+      );
+    }
+    if (
+      requirement.candidateListField.trim().length === 0 ||
+      requirement.candidateIdentifierField.trim().length === 0
+    ) {
+      throw new Error(`AI 工具前置发现声明的候选字段不能为空：${descriptor.name}`);
+    }
   }
 
   /** 校验工具输入或输出字段都已显式声明且没有重复字段名。 */
@@ -136,7 +167,21 @@ export class AiToolRegistryService {
       ...descriptor,
       input: this.createImmutableDataContract(descriptor.input),
       output: this.createImmutableDataContract(descriptor.output),
+      ...(descriptor.discoveryRequirement
+        ? {
+            discoveryRequirement: this.createImmutableDiscoveryRequirement(
+              descriptor.discoveryRequirement,
+            ),
+          }
+        : {}),
     });
+  }
+
+  /** 深拷贝并冻结前置发现声明，避免模块外修改后绕过串联规则。 */
+  private createImmutableDiscoveryRequirement(
+    requirement: AiToolDiscoveryRequirement,
+  ): AiToolDiscoveryRequirement {
+    return Object.freeze({ ...requirement });
   }
 
   /** 深拷贝并冻结一个输入或输出数据契约。 */

@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../../database/prisma.service';
+import { AiAssistantMessageService } from './ai-assistant-message.service';
 import { AiEventService } from './ai-event.service';
 import {
   AI_RUN_EXECUTION_LEASE_DURATION_MS,
@@ -29,6 +30,7 @@ describePersistence('AI 持久化事务地基', () => {
   let eventService: AiEventService;
   let queueService: AiQueueService;
   let executionLeaseService: AiExecutionLeaseService;
+  let assistantMessageService: AiAssistantMessageService;
   const createdUserIds: number[] = [];
 
   /** 连接隔离数据库并组装不依赖 HTTP 或模型调用的持久化服务。 */
@@ -41,11 +43,16 @@ describePersistence('AI 持久化事务地基', () => {
     executionLeaseService = new AiExecutionLeaseService(prisma);
     eventService = new AiEventService(prisma, executionLeaseService);
     queueService = new AiQueueService();
+    assistantMessageService = new AiAssistantMessageService(
+      prisma,
+      executionLeaseService,
+    );
     runControlService = new AiRunControlService(
       prisma,
       eventService,
       queueService,
       executionLeaseService,
+      assistantMessageService,
     );
     threadService = new AiThreadService(
       prisma,
@@ -58,6 +65,9 @@ describePersistence('AI 持久化事务地基', () => {
   /** 每个用例结束后删除本用例 AI 数据和独立创建的用户，避免测试之间共享状态。 */
   afterEach(async () => {
     await prisma.aiEvent.deleteMany();
+    await prisma.aiSourceDependency.deleteMany();
+    await prisma.aiToolCall.deleteMany();
+    await prisma.aiStep.deleteMany();
     await prisma.aiRun.deleteMany();
     await prisma.aiMessage.deleteMany();
     await prisma.aiThread.deleteMany();

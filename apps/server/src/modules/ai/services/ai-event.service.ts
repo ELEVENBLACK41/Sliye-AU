@@ -94,6 +94,23 @@ export class AiEventService {
     });
   }
 
+  /**
+   * 由当前执行器追加一条助手文本增量事件。
+   * 事件先落库再由订阅方按序号补拉，因此浏览器断开不会丢失已生成的正文。
+   */
+  async appendAssistantTextDelta(
+    input: AiExecutionLeaseInput & { messageId: string; delta: string },
+  ) {
+    return this.prisma.$transaction((transaction) =>
+      this.appendExecutionEventInTransaction(transaction, {
+        runId: input.runId,
+        executionLeaseId: input.executionLeaseId,
+        type: 'ASSISTANT_TEXT_DELTA',
+        data: { messageId: input.messageId, delta: input.delta },
+      }),
+    );
+  }
+
   /** 按服务端 sequence 补拉指定 Run 在断线点之后的事件，永不使用前端数组下标。 */
   listAfterSequence(runId: string, afterSequence: number) {
     return this.prisma.aiEvent.findMany({
@@ -126,10 +143,17 @@ export class AiEventService {
     });
   }
 
-  /** 将共享事件类型转换为 Prisma 持久化枚举。 */
+  /** 将共享事件类型转换为 Prisma 持久化枚举，未知类型在编译期就会被穷尽检查拦截。 */
   private toPrismaAiEventType(type: AppendAiEventInput['type']): AiEventType {
-    return type === 'RUN_STATUS_CHANGED'
-      ? AiEventType.RUN_STATUS_CHANGED
-      : AiEventType.ASSISTANT_TEXT_DELTA;
+    switch (type) {
+      case 'RUN_STATUS_CHANGED':
+        return AiEventType.RUN_STATUS_CHANGED;
+      case 'ASSISTANT_TEXT_DELTA':
+        return AiEventType.ASSISTANT_TEXT_DELTA;
+      case 'TOOL_CALL_STARTED':
+        return AiEventType.TOOL_CALL_STARTED;
+      case 'TOOL_CALL_SETTLED':
+        return AiEventType.TOOL_CALL_SETTLED;
+    }
   }
 }

@@ -104,4 +104,68 @@ describe('AiToolRegistryService', () => {
         ]),
     ).toThrow('AI 工具输入字段说明不能为空');
   });
+
+  it('接受声明前置发现依赖的工具描述，并同样冻结该声明', () => {
+    const descriptor = createToolDescriptor({
+      name: 'getDecisionContext',
+      input: {
+        description: '本 Run 已发现候选中唯一命中的决策主键。',
+        fields: [
+          {
+            name: 'decisionId',
+            valueType: 'NUMBER',
+            required: true,
+            description: '待读取的决策主键。',
+          },
+        ],
+      },
+      discoveryRequirement: {
+        discoveryToolName: 'findDecisionCandidates',
+        targetInputField: 'decisionId',
+        candidateListField: 'candidates',
+        candidateIdentifierField: 'decisionId',
+      },
+    });
+    const service = new AiToolRegistryService([descriptor]);
+    const registered = service.findDescriptor('getDecisionContext');
+
+    expect(registered?.discoveryRequirement).toEqual({
+      discoveryToolName: 'findDecisionCandidates',
+      targetInputField: 'decisionId',
+      candidateListField: 'candidates',
+      candidateIdentifierField: 'decisionId',
+    });
+    expect(Object.isFrozen(registered?.discoveryRequirement)).toBe(true);
+  });
+
+  it('拒绝指向未定义输入字段或指向自身的前置发现声明', () => {
+    expect(
+      () =>
+        new AiToolRegistryService([
+          createToolDescriptor({
+            // 输入里只声明了 query，因此指向 decisionId 的前置发现声明必须被拒绝。
+            name: 'getDecisionContext',
+            discoveryRequirement: {
+              discoveryToolName: 'findDecisionCandidates',
+              targetInputField: 'decisionId',
+              candidateListField: 'candidates',
+              candidateIdentifierField: 'decisionId',
+            },
+          }),
+        ]),
+    ).toThrow('AI 工具前置发现声明的目标字段未在输入中定义');
+    expect(
+      () =>
+        new AiToolRegistryService([
+          createToolDescriptor({
+            discoveryRequirement: {
+              discoveryToolName: 'findDecisionCandidates',
+              targetInputField: 'query',
+              candidateListField: 'candidates',
+              candidateIdentifierField: 'decisionId',
+            },
+          }),
+        ]),
+    ).toThrow('AI 工具不能把自己声明为前置发现工具');
+  });
 });

@@ -1,6 +1,6 @@
 /**
  * 本文件验证 findDecisionCandidates 工具执行器只做输入校验、权限上下文派生、
- * 委托 decisions 模块查询和输出映射；不重复验证查询条件构造细节，
+ * 委托 decisions 模块查询、输出映射和来源登记；不重复验证查询条件构造细节，
  * 那部分已经在 decisions 模块的 `decision-discovery.service.spec.ts` 里覆盖。
  * 不连接真实数据库，全部依赖均为内存 mock。
  */
@@ -45,6 +45,12 @@ describe('FindDecisionCandidatesToolService', () => {
     };
   }
 
+  it('暴露与中心注册表一致的稳定工具名称', () => {
+    const { service } = createService();
+
+    expect(service.toolName).toBe('findDecisionCandidates');
+  });
+
   it('查询词为空时拒绝，且不构造权限上下文或委托查询', async () => {
     const { service, buildAuthorizationContext, findCandidates } =
       createService();
@@ -70,7 +76,7 @@ describe('FindDecisionCandidatesToolService', () => {
     );
   });
 
-  it('把 decisions 模块返回的候选映射为工具输出契约，Date 转为 ISO 字符串', async () => {
+  it('把 decisions 模块返回的候选映射为工具输出契约，并登记为本次读取的来源', async () => {
     const { service, findCandidates } = createService();
     const updatedAt = new Date('2026-08-25T08:00:00.000Z');
     findCandidates.mockResolvedValue([
@@ -86,15 +92,28 @@ describe('FindDecisionCandidatesToolService', () => {
     await expect(
       service.execute(EXECUTION_CONTEXT, { query: '缓存方案' }),
     ).resolves.toEqual({
-      candidates: [
-        {
-          decisionId: 17,
-          title: '缓存方案评审',
-          projectTitle: '基础设施项目',
-          status: 'DISCUSSING',
-          updatedAt: updatedAt.toISOString(),
-        },
+      output: {
+        candidates: [
+          {
+            decisionId: 17,
+            title: '缓存方案评审',
+            projectTitle: '基础设施项目',
+            status: 'DISCUSSING',
+            updatedAt: updatedAt.toISOString(),
+          },
+        ],
+      },
+      sources: [
+        { sourceType: 'DECISION', sourceId: '17', label: '缓存方案评审' },
       ],
     });
+  });
+
+  it('没有命中任何候选时返回空输出与空来源，不泄漏无权决策的存在', async () => {
+    const { service } = createService();
+
+    await expect(
+      service.execute(EXECUTION_CONTEXT, { query: '不存在的决策' }),
+    ).resolves.toEqual({ output: { candidates: [] }, sources: [] });
   });
 });

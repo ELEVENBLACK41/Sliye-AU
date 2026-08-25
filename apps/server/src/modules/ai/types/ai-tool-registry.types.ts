@@ -43,6 +43,23 @@ export type AiToolDataContract = {
   fields: readonly AiToolFieldDescriptor[];
 };
 
+/**
+ * 一项工具对“目标必须先被发现”的声明式依赖。
+ * 有该声明的工具只能使用某次发现调用唯一命中的目标标识，
+ * 模型不得凭空猜测标识后直接读取业务数据；规则由工具编排层统一强制执行，
+ * 因此新增同类工具只需要补一份声明，不需要在编排代码里加分支。
+ */
+export type AiToolDiscoveryRequirement = {
+  /** 必须先在同一 Run 内成功执行的发现工具名称。 */
+  discoveryToolName: string;
+  /** 本工具输入中承载目标标识的字段名。 */
+  targetInputField: string;
+  /** 发现工具输出候选数组的字段名。 */
+  candidateListField: string;
+  /** 发现工具候选项中承载目标标识的字段名。 */
+  candidateIdentifierField: string;
+};
+
 /** 一项可注册到 Agent Runtime 的只读工具描述。 */
 export type AiToolDescriptor = {
   /** 供 Runtime、审计和后续模型工具调用复用的稳定工具名称。 */
@@ -57,6 +74,8 @@ export type AiToolDescriptor = {
   input: AiToolDataContract;
   /** 工具返回的窄输出结构。 */
   output: AiToolDataContract;
+  /** 目标必须先被发现工具唯一命中时的声明；不需要前置发现的工具省略该字段。 */
+  discoveryRequirement?: AiToolDiscoveryRequirement;
 };
 
 /** 工具调用时从已领取 Run 派生的受控身份与执行状态。 */
@@ -71,3 +90,6 @@ export type AiToolExecutionContext = Pick<
 
 /** NestJS 注入中心工具描述集合时使用的内部 Token。 */
 export const AI_TOOL_DESCRIPTORS = Symbol('AI_TOOL_DESCRIPTORS');
+
+/** NestJS 注入全部已注册工具执行器时使用的内部 Token。 */
+export const AI_TOOL_EXECUTORS = Symbol('AI_TOOL_EXECUTORS');
