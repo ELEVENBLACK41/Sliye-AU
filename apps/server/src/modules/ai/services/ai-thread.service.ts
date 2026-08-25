@@ -177,6 +177,14 @@ export class AiThreadService {
         if (!thread) {
           throw this.createThreadNotFoundException();
         }
+        // 归档会话不再接收新输入，否则会产生“已归档但有活跃 Run”的矛盾状态。
+        if (thread.archivedAt !== null) {
+          throw new BusinessException({
+            code: API_ERROR_CODES.AI_THREAD_ARCHIVED,
+            message: '该会话已归档，请先恢复后再继续对话',
+            status: HttpStatus.CONFLICT,
+          });
+        }
         const lockedReplay = await tx.aiMessage.findFirst({
           where: {
             threadId: input.threadId,

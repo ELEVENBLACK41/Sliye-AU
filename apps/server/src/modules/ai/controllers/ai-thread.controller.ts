@@ -13,10 +13,13 @@ import {
   CreateAiThreadDto,
   CreateAiThreadMessageDto,
   ListAiMessagesQueryDto,
+  RenameAiThreadDto,
+  SetAiThreadArchivedDto,
   ListAiThreadsQueryDto,
   SetAiThreadPinnedDto,
 } from '../dto/ai-request.dto';
 import { AiMessageQueryService } from '../services/ai-message-query.service';
+import { AiThreadMetadataService } from '../services/ai-thread-metadata.service';
 import { AiThreadPinService } from '../services/ai-thread-pin.service';
 import { AiThreadQueryService } from '../services/ai-thread-query.service';
 import { AiThreadService } from '../services/ai-thread.service';
@@ -31,6 +34,7 @@ export class AiThreadController {
     private readonly threadQueryService: AiThreadQueryService,
     private readonly threadPinService: AiThreadPinService,
     private readonly messageQueryService: AiMessageQueryService,
+    private readonly threadMetadataService: AiThreadMetadataService,
   ) {}
 
   /** 按最后活动时间倒序分页返回当前用户的未固定会话。 */
@@ -88,6 +92,38 @@ export class AiThreadController {
       authorization.userId,
       threadId,
       { cursor: query.cursor, limit: query.limit },
+    );
+  }
+
+  /** 重命名会话；不改变会话的最后活动时间与列表排序位置。 */
+  @Put(':threadId/title')
+  @RequirePermissions('ai:chat:use')
+  @ApiOperation({ summary: '重命名 AI 会话' })
+  rename(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('threadId') threadId: string,
+    @Body() body: RenameAiThreadDto,
+  ) {
+    return this.threadMetadataService.renameThread(
+      authorization.userId,
+      threadId,
+      body.title,
+    );
+  }
+
+  /** 归档或恢复会话；归档要求没有活跃 Run，并会同时清除固定状态。 */
+  @Put(':threadId/archived')
+  @RequirePermissions('ai:chat:use')
+  @ApiOperation({ summary: '归档或恢复 AI 会话' })
+  setArchived(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('threadId') threadId: string,
+    @Body() body: SetAiThreadArchivedDto,
+  ) {
+    return this.threadMetadataService.setThreadArchived(
+      authorization.userId,
+      threadId,
+      body.archived,
     );
   }
 

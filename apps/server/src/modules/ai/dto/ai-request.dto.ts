@@ -8,11 +8,14 @@ import type {
   CreateAiThreadRequest,
   AiMessageSubmissionMode,
   AiThreadListFilter,
+  RenameAiThreadRequest,
+  SetAiThreadArchivedRequest,
   SetAiThreadPinnedRequest,
 } from '@workspace/contracts/ai';
 import {
   AI_MESSAGE_PAGE_DEFAULT_LIMIT,
   AI_THREAD_LIST_FILTERS,
+  AI_THREAD_TITLE_MAX_LENGTH,
   AI_THREAD_PAGE_DEFAULT_LIMIT,
 } from '@workspace/contracts/ai';
 import { Transform } from 'class-transformer';
@@ -119,6 +122,27 @@ export class ListAiThreadsQueryDto {
   @IsOptional()
   @IsIn(AI_THREAD_LIST_FILTERS)
   filter?: AiThreadListFilter;
+}
+
+/** 校验重命名会话的请求体。 */
+export class RenameAiThreadDto implements RenameAiThreadRequest {
+  /** 新标题，两端空白由服务端去除；去除后不得为空。 */
+  @ApiProperty()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(AI_THREAD_TITLE_MAX_LENGTH)
+  title!: string;
+}
+
+/** 校验归档或恢复会话的请求体。 */
+export class SetAiThreadArchivedDto implements SetAiThreadArchivedRequest {
+  /** `true` 归档会话，`false` 恢复会话；重复设置为同一状态是幂等的。 */
+  @ApiProperty()
+  @IsBoolean()
+  archived!: boolean;
 }
 
 /** 校验会话消息历史的游标查询参数。 */

@@ -21,16 +21,23 @@ export type ClaimedAiQueueMessage = {
 
 @Injectable()
 export class AiQueueService {
-  /** 锁定当前用户拥有的 Thread，串行化入队、替代和队首领取。 */
+  /**
+   * 锁定当前用户拥有的 Thread，串行化入队、替代、队首领取与归档判断。
+   * 同时返回归档时间，供调用方在同一把锁内判断会话是否已归档。
+   */
   async lockThread(
     transaction: Prisma.TransactionClient,
     threadId: string,
     ownerUserId: number,
-  ): Promise<{ id: string; activeRunId: string | null } | null> {
+  ): Promise<{
+    id: string;
+    activeRunId: string | null;
+    archivedAt: Date | null;
+  } | null> {
     const rows = await transaction.$queryRaw<
-      Array<{ id: string; activeRunId: string | null }>
+      Array<{ id: string; activeRunId: string | null; archivedAt: Date | null }>
     >(Prisma.sql`
-      SELECT "id", "activeRunId"
+      SELECT "id", "activeRunId", "archivedAt"
       FROM "AiThread"
       WHERE "id" = ${threadId} AND "ownerUserId" = ${ownerUserId}
       FOR UPDATE

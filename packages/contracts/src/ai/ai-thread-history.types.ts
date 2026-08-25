@@ -79,7 +79,13 @@ export type AiThreadListItem = {
   archivedAt: string | null;
   /** Thread 创建时间，使用 ISO 8601 字符串。 */
   createdAt: string;
-  /** Thread 最后一次业务变化时间，也是列表排序与游标的依据，使用 ISO 8601 字符串。 */
+  /**
+   * Thread 最后一次**会话活动**时间，也是列表排序与游标的依据，使用 ISO 8601 字符串。
+   *
+   * 只有新消息与 Run 状态变化会推进它；重命名、固定、归档、恢复等元数据变更
+   * 一律保持原值。否则改个标题就会让几个月前的会话跳到“最近”列表最前面，
+   * 让用户误以为它刚有新内容。
+   */
   updatedAt: string;
 };
 
@@ -111,6 +117,27 @@ export type AiPinnedThreadList = {
 export type SetAiThreadPinnedRequest = {
   /** `true` 固定会话，`false` 取消固定；重复设置为同一状态是幂等的。 */
   pinned: boolean;
+};
+
+/** 用户自定义会话标题允许的最大长度。 */
+export const AI_THREAD_TITLE_MAX_LENGTH = 100;
+
+/** 重命名会话的请求体。 */
+export type RenameAiThreadRequest = {
+  /** 新标题，两端空白会被去除；去除后不得为空。 */
+  title: string;
+};
+
+/**
+ * 归档或恢复一个会话的请求体。
+ *
+ * 归档要求会话当前**没有活跃 Run**：否则归档会隐式取消正在生成的回答，
+ * 这个副作用用户不一定预期，因此存在活跃 Run 时返回 `AI.THREAD_RUN_ACTIVE`，
+ * 由用户先显式停止。归档同时会清除固定状态；恢复不会自动重新固定。
+ */
+export type SetAiThreadArchivedRequest = {
+  /** `true` 归档会话，`false` 恢复会话；重复设置为同一状态是幂等的。 */
+  archived: boolean;
 };
 
 /**

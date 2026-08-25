@@ -26,6 +26,7 @@ import { AiRunService } from './ai-run.service';
 import { AiSourceDependencyService } from './ai-source-dependency.service';
 import { AiStepService } from './ai-step.service';
 import { AiMessageQueryService } from './ai-message-query.service';
+import { AiThreadMetadataService } from './ai-thread-metadata.service';
 import { AiThreadPinService } from './ai-thread-pin.service';
 import { AiThreadQueryService } from './ai-thread-query.service';
 import { AiThreadService } from './ai-thread.service';
@@ -49,6 +50,7 @@ describePersistence('AI 持久化事务地基', () => {
   let threadQueryService: AiThreadQueryService;
   let threadPinService: AiThreadPinService;
   let messageQueryService: AiMessageQueryService;
+  let threadMetadataService: AiThreadMetadataService;
   const createdUserIds: number[] = [];
 
   /** 连接隔离数据库并组装不依赖 HTTP 或模型调用的持久化服务。 */
@@ -90,6 +92,7 @@ describePersistence('AI 持久化事务地基', () => {
     threadQueryService = new AiThreadQueryService(prisma);
     threadPinService = new AiThreadPinService(prisma);
     messageQueryService = new AiMessageQueryService(prisma);
+    threadMetadataService = new AiThreadMetadataService(prisma, queueService);
   });
 
   /**
@@ -585,6 +588,152 @@ describePersistence('AI 持久化事务地基', () => {
         select: { status: true },
       }),
     ).resolves.toMatchObject({ status: 'QUEUED' });
+  });
+
+  it('重命名与归档不推进最后活动时间，归档会清除固定状态', async () => {
+    const ownerUserId = await createTestUser();
+    const created = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证元数据变更。',
+      idempotencyKey: 'thread-metadata-001',
+      modelRole: 'standard',
+    });
+    // 先让 Run 进入终态：归档要求没有活跃 Run。
+    // Run 状态变化本身**应当**推进 updatedAt，因此基准值要在它之后再设定，
+    // 否则测的就不是“元数据变更是否推进时间”了。
+    await runControlService.requestStop({
+      ownerUserId,
+      runId: created.runId,
+      cancellationReason: 'USER_REQUESTED',
+    });
+    const originalUpdatedAt = new Date('2026-08-20T08:00:00.000Z');
+    await prisma.aiThread.update({
+      where: { id: created.threadId },
+      data: { updatedAt: originalUpdatedAt },
+    });
+    await threadPinService.setThreadPinned(ownerUserId, created.threadId, true);
+
+    const renamed = await threadMetadataService.renameThread(
+      ownerUserId,
+      created.threadId,
+      '  重命名  后的   标题  ',
+    );
+    expect(renamed.title).toBe('重命名 后的 标题');
+    expect(renamed.updatedAt).toBe(originalUpdatedAt.toISOString());
+
+    const archived = await threadMetadataService.setThreadArchived(
+      ownerUserId,
+      created.threadId,
+      true,
+    );
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.pinnedAt).toBeNull();
+    expect(archived.updatedAt).toBe(originalUpdatedAt.toISOString());
+
+    // 重复归档是幂等的，不改变原有归档时间。
+    const repeated = await threadMetadataService.setThreadArchived(
+      ownerUserId,
+      created.threadId,
+      true,
+    );
+    expect(repeated.archivedAt).toBe(archived.archivedAt);
+
+    const restored = await threadMetadataService.setThreadArchived(
+      ownerUserId,
+      created.threadId,
+      false,
+    );
+    expect(restored.archivedAt).toBeNull();
+    // 恢复不会自动重新固定。
+    expect(restored.pinnedAt).toBeNull();
+  });
+
+  it('存在活跃 Run 时拒绝归档，归档后不再接收新消息', async () => {
+    const ownerUserId = await createTestUser();
+    const created = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证归档与活跃 Run 的关系。',
+      idempotencyKey: 'thread-archive-active-001',
+      modelRole: 'standard',
+    });
+
+    // 首个 Run 仍在排队，属于活跃 Run，归档必须被拒绝而不是隐式取消它。
+    await expect(
+      threadMetadataService.setThreadArchived(
+        ownerUserId,
+        created.threadId,
+        true,
+      ),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE });
+
+    await runControlService.requestStop({
+      ownerUserId,
+      runId: created.runId,
+      cancellationReason: 'USER_REQUESTED',
+    });
+    await threadMetadataService.setThreadArchived(
+      ownerUserId,
+      created.threadId,
+      true,
+    );
+
+    // 已归档会话不再接收新输入，避免出现“已归档但有活跃 Run”的矛盾状态。
+    await expect(
+      threadService.createMessageWithRun({
+        ownerUserId,
+        threadId: created.threadId,
+        message: '归档后不应被接受的消息。',
+        idempotencyKey: 'thread-archive-active-message',
+        modelRole: 'standard',
+      }),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_ARCHIVED });
+
+    // 恢复后可以继续对话。
+    await threadMetadataService.setThreadArchived(
+      ownerUserId,
+      created.threadId,
+      false,
+    );
+    await expect(
+      threadService.createMessageWithRun({
+        ownerUserId,
+        threadId: created.threadId,
+        message: '恢复后可以继续发送。',
+        idempotencyKey: 'thread-archive-restored-message',
+        modelRole: 'standard',
+      }),
+    ).resolves.toMatchObject({ threadId: created.threadId });
+  });
+
+  it('元数据变更只对所有者开放，空标题被拒绝', async () => {
+    const ownerUserId = await createTestUser();
+    const otherUserId = await createTestUser();
+    const created = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证元数据权限。',
+      idempotencyKey: 'thread-metadata-scope-001',
+      modelRole: 'standard',
+    });
+
+    await expect(
+      threadMetadataService.renameThread(
+        otherUserId,
+        created.threadId,
+        '新标题',
+      ),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
+    await expect(
+      threadMetadataService.setThreadArchived(
+        otherUserId,
+        created.threadId,
+        true,
+      ),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
+    await expect(
+      threadMetadataService.renameThread(ownerUserId, created.threadId, '   '),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
+    });
   });
 
   it('消息历史从最新往前翻页，返回时为时间正序且不重复不漏项', async () => {
