@@ -15,6 +15,7 @@ import { DecisionProposalService } from './services/decision-proposal.service';
 import { DecisionResolutionService } from './services/decision-resolution.service';
 import { DecisionVoteService } from './services/decision-vote.service';
 import { DecisionCenterQueryService } from './services/decision-center-query.service';
+import { DecisionDiscoveryService } from './services/decision-discovery.service';
 
 @Module({
   imports: [AuthModule, MeetingsModule, ProjectsModule],
@@ -31,6 +32,8 @@ import { DecisionCenterQueryService } from './services/decision-center-query.ser
     DecisionResolutionService,
     DecisionVoteService,
     DecisionCenterQueryService,
+    DecisionDiscoveryService,
   ],
+  exports: [DecisionDiscoveryService],
 })
 export class DecisionsModule {}
