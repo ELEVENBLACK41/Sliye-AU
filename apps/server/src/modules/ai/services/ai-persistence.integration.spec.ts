@@ -4,6 +4,7 @@
  */
 
 import { ConfigService } from '@nestjs/config';
+import { AI_THREAD_PINNED_MAX } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../../database/prisma.service';
@@ -24,6 +25,8 @@ import { AiRunControlService } from './ai-run-control.service';
 import { AiRunService } from './ai-run.service';
 import { AiSourceDependencyService } from './ai-source-dependency.service';
 import { AiStepService } from './ai-step.service';
+import { AiMessageQueryService } from './ai-message-query.service';
+import { AiThreadPinService } from './ai-thread-pin.service';
 import { AiThreadQueryService } from './ai-thread-query.service';
 import { AiThreadService } from './ai-thread.service';
 import { AiToolCallService } from './ai-tool-call.service';
@@ -44,6 +47,8 @@ describePersistence('AI 持久化事务地基', () => {
   let stepService: AiStepService;
   let toolCallService: AiToolCallService;
   let threadQueryService: AiThreadQueryService;
+  let threadPinService: AiThreadPinService;
+  let messageQueryService: AiMessageQueryService;
   const createdUserIds: number[] = [];
 
   /** 连接隔离数据库并组装不依赖 HTTP 或模型调用的持久化服务。 */
@@ -83,17 +88,38 @@ describePersistence('AI 持久化事务地基', () => {
     );
     runService = new AiRunService(prisma, queueService, executionLeaseService);
     threadQueryService = new AiThreadQueryService(prisma);
+    threadPinService = new AiThreadPinService(prisma);
+    messageQueryService = new AiMessageQueryService(prisma);
   });
 
-  /** 每个用例结束后删除本用例 AI 数据和独立创建的用户，避免测试之间共享状态。 */
-  afterEach(async () => {
+  /**
+   * 按外键与 CHECK 约束允许的顺序清空 AI 相关表。
+   *
+   * 助手消息的 `runId` 受 CHECK 约束不能为空，而删除 Run 会把它置为 NULL，
+   * 因此必须先删助手消息，再删 Run，最后删被 Run 以 Restrict 引用的用户消息。
+   */
+  async function clearAiTables(): Promise<void> {
     await prisma.aiEvent.deleteMany();
     await prisma.aiSourceDependency.deleteMany();
     await prisma.aiToolCall.deleteMany();
     await prisma.aiStep.deleteMany();
+    await prisma.aiMessage.deleteMany({ where: { role: 'ASSISTANT' } });
     await prisma.aiRun.deleteMany();
     await prisma.aiMessage.deleteMany();
     await prisma.aiThread.deleteMany();
+  }
+
+  /**
+   * 开跑前先清空一次：某轮用例中断导致清理没跑完时，
+   * 残留数据会让后续每一次运行都失败，这里让测试套件可以自愈。
+   */
+  beforeAll(async () => {
+    await clearAiTables();
+  });
+
+  /** 每个用例结束后删除本用例 AI 数据和独立创建的用户，避免测试之间共享状态。 */
+  afterEach(async () => {
+    await clearAiTables();
     await prisma.user.deleteMany({
       where: { id: { in: createdUserIds.splice(0) } },
     });
@@ -559,6 +585,256 @@ describePersistence('AI 持久化事务地基', () => {
         select: { status: true },
       }),
     ).resolves.toMatchObject({ status: 'QUEUED' });
+  });
+
+  it('消息历史从最新往前翻页，返回时为时间正序且不重复不漏项', async () => {
+    const ownerUserId = await createTestUser();
+    const initial = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '消息 0。',
+      idempotencyKey: 'message-page-000',
+      modelRole: 'standard',
+    });
+    // 追加若干条用户消息，并让全部消息共享同一创建时间，
+    // 这样只有标识兜底才能保证翻页顺序稳定。
+    for (let index = 1; index <= 4; index += 1) {
+      await threadService.createMessageWithRun({
+        ownerUserId,
+        threadId: initial.threadId,
+        message: `消息 ${index}。`,
+        idempotencyKey: `message-page-00${index}`,
+        modelRole: 'standard',
+      });
+    }
+    await prisma.aiMessage.updateMany({
+      where: { threadId: initial.threadId },
+      data: { createdAt: new Date('2026-08-26T09:00:00.000Z') },
+    });
+    const expectedOrder = await prisma.aiMessage.findMany({
+      where: { threadId: initial.threadId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+
+    const pages: string[][] = [];
+    let cursor: string | undefined;
+    let pageCount = 0;
+    do {
+      const page = await messageQueryService.listMessages(
+        ownerUserId,
+        initial.threadId,
+        { limit: 2, cursor },
+      );
+      pages.push(page.items.map((item) => item.id));
+      cursor = page.nextCursor ?? undefined;
+      pageCount += 1;
+      expect(pageCount).toBeLessThanOrEqual(10);
+    } while (cursor);
+
+    // 每一页内部是正序；页与页之间从最新往更早推进，因此整体需要反向拼接。
+    const collected = [...pages].reverse().flat();
+    expect(collected).toEqual(expectedOrder.map((message) => message.id));
+    expect(new Set(collected).size).toBe(expectedOrder.length);
+  });
+
+  it('助手消息带出所属 Run 状态与工具调用，但不返回工具输入输出', async () => {
+    const ownerUserId = await createTestUser();
+    const initial = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证消息展示数据。',
+      idempotencyKey: 'message-run-view-001',
+      modelRole: 'standard',
+    });
+    const lease = await runService.claimQueuedRun(initial.runId);
+    const assistant = await assistantMessageService.ensureAssistantMessage({
+      runId: initial.runId,
+      executionLeaseId: lease!.executionLeaseId,
+    });
+    const toolCall = await toolCallService.startToolCall({
+      runId: initial.runId,
+      executionLeaseId: lease!.executionLeaseId,
+      providerToolCallId: 'provider-view-1',
+      toolName: 'findDecisionCandidates',
+      input: { query: '不应出现在历史接口中的输入' },
+    });
+    await toolCallService.settleToolCall({
+      runId: initial.runId,
+      executionLeaseId: lease!.executionLeaseId,
+      toolCallId: toolCall.toolCallId,
+      status: 'SUCCEEDED',
+      outputSummary: { secret: '不应出现在历史接口中的业务输出' },
+      failureCode: null,
+      failureReason: null,
+      sources: [],
+      durationMs: 12,
+    });
+
+    const page = await messageQueryService.listMessages(
+      ownerUserId,
+      initial.threadId,
+      {},
+    );
+    const assistantItem = page.items.find(
+      (item) => item.id === assistant.messageId,
+    );
+    expect(assistantItem?.run).toMatchObject({
+      runId: initial.runId,
+      status: 'RUNNING',
+      toolCalls: [
+        {
+          id: toolCall.toolCallId,
+          toolName: 'findDecisionCandidates',
+          status: 'SUCCEEDED',
+          durationMs: 12,
+        },
+      ],
+    });
+    // 工具输入与输出承载真实业务事实，在来源失权投影落地前不得经历史接口泄漏。
+    const serialized = JSON.stringify(page);
+    expect(serialized).not.toContain('不应出现在历史接口中的输入');
+    expect(serialized).not.toContain('不应出现在历史接口中的业务输出');
+
+    // 用户消息没有 Run 快照。
+    const userItem = page.items.find((item) => item.role === 'USER');
+    expect(userItem?.run).toBeNull();
+  });
+
+  it('消息历史只对会话所有者可见，游标不能跨会话复用', async () => {
+    const ownerUserId = await createTestUser();
+    const otherUserId = await createTestUser();
+    const first = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '会话一。',
+      idempotencyKey: 'message-scope-001',
+      modelRole: 'standard',
+    });
+    const second = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '会话二。',
+      idempotencyKey: 'message-scope-002',
+      modelRole: 'standard',
+    });
+
+    await expect(
+      messageQueryService.listMessages(otherUserId, first.threadId, {}),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
+
+    const firstPage = await messageQueryService.listMessages(
+      ownerUserId,
+      first.threadId,
+      { limit: 1 },
+    );
+    // 会话一还有更早消息时才会给出游标；这里构造一个可用游标再跨会话使用。
+    const reusableCursor = firstPage.nextCursor;
+    if (reusableCursor) {
+      await expect(
+        messageQueryService.listMessages(ownerUserId, second.threadId, {
+          cursor: reusableCursor,
+        }),
+      ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_CURSOR_INVALID });
+    }
+  });
+
+  it('置顶写入是幂等的，且不会改变会话的最后活动时间', async () => {
+    const ownerUserId = await createTestUser();
+    const created = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证置顶幂等。',
+      idempotencyKey: 'thread-pin-idempotent-001',
+      modelRole: 'standard',
+    });
+    const originalUpdatedAt = new Date('2026-08-20T08:00:00.000Z');
+    await prisma.aiThread.update({
+      where: { id: created.threadId },
+      data: { updatedAt: originalUpdatedAt },
+    });
+
+    const pinned = await threadPinService.setThreadPinned(
+      ownerUserId,
+      created.threadId,
+      true,
+    );
+    expect(pinned.pinnedAt).not.toBeNull();
+    // 置顶不是会话内容变化，取消置顶后不应该凭空跳到“最近”列表最前面。
+    expect(pinned.updatedAt).toBe(originalUpdatedAt.toISOString());
+
+    // 重复置顶不改变原有固定时间，也不报错。
+    const repeated = await threadPinService.setThreadPinned(
+      ownerUserId,
+      created.threadId,
+      true,
+    );
+    expect(repeated.pinnedAt).toBe(pinned.pinnedAt);
+
+    const unpinned = await threadPinService.setThreadPinned(
+      ownerUserId,
+      created.threadId,
+      false,
+    );
+    expect(unpinned.pinnedAt).toBeNull();
+    expect(unpinned.updatedAt).toBe(originalUpdatedAt.toISOString());
+  });
+
+  it('并发置顶不会突破固定数量上限', async () => {
+    const ownerUserId = await createTestUser();
+    const threadIds: string[] = [];
+    for (let index = 0; index < AI_THREAD_PINNED_MAX + 3; index += 1) {
+      const created = await threadService.createThreadWithInitialRun({
+        ownerUserId,
+        message: `并发置顶会话 ${index}。`,
+        idempotencyKey: `thread-pin-limit-${index}`,
+        modelRole: 'standard',
+      });
+      threadIds.push(created.threadId);
+    }
+
+    // 全部同时置顶：只有上限内的请求可以成功，其余必须稳定失败。
+    const results = await Promise.allSettled(
+      threadIds.map((threadId) =>
+        threadPinService.setThreadPinned(ownerUserId, threadId, true),
+      ),
+    );
+    const rejected = results.filter((result) => result.status === 'rejected');
+    expect(rejected).toHaveLength(3);
+    for (const result of rejected) {
+      expect(result.reason).toMatchObject({
+        code: API_ERROR_CODES.AI_THREAD_PINNED_LIMIT_EXCEEDED,
+      });
+    }
+
+    await expect(
+      prisma.aiThread.count({
+        where: { ownerUserId, pinnedAt: { not: null } },
+      }),
+    ).resolves.toBe(AI_THREAD_PINNED_MAX);
+    const pinnedList = await threadPinService.listPinnedThreads(ownerUserId);
+    expect(pinnedList.items).toHaveLength(AI_THREAD_PINNED_MAX);
+    expect(pinnedList.limit).toBe(AI_THREAD_PINNED_MAX);
+  });
+
+  it('已归档会话不能被固定，非所有者不能改变固定状态', async () => {
+    const ownerUserId = await createTestUser();
+    const otherUserId = await createTestUser();
+    const created = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证归档与置顶互斥。',
+      idempotencyKey: 'thread-pin-archived-001',
+      modelRole: 'standard',
+    });
+    await prisma.aiThread.update({
+      where: { id: created.threadId },
+      data: { archivedAt: new Date() },
+    });
+
+    await expect(
+      threadPinService.setThreadPinned(ownerUserId, created.threadId, true),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_ARCHIVED });
+    await expect(
+      threadPinService.setThreadPinned(otherUserId, created.threadId, true),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
+    await expect(
+      threadPinService.listPinnedThreads(ownerUserId),
+    ).resolves.toMatchObject({ items: [] });
   });
 
   it('同一最后活动时间的多条会话翻页不重复不漏项，且排除已固定会话', async () => {

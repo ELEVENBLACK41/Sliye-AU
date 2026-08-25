@@ -4,7 +4,7 @@
  * 业务对象由 Agent 从用户消息中发现，并在工具调用时由 NestJS 实时鉴权。
  */
 
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuthorization } from '../../auth/decorators/current-authorization.decorator';
 import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
@@ -12,8 +12,12 @@ import type { AuthorizationContext } from '../../auth/types/auth.types';
 import {
   CreateAiThreadDto,
   CreateAiThreadMessageDto,
+  ListAiMessagesQueryDto,
   ListAiThreadsQueryDto,
+  SetAiThreadPinnedDto,
 } from '../dto/ai-request.dto';
+import { AiMessageQueryService } from '../services/ai-message-query.service';
+import { AiThreadPinService } from '../services/ai-thread-pin.service';
 import { AiThreadQueryService } from '../services/ai-thread-query.service';
 import { AiThreadService } from '../services/ai-thread.service';
 
@@ -25,6 +29,8 @@ export class AiThreadController {
   constructor(
     private readonly threadService: AiThreadService,
     private readonly threadQueryService: AiThreadQueryService,
+    private readonly threadPinService: AiThreadPinService,
+    private readonly messageQueryService: AiMessageQueryService,
   ) {}
 
   /** 按最后活动时间倒序分页返回当前用户的未固定会话。 */
@@ -40,6 +46,49 @@ export class AiThreadController {
       limit: query.limit,
       filter: query.filter,
     });
+  }
+
+  /**
+   * 一次性返回当前用户的全部固定会话。
+   * 该路由必须声明在 `:threadId` 之前，否则 `pinned` 会被当作 Thread 标识匹配。
+   */
+  @Get('pinned')
+  @RequirePermissions('ai:chat:use')
+  @ApiOperation({ summary: '查询固定的 AI 会话列表' })
+  listPinned(@CurrentAuthorization() authorization: AuthorizationContext) {
+    return this.threadPinService.listPinnedThreads(authorization.userId);
+  }
+
+  /** 固定或取消固定一个会话；重复设置为同一状态是幂等的。 */
+  @Put(':threadId/pinned')
+  @RequirePermissions('ai:chat:use')
+  @ApiOperation({ summary: '固定或取消固定 AI 会话' })
+  setPinned(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('threadId') threadId: string,
+    @Body() body: SetAiThreadPinnedDto,
+  ) {
+    return this.threadPinService.setThreadPinned(
+      authorization.userId,
+      threadId,
+      body.pinned,
+    );
+  }
+
+  /** 按创建时间从新到旧分页读取会话消息，返回时为时间正序。 */
+  @Get(':threadId/messages')
+  @RequirePermissions('ai:chat:use')
+  @ApiOperation({ summary: '分页查询 AI 会话消息历史' })
+  listMessages(
+    @CurrentAuthorization() authorization: AuthorizationContext,
+    @Param('threadId') threadId: string,
+    @Query() query: ListAiMessagesQueryDto,
+  ) {
+    return this.messageQueryService.listMessages(
+      authorization.userId,
+      threadId,
+      { cursor: query.cursor, limit: query.limit },
+    );
   }
 
   /** 读取单条会话详情与当前活跃 Run 快照；非所有者统一返回不存在。 */

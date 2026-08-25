@@ -11,7 +11,6 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import type {
   AiThreadDetail,
   AiThreadListFilter,
-  AiThreadListItem,
   AiThreadPage,
 } from '@workspace/contracts/ai';
 import {
@@ -23,29 +22,11 @@ import { BusinessException } from '../../../common/exceptions/business.exception
 import { PrismaService } from '../../../database/prisma.service';
 import type { Prisma } from '../../../generated/prisma';
 import { isAiRunNonTerminalStatus } from '../state/ai-run.machine';
-import { decodeAiThreadCursor, encodeAiThreadCursor } from './ai-thread-cursor';
-
-/** 列表与详情共用的会话字段投影，保证两个接口返回同一组元数据。 */
-const AI_THREAD_LIST_ITEM_SELECT = {
-  id: true,
-  title: true,
-  activeRunId: true,
-  pinnedAt: true,
-  archivedAt: true,
-  createdAt: true,
-  updatedAt: true,
-} as const;
-
-/** 已投影的会话行，用于在服务内部转换为对外契约。 */
-type AiThreadRow = {
-  id: string;
-  title: string;
-  activeRunId: string | null;
-  pinnedAt: Date | null;
-  archivedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
+import { AI_CURSOR_KINDS, decodeAiCursor, encodeAiCursor } from './ai-cursor';
+import {
+  AI_THREAD_LIST_ITEM_SELECT,
+  toAiThreadListItem,
+} from './ai-thread-projection';
 
 @Injectable()
 export class AiThreadQueryService {
@@ -81,12 +62,13 @@ export class AiThreadQueryService {
     const lastItem = items.at(-1);
 
     return {
-      items: items.map((row) => this.toListItem(row)),
+      items: items.map(toAiThreadListItem),
       nextCursor:
         hasMore && lastItem
-          ? encodeAiThreadCursor({
-              filter,
-              updatedAt: lastItem.updatedAt,
+          ? encodeAiCursor({
+              kind: AI_CURSOR_KINDS.THREAD_LIST,
+              scope: filter,
+              time: lastItem.updatedAt,
               id: lastItem.id,
             })
           : null,
@@ -120,7 +102,7 @@ export class AiThreadQueryService {
     const activeRun = thread.activeRun;
 
     return {
-      ...this.toListItem(thread),
+      ...toAiThreadListItem(thread),
       activeRun:
         activeRun && isAiRunNonTerminalStatus(activeRun.status)
           ? {
@@ -167,26 +149,16 @@ export class AiThreadQueryService {
       return {};
     }
 
-    const position = decodeAiThreadCursor(cursor, filter);
+    const position = decodeAiCursor(cursor, {
+      kind: AI_CURSOR_KINDS.THREAD_LIST,
+      scope: filter,
+    });
 
     return {
       OR: [
-        { updatedAt: { lt: position.updatedAt } },
-        { updatedAt: position.updatedAt, id: { lt: position.id } },
+        { updatedAt: { lt: position.time } },
+        { updatedAt: position.time, id: { lt: position.id } },
       ],
-    };
-  }
-
-  /** 把数据库行转换为对外契约；时间统一为 ISO 8601 字符串。 */
-  private toListItem(row: AiThreadRow): AiThreadListItem {
-    return {
-      id: row.id,
-      title: row.title,
-      activeRunId: row.activeRunId,
-      pinnedAt: row.pinnedAt?.toISOString() ?? null,
-      archivedAt: row.archivedAt?.toISOString() ?? null,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
     };
   }
 }

@@ -8,13 +8,16 @@ import type {
   CreateAiThreadRequest,
   AiMessageSubmissionMode,
   AiThreadListFilter,
+  SetAiThreadPinnedRequest,
 } from '@workspace/contracts/ai';
 import {
+  AI_MESSAGE_PAGE_DEFAULT_LIMIT,
   AI_THREAD_LIST_FILTERS,
   AI_THREAD_PAGE_DEFAULT_LIMIT,
 } from '@workspace/contracts/ai';
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -82,6 +85,14 @@ export class CreateAiThreadMessageDto {
   submissionMode?: AiMessageSubmissionMode;
 }
 
+/** 校验固定或取消固定会话的请求体。 */
+export class SetAiThreadPinnedDto implements SetAiThreadPinnedRequest {
+  /** `true` 固定会话，`false` 取消固定；重复设置为同一状态是幂等的。 */
+  @ApiProperty()
+  @IsBoolean()
+  pinned!: boolean;
+}
+
 /**
  * 校验 Thread 列表的游标查询参数。
  *
@@ -108,6 +119,23 @@ export class ListAiThreadsQueryDto {
   @IsOptional()
   @IsIn(AI_THREAD_LIST_FILTERS)
   filter?: AiThreadListFilter;
+}
+
+/** 校验会话消息历史的游标查询参数。 */
+export class ListAiMessagesQueryDto {
+  /** 上一页返回的不透明游标；首次请求省略。 */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_AI_CURSOR_LENGTH)
+  cursor?: string;
+
+  /** 单页条数，缺省与上限由 contracts 常量定义。 */
+  @ApiPropertyOptional({ default: AI_MESSAGE_PAGE_DEFAULT_LIMIT })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  limit?: number;
 }
 
 /**

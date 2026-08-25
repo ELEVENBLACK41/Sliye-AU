@@ -6,7 +6,7 @@
 
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { Prisma } from '../../../generated/prisma';
-import { decodeAiThreadCursor } from './ai-thread-cursor';
+import { AI_CURSOR_KINDS, decodeAiCursor } from './ai-cursor';
 import { AiThreadQueryService } from './ai-thread-query.service';
 
 /** 构造一行数据库投影结果。 */
@@ -103,10 +103,12 @@ describe('AiThreadQueryService', () => {
       expect(page.items.map((item) => item.id)).toEqual(['a', 'b']);
       expect(page.hasMore).toBe(true);
       // 游标指向本页最后一条，而不是被截掉的那条。
-      expect(decodeAiThreadCursor(page.nextCursor!, 'ACTIVE')).toEqual({
-        updatedAt: new Date('2026-08-25T09:00:00.000Z'),
-        id: 'b',
-      });
+      expect(
+        decodeAiCursor(page.nextCursor!, {
+          kind: AI_CURSOR_KINDS.THREAD_LIST,
+          scope: 'ACTIVE',
+        }),
+      ).toEqual({ time: new Date('2026-08-25T09:00:00.000Z'), id: 'b' });
     });
 
     it('没有更多数据时不返回游标', async () => {
