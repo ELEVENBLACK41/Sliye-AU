@@ -1,37 +1,26 @@
 /**
- * 本文件定义绑定单项 Decision 的 AI Thread 共享契约。
- * Thread 只承担会话容器、权限范围和当前运行门禁，不保存模型执行细节。
+ * 本文件定义不持久化业务目标的 AI Thread 与创建会话请求共享契约。
+ * 项目、决策、会议等查询目标由 Agent 从每次用户消息中解析，不作为 Thread 字段保存。
  */
 
-/** AI Thread 可被普通用户读取或因业务来源失权而被锁定的范围状态。 */
-export const AI_THREAD_SCOPE_STATES = ['ACTIVE', 'LOCKED'] as const;
+/** 创建首条消息和 Thread 时使用的共享请求契约。 */
+export type CreateAiThreadRequest = {
+  /** 创建 Thread 的首条非空用户消息，也是 Agent 解析本次业务目标的原始输入。 */
+  message: string;
+  /** 当前用户创建请求范围内的幂等键。 */
+  idempotencyKey: string;
+};
 
-/** AI Thread 当前的权限范围状态。 */
-export type AiThreadScopeState = (typeof AI_THREAD_SCOPE_STATES)[number];
-
-/** 第一版 AI Thread 的锁定原因。 */
-export type AiThreadLockReason = 'SCOPE_CHANGED';
-
-/** 一条绑定单项 Decision、归属于创建用户的持久化 AI 会话。 */
+/** 一条只归属于创建用户、不绑定任何业务目标的持久化 AI 会话。 */
 export type AiThread = {
   /** 对外稳定且不可推断业务数量的 Thread 标识。 */
   id: string;
   /** Thread 创建者和唯一拥有者的用户主键。 */
   ownerUserId: number;
-  /** 由服务端根据 Decision 解析并固化的项目主键。 */
-  projectId: number;
-  /** 第一版 Thread 唯一绑定且不可在会话内切换的决策主键。 */
-  decisionId: number;
   /** 默认由首条用户问题截断生成、允许用户后续修改的会话标题。 */
   title: string;
   /** 当前非终态 Run 标识；没有正在处理的 Run 时为 `null`。 */
   activeRunId: string | null;
-  /** 当前 Thread 是否仍处于创建用户可读取的业务范围内。 */
-  scopeState: AiThreadScopeState;
-  /** Thread 被锁定的稳定原因；正常可读时为 `null`。 */
-  lockReason: AiThreadLockReason | null;
-  /** Thread 首次因权限范围变化被锁定的时间；正常可读时为 `null`。 */
-  scopeChangedAt: string | null;
   /** 用户归档 Thread 的时间；未归档时为 `null`。 */
   archivedAt: string | null;
   /** Thread 创建时间，使用 ISO 8601 字符串。 */
