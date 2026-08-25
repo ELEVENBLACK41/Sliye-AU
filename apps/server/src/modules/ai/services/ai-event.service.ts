@@ -77,6 +77,33 @@ export class AiEventService {
     });
   }
 
+  /** 在 Run 终态控制事务中记录被强制收敛的工具调用，不再要求已失效租约。 */
+  async appendToolCallSettledByControlInTransaction(
+    transaction: Prisma.TransactionClient,
+    input: {
+      runId: string;
+      toolCallId: string;
+      toolName: string;
+      failureCode: string;
+      failureReason: string;
+      durationMs: number;
+    },
+  ) {
+    return this.appendEventInTransaction(transaction, {
+      runId: input.runId,
+      type: 'TOOL_CALL_SETTLED',
+      data: {
+        toolCallId: input.toolCallId,
+        toolName: input.toolName,
+        status: 'FAILED',
+        outputSummary: null,
+        failureCode: input.failureCode,
+        failureReason: input.failureReason,
+        durationMs: input.durationMs,
+      },
+    });
+  }
+
   /** 在已完成权限或状态 fencing 的前提下写入不可变事件与序号。 */
   private async appendEventInTransaction(
     transaction: Prisma.TransactionClient,

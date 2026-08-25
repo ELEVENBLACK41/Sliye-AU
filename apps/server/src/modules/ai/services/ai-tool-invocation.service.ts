@@ -87,13 +87,37 @@ export class AiToolInvocationService {
     request: AiToolInvocationRequest,
   ): Promise<AiToolInvocationResult> {
     const startedAt = Date.now();
-    const { toolCallId } = await this.toolCallService.startToolCall({
+    const started = await this.toolCallService.startToolCall({
       runId: executionContext.runId,
       executionLeaseId: executionContext.executionLeaseId,
       providerToolCallId: request.providerToolCallId,
       toolName: request.toolName,
       input: request.input as Prisma.InputJsonValue,
     });
+    if (started.state === 'REPLAY_SUCCEEDED') {
+      return {
+        status: 'SUCCEEDED',
+        toolCallId: started.toolCallId,
+        output: started.output,
+      };
+    }
+    if (started.state === 'REPLAY_FAILED') {
+      return {
+        status: 'FAILED',
+        toolCallId: started.toolCallId,
+        failureCode: started.failureCode,
+        failureReason: started.failureReason,
+      };
+    }
+    if (started.state === 'IN_PROGRESS') {
+      return {
+        status: 'FAILED',
+        toolCallId: started.toolCallId,
+        failureCode: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
+        failureReason: '相同工具调用仍在处理中，请勿重复执行',
+      };
+    }
+    const { toolCallId } = started;
 
     try {
       const descriptor = this.resolveDescriptor(request.toolName);
@@ -303,6 +327,12 @@ export class AiToolInvocationService {
         );
       }
       executorMap.set(executor.toolName, executor);
+    }
+
+    for (const descriptor of this.registry.listDescriptors()) {
+      if (!executorMap.has(descriptor.name)) {
+        throw new Error(`AI 工具描述没有对应执行器：${descriptor.name}`);
+      }
     }
 
     return executorMap;

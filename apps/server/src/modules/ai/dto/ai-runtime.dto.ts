@@ -8,6 +8,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { AiRunFailureReason } from '@workspace/contracts/ai';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsIn,
   IsISO8601,
   IsInt,
@@ -29,6 +31,9 @@ const MAX_TEXT_DELTA_LENGTH = 8_000;
 
 /** 助手最终正文允许的最大长度。 */
 const MAX_ASSISTANT_CONTENT_LENGTH = 40_000;
+
+/** 单个模型步骤允许关联的最大工具调用数量。 */
+const MAX_TOOL_CALLS_PER_STEP = 20;
 
 /** 全部内部执行接口共用的租约凭据。 */
 export class AiRuntimeLeaseDto {
@@ -108,6 +113,14 @@ export class RecordAiStepDto extends AiRuntimeLeaseDto {
   @ApiProperty()
   @IsISO8601()
   finishedAt!: string;
+
+  /** 本步骤内由模型生成的工具调用标识，用于关联审计记录。 */
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMaxSize(MAX_TOOL_CALLS_PER_STEP)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  providerToolCallIds!: string[];
 }
 
 /** 发起一次只读工具调用的内部请求。 */
@@ -169,10 +182,20 @@ export class CompleteAiRunDto extends AiRuntimeLeaseDto {
 
   /** 失败路径的稳定原因；完成时省略。 */
   @ApiPropertyOptional({
-    enum: ['MODEL_ERROR', 'TOOL_ERROR', 'EXECUTION_LEASE_EXPIRED', 'INTERNAL_ERROR'],
+    enum: [
+      'MODEL_ERROR',
+      'TOOL_ERROR',
+      'EXECUTION_LEASE_EXPIRED',
+      'INTERNAL_ERROR',
+    ],
   })
   @IsOptional()
-  @IsIn(['MODEL_ERROR', 'TOOL_ERROR', 'EXECUTION_LEASE_EXPIRED', 'INTERNAL_ERROR'])
+  @IsIn([
+    'MODEL_ERROR',
+    'TOOL_ERROR',
+    'EXECUTION_LEASE_EXPIRED',
+    'INTERNAL_ERROR',
+  ])
   failureReason?: AiRunFailureReason;
 
   /** 失败路径的稳定业务错误码；完成时省略。 */

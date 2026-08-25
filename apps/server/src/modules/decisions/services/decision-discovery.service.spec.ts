@@ -26,8 +26,10 @@ describe('DecisionDiscoveryService', () => {
     const buildDecisionWhere = jest.fn().mockResolvedValue({
       AND: [{ project: { members: { some: { userId: 42 } } } }],
     });
+    const assertPermission = jest.fn();
     const authorizationService = {
       buildDecisionWhere,
+      assertPermission,
     } as unknown as AuthorizationService;
 
     return {
@@ -37,15 +39,21 @@ describe('DecisionDiscoveryService', () => {
       ),
       findMany,
       buildDecisionWhere,
+      assertPermission,
     };
   }
 
   it('非数字查询词只按标题模糊匹配，并叠加在统一授权范围之上', async () => {
-    const { service, findMany, buildDecisionWhere } = createService();
+    const { service, findMany, buildDecisionWhere, assertPermission } =
+      createService();
 
     await service.findCandidates(AUTHORIZATION_CONTEXT, '缓存方案评审', 5);
 
     expect(buildDecisionWhere).toHaveBeenCalledWith(
+      AUTHORIZATION_CONTEXT,
+      'decision:read',
+    );
+    expect(assertPermission).toHaveBeenCalledWith(
       AUTHORIZATION_CONTEXT,
       'decision:read',
     );
@@ -73,21 +81,37 @@ describe('DecisionDiscoveryService', () => {
 
     await service.findCandidates(AUTHORIZATION_CONTEXT, '17', 5);
 
-    const calledWith = findMany.mock.calls[0][0];
-    expect(calledWith.where.AND[1].OR).toEqual([
-      { title: { contains: '17', mode: 'insensitive' } },
-      { id: 17 },
-    ]);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            { AND: [{ project: { members: { some: { userId: 42 } } } }] },
+            {
+              OR: [
+                { title: { contains: '17', mode: 'insensitive' } },
+                { id: 17 },
+              ],
+            },
+          ],
+        },
+      }),
+    );
   });
 
   it('limit 会被限制在 1 到 20 之间，避免调用方传入越界数量', async () => {
     const { service, findMany } = createService();
 
     await service.findCandidates(AUTHORIZATION_CONTEXT, 'x', 999);
-    expect(findMany.mock.calls[0][0].take).toBe(20);
+    expect(findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ take: 20 }),
+    );
 
     await service.findCandidates(AUTHORIZATION_CONTEXT, 'x', 0);
-    expect(findMany.mock.calls[1][0].take).toBe(1);
+    expect(findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ take: 1 }),
+    );
   });
 
   it('把查询结果映射为最小候选摘要，保留原生 Date 类型', async () => {

@@ -34,7 +34,7 @@ export class AiRuntimeServiceGuard implements CanActivate {
     );
     if (!configuredToken) {
       throw this.createUnauthorizedException(
-        '服务端未配置 AI Runtime 内部密钥，内部执行接口不可用',
+        '内部执行接口只允许 AI Runtime 调用',
       );
     }
 

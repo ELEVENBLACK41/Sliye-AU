@@ -90,11 +90,22 @@ const CONTEXT_DESCRIPTOR: AiToolDescriptor = {
 
 describe('AiToolInvocationService', () => {
   /** 创建注册表真实、持久化与执行器均为 mock 的编排服务。 */
-  function createService(options: {
-    execute?: jest.Mock;
-    discoveries?: Array<{ toolCallId: string; candidateIdentifiers: Array<number | string> }>;
-  } = {}) {
-    const startToolCall = jest.fn().mockResolvedValue({ toolCallId: 'tool-call-1' });
+  function createService(
+    options: {
+      execute?: jest.Mock;
+      discoveries?: Array<{
+        toolCallId: string;
+        candidateIdentifiers: Array<number | string>;
+      }>;
+      startResult?: unknown;
+    } = {},
+  ) {
+    const startToolCall = jest.fn().mockResolvedValue(
+      options.startResult ?? {
+        state: 'CREATED',
+        toolCallId: 'tool-call-1',
+      },
+    );
     const settleToolCall = jest.fn().mockResolvedValue(undefined);
     const listSucceededDiscoveryCalls = jest
       .fn()
@@ -109,7 +120,9 @@ describe('AiToolInvocationService', () => {
       options.execute ??
       jest.fn().mockResolvedValue({
         output: { decisionId: 17 },
-        sources: [{ sourceType: 'DECISION', sourceId: '17', label: '缓存方案评审' }],
+        sources: [
+          { sourceType: 'DECISION', sourceId: '17', label: '缓存方案评审' },
+        ],
       });
     const contextExecutor = {
       toolName: 'getDecisionContext',
@@ -117,7 +130,9 @@ describe('AiToolInvocationService', () => {
     } as unknown as AiToolExecutor<Record<string, unknown>, unknown>;
     const discoveryExecutor = {
       toolName: 'findDecisionCandidates',
-      execute: jest.fn().mockResolvedValue({ output: { candidates: [] }, sources: [] }),
+      execute: jest
+        .fn()
+        .mockResolvedValue({ output: { candidates: [] }, sources: [] }),
     } as unknown as AiToolExecutor<Record<string, unknown>, unknown>;
 
     const registry = new AiToolRegistryService([
@@ -177,7 +192,9 @@ describe('AiToolInvocationService', () => {
 
   it('候选多于一个时拒绝读取上下文，模型必须先向用户消歧', async () => {
     const { service, execute } = createService({
-      discoveries: [{ toolCallId: 'tool-call-0', candidateIdentifiers: [17, 18] }],
+      discoveries: [
+        { toolCallId: 'tool-call-0', candidateIdentifiers: [17, 18] },
+      ],
     });
 
     const result = await service.invokeTool(EXECUTION_CONTEXT, {
@@ -232,7 +249,9 @@ describe('AiToolInvocationService', () => {
       expect.objectContaining({
         status: 'SUCCEEDED',
         outputSummary: { decisionId: 17 },
-        sources: [{ sourceType: 'DECISION', sourceId: '17', label: '缓存方案评审' }],
+        sources: [
+          { sourceType: 'DECISION', sourceId: '17', label: '缓存方案评审' },
+        ],
       }),
     );
   });
@@ -261,10 +280,36 @@ describe('AiToolInvocationService', () => {
     });
   });
 
+  it('相同工具调用已经成功时直接重放摘要，不再次读取业务数据或写结束事件', async () => {
+    const { service, execute, settleToolCall } = createService({
+      startResult: {
+        state: 'REPLAY_SUCCEEDED',
+        toolCallId: 'tool-call-replay',
+        output: { decisionId: 17 },
+      },
+    });
+
+    await expect(
+      service.invokeTool(EXECUTION_CONTEXT, {
+        providerToolCallId: 'call-replay',
+        toolName: 'getDecisionContext',
+        input: { decisionId: 17 },
+      }),
+    ).resolves.toEqual({
+      status: 'SUCCEEDED',
+      toolCallId: 'tool-call-replay',
+      output: { decisionId: 17 },
+    });
+    expect(execute).not.toHaveBeenCalled();
+    expect(settleToolCall).not.toHaveBeenCalled();
+  });
+
   it('工具抛出未知异常时只返回脱敏说明', async () => {
     const { service } = createService({
       discoveries: [{ toolCallId: 'tool-call-0', candidateIdentifiers: [17] }],
-      execute: jest.fn().mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:5432')),
+      execute: jest
+        .fn()
+        .mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:5432')),
     });
 
     const result = await service.invokeTool(EXECUTION_CONTEXT, {
@@ -277,7 +322,9 @@ describe('AiToolInvocationService', () => {
       status: 'FAILED',
       failureCode: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
     });
-    expect(result.status === 'FAILED' && result.failureReason).not.toContain('ECONNREFUSED');
+    expect(result.status === 'FAILED' && result.failureReason).not.toContain(
+      'ECONNREFUSED',
+    );
   });
 
   it('构造时拒绝没有对应注册描述的执行器，避免出现模型看不到的隐藏能力', () => {
@@ -289,9 +336,24 @@ describe('AiToolInvocationService', () => {
 
     expect(
       () =>
-        new AiToolInvocationService(registry, {} as unknown as AiToolCallService, [
-          orphanExecutor,
-        ]),
+        new AiToolInvocationService(
+          registry,
+          {} as unknown as AiToolCallService,
+          [orphanExecutor],
+        ),
     ).toThrow('AI 工具执行器没有对应的注册描述');
+  });
+
+  it('构造时拒绝没有执行器的工具描述，避免模型看到运行时不可用的能力', () => {
+    const registry = new AiToolRegistryService([DISCOVERY_DESCRIPTOR]);
+
+    expect(
+      () =>
+        new AiToolInvocationService(
+          registry,
+          {} as unknown as AiToolCallService,
+          [],
+        ),
+    ).toThrow('AI 工具描述没有对应执行器');
   });
 });

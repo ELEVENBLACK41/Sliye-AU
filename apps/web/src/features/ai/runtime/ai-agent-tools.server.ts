@@ -6,13 +6,10 @@
 import 'server-only';
 
 import { dynamicTool, type ToolSet } from 'ai';
+import type { AiRuntimeToolDescriptor, AiRuntimeToolField } from '@workspace/contracts/ai';
 import { z } from 'zod';
 
-import {
-  invokeAiRuntimeTool,
-  type AiRuntimeToolDescriptor,
-  type AiRuntimeToolField,
-} from './ai-runtime-client.server.ts';
+import { invokeAiRuntimeTool } from './ai-runtime-client.server.ts';
 
 /** 构造动态工具集合时需要的当前执行凭据。 */
 export type AiAgentToolContext = {
@@ -86,7 +83,5 @@ function toFieldSchema(field: AiRuntimeToolField): z.ZodTypeAny {
 
 /** 模型输入始终按对象传给服务端；非对象输入统一归一化为空对象由服务端拒绝。 */
 function toToolInput(input: unknown): Record<string, unknown> {
-  return typeof input === 'object' && input !== null && !Array.isArray(input)
-    ? (input as Record<string, unknown>)
-    : {};
+  return typeof input === 'object' && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
 }

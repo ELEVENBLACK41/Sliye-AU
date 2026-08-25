@@ -7,6 +7,12 @@ import { ConfigService } from '@nestjs/config';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../../database/prisma.service';
+import { DataScope } from '../../../generated/prisma';
+import { AuthorizationService } from '../../auth/services/authorization.service';
+import type { AuthorizationContext } from '../../auth/types/auth.types';
+import { DecisionContextService } from '../../decisions/services/decision-context.service';
+import type { AiPermissionPolicyService } from '../policies/ai-permission-policy';
+import { GetDecisionContextToolService } from '../tools/decision/get-decision-context.service';
 import { AiAssistantMessageService } from './ai-assistant-message.service';
 import { AiEventService } from './ai-event.service';
 import {
@@ -16,7 +22,10 @@ import {
 import { AiQueueService } from './ai-queue.service';
 import { AiRunControlService } from './ai-run-control.service';
 import { AiRunService } from './ai-run.service';
+import { AiSourceDependencyService } from './ai-source-dependency.service';
+import { AiStepService } from './ai-step.service';
 import { AiThreadService } from './ai-thread.service';
+import { AiToolCallService } from './ai-tool-call.service';
 
 /** 只有明确指定隔离测试数据库时才执行真实数据库测试。 */
 const testDatabaseUrl = process.env['AI_PERSISTENCE_TEST_DATABASE_URL'];
@@ -31,6 +40,8 @@ describePersistence('AI 持久化事务地基', () => {
   let queueService: AiQueueService;
   let executionLeaseService: AiExecutionLeaseService;
   let assistantMessageService: AiAssistantMessageService;
+  let stepService: AiStepService;
+  let toolCallService: AiToolCallService;
   const createdUserIds: number[] = [];
 
   /** 连接隔离数据库并组装不依赖 HTTP 或模型调用的持久化服务。 */
@@ -47,12 +58,21 @@ describePersistence('AI 持久化事务地基', () => {
       prisma,
       executionLeaseService,
     );
+    const sourceDependencyService = new AiSourceDependencyService(prisma);
+    toolCallService = new AiToolCallService(
+      prisma,
+      eventService,
+      executionLeaseService,
+      sourceDependencyService,
+    );
+    stepService = new AiStepService(prisma, executionLeaseService);
     runControlService = new AiRunControlService(
       prisma,
       eventService,
       queueService,
       executionLeaseService,
       assistantMessageService,
+      toolCallService,
     );
     threadService = new AiThreadService(
       prisma,
@@ -517,6 +537,7 @@ describePersistence('AI 持久化事务地基', () => {
     await expect(runControlService.reconcileExpiredRuns()).resolves.toEqual({
       scannedRunCount: 1,
       reconciledRunCount: 1,
+      nextRunIds: [expect.any(String)],
     });
     await expect(
       prisma.aiRun.findUnique({
@@ -534,6 +555,155 @@ describePersistence('AI 持久化事务地基', () => {
         select: { status: true },
       }),
     ).resolves.toMatchObject({ status: 'QUEUED' });
+  });
+
+  it('模型步骤关联工具调用，Run 终态会收敛遗留的运行中工具审计', async () => {
+    const ownerUserId = await createTestUser();
+    const initial = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证工具审计收敛。',
+      idempotencyKey: 'tool-audit-settlement-001',
+      modelRole: 'standard',
+    });
+    const lease = await runService.claimQueuedRun(initial.runId);
+    expect(lease).not.toBeNull();
+    const settledCall = await toolCallService.startToolCall({
+      runId: initial.runId,
+      executionLeaseId: lease!.executionLeaseId,
+      providerToolCallId: 'provider-tool-settled',
+      toolName: 'findDecisionCandidates',
+      input: { query: '测试' },
+    });
+    expect(settledCall.state).toBe('CREATED');
+    await toolCallService.settleToolCall({
+      runId: initial.runId,
+      executionLeaseId: lease!.executionLeaseId,
+      toolCallId: settledCall.toolCallId,
+      status: 'SUCCEEDED',
+      outputSummary: { candidates: [] },
+      failureCode: null,
+      failureReason: null,
+      sources: [],
+      durationMs: 1,
+    });
+    const step = await stepService.recordStep({
+      runId: initial.runId,
+      executionLeaseId: lease!.executionLeaseId,
+      sequence: 1,
+      resolvedModelId: 'test/model',
+      finishReason: 'tool-calls',
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      startedAt: new Date(),
+      finishedAt: new Date(),
+      providerToolCallIds: ['provider-tool-settled'],
+    });
+    await expect(
+      prisma.aiToolCall.findUnique({
+        where: { id: settledCall.toolCallId },
+        select: { stepId: true },
+      }),
+    ).resolves.toEqual({ stepId: step.stepId });
+
+    const runningCall = await toolCallService.startToolCall({
+      runId: initial.runId,
+      executionLeaseId: lease!.executionLeaseId,
+      providerToolCallId: 'provider-tool-running',
+      toolName: 'getDecisionContext',
+      input: { decisionId: 1 },
+    });
+    await runControlService.requestStop({
+      ownerUserId,
+      runId: initial.runId,
+      cancellationReason: 'USER_REQUESTED',
+    });
+    await runControlService.confirmCancellation(ownerUserId, initial.runId);
+
+    const failedToolCall = await prisma.aiToolCall.findUnique({
+      where: { id: runningCall.toolCallId },
+      select: { status: true, failureCode: true, finishedAt: true },
+    });
+    expect(failedToolCall).toMatchObject({
+      status: 'FAILED',
+      failureCode: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
+    });
+    expect(failedToolCall?.finishedAt).toBeInstanceOf(Date);
+  });
+
+  it('执行中撤销项目成员身份后，后续决策上下文工具调用被实时拒绝', async () => {
+    const ownerUserId = await createTestUser();
+    const department = await prisma.department.create({
+      data: {
+        code: `AI-REVOKE-${randomUUID()}`,
+        name: 'AI 撤权测试部门',
+      },
+    });
+    const project = await prisma.project.create({
+      data: {
+        title: 'AI 撤权测试项目',
+        createdById: ownerUserId,
+        deptId: department.id,
+        members: { create: { userId: ownerUserId } },
+      },
+    });
+    const decision = await prisma.decision.create({
+      data: {
+        title: 'AI 执行中撤权测试决策',
+        projectId: project.id,
+        creatorId: ownerUserId,
+        deptId: department.id,
+      },
+    });
+    const authorization: AuthorizationContext = {
+      userId: ownerUserId,
+      deptId: null,
+      isSuperAdmin: false,
+      roleCodes: new Set(),
+      deniedPermissions: new Set(),
+      grants: new Map([
+        ['ai:chat:use', new Set([DataScope.ALL])],
+        ['decision:read', new Set([DataScope.ALL])],
+      ]),
+    };
+    const permissionPolicy = {
+      buildAuthorizationContext: jest.fn().mockResolvedValue(authorization),
+    } as unknown as AiPermissionPolicyService;
+    const contextService = new DecisionContextService(
+      prisma,
+      new AuthorizationService(prisma),
+    );
+    const tool = new GetDecisionContextToolService(
+      permissionPolicy,
+      contextService,
+    );
+    const executionContext = {
+      runId: 'permission-revocation-run',
+      threadId: 'permission-revocation-thread',
+      ownerUserId,
+      executionLeaseId: 'permission-revocation-lease',
+      executionLeaseExpiresAt: new Date(Date.now() + 30_000),
+    };
+
+    try {
+      await expect(
+        tool.execute(executionContext, { decisionId: decision.id }),
+      ).resolves.toMatchObject({
+        output: { decisionId: decision.id },
+      });
+      await prisma.projectMember.delete({
+        where: {
+          projectId_userId: { projectId: project.id, userId: ownerUserId },
+        },
+      });
+      await expect(
+        tool.execute(executionContext, { decisionId: decision.id }),
+      ).rejects.toMatchObject({ code: API_ERROR_CODES.DECISION_NOT_FOUND });
+    } finally {
+      await prisma.decision.deleteMany({ where: { id: decision.id } });
+      await prisma.project.deleteMany({ where: { id: project.id } });
+      await prisma.department.deleteMany({ where: { id: department.id } });
+    }
   });
 
   it('普通输入入队与旧 Run 终态竞争时只会产生一个后续活跃 Run', async () => {

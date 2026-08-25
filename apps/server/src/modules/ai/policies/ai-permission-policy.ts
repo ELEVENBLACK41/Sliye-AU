@@ -71,9 +71,12 @@ export class AiPermissionPolicyService {
       });
     }
 
-    return this.authorizationService.buildContext(
+    const authorization = this.authorizationService.buildContext(
       this.toAuthorizationUserRecord(user),
     );
+    this.authorizationService.assertPermission(authorization, 'ai:chat:use');
+
+    return authorization;
   }
 
   /** 将内部查询结果转换为授权服务需要的稳定输入结构，字段含义与登录守卫保持一致。 */

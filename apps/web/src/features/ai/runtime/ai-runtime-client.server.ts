@@ -5,8 +5,12 @@
  */
 import 'server-only';
 
-import type { AiLanguageModelRole } from '@workspace/contracts/ai';
-import type { ApiErrorCode } from '@workspace/contracts/common';
+import type {
+  AiRuntimeReconciliationResult,
+  AiRuntimeRunStopResult,
+  AiRuntimeSession,
+  AiRuntimeToolInvocationResult,
+} from '@workspace/contracts/ai';
 
 import { requestNest } from '@/services/bff-request';
 
@@ -15,89 +19,6 @@ const AI_RUNTIME_PATH_PREFIX = '/internal/ai/runs';
 
 /** 携带共享密钥的请求头名称，必须与 NestJS 守卫保持一致。 */
 const AI_RUNTIME_TOKEN_HEADER = 'x-ai-runtime-token';
-
-/** 一条可注入模型上下文的历史消息。 */
-export type AiRuntimeContextMessage = {
-  /** 消息发送方角色。 */
-  role: 'USER' | 'ASSISTANT';
-  /** 已由服务端按预算截断的消息正文。 */
-  content: string;
-};
-
-/** 工具描述中的一个具名字段。 */
-export type AiRuntimeToolField = {
-  /** 字段名。 */
-  name: string;
-  /** 字段基础值类型。 */
-  valueType: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'STRING_ARRAY' | 'OBJECT';
-  /** 是否必填。 */
-  required: boolean;
-  /** 字段说明，会作为模型可见的参数描述。 */
-  description: string;
-};
-
-/** 一项由 NestJS 中心注册表批准的只读工具描述。 */
-export type AiRuntimeToolDescriptor = {
-  /** 稳定工具名称。 */
-  name: string;
-  /** 工具用途与边界说明。 */
-  description: string;
-  /** 第二阶段只提供只读工具。 */
-  accessMode: 'READ';
-  /** 单次调用超时上限。 */
-  timeoutMs: number;
-  /** 工具窄输入契约。 */
-  input: { description: string; fields: AiRuntimeToolField[] };
-  /** 工具窄输出契约。 */
-  output: { description: string; fields: AiRuntimeToolField[] };
-};
-
-/** Runtime 成功领取 Run 后取得的完整会话数据。 */
-export type AiRuntimeSession = {
-  /** 从持久化 Run 重新读取的受控执行上下文。 */
-  execution: {
-    /** 本次领取的 Run 标识。 */
-    runId: string;
-    /** Run 所属 Thread 标识。 */
-    threadId: string;
-    /** Thread 所有者，也是工具实时鉴权使用的用户标识。 */
-    ownerUserId: number;
-    /** 本次 Run 对应的原始用户消息标识。 */
-    userMessageId: string;
-    /** 本次 Run 对应的原始用户消息正文。 */
-    userMessageContent: string;
-    /** 本次 Run 使用的逻辑模型角色。 */
-    modelRole: AiLanguageModelRole;
-    /** 当前执行器持有的租约标识。 */
-    executionLeaseId: string;
-    /** 当前租约过期时间的 ISO 字符串。 */
-    executionLeaseExpiresAt: string;
-  };
-  /** 受基础预算限制的最近历史消息，按时间正序。 */
-  recentMessages: AiRuntimeContextMessage[];
-  /** 当前允许模型使用的只读工具目录。 */
-  tools: AiRuntimeToolDescriptor[];
-};
-
-/** 一次工具调用的编排结果；失败同样是正常返回，由模型决定下一步。 */
-export type AiRuntimeToolInvocationResult =
-  | { status: 'SUCCEEDED'; toolCallId: string; output: unknown }
-  | {
-      status: 'FAILED';
-      toolCallId: string;
-      failureCode: ApiErrorCode;
-      failureReason: string;
-    };
-
-/** Run 收敛终态后的结果，可能同时领取到下一条排队消息对应的 Run。 */
-export type AiRuntimeRunStopResult = {
-  /** 被收敛的 Run 标识。 */
-  runId: string;
-  /** 事务完成后的最新状态。 */
-  status: string;
-  /** 终态后由队列领取的下一个 Run；没有则为 null。 */
-  nextRunId: string | null;
-};
 
 /** NestJS 内部执行接口返回业务失败时抛出的错误。 */
 export class AiRuntimeRequestError extends Error {
@@ -120,8 +41,7 @@ export class AiRuntimeRequestError extends Error {
 export function isAiExecutionLeaseInvalid(error: unknown): boolean {
   return (
     error instanceof AiRuntimeRequestError &&
-    (error.code === 'AI.EXECUTION_LEASE_INVALID' ||
-      error.code === 'AI.EXECUTION_LEASE_EXPIRED')
+    (error.code === 'AI.EXECUTION_LEASE_INVALID' || error.code === 'AI.EXECUTION_LEASE_EXPIRED')
   );
 }
 
@@ -131,10 +51,7 @@ export async function claimAiRuntimeSession(runId: string): Promise<AiRuntimeSes
 }
 
 /** 延长当前执行器租约，返回新的过期时间。 */
-export async function renewAiRuntimeLease(
-  runId: string,
-  executionLeaseId: string,
-): Promise<Date> {
+export async function renewAiRuntimeLease(runId: string, executionLeaseId: string): Promise<Date> {
   const result = await callRuntime<{ executionLeaseExpiresAt: string }>(`/${runId}/lease/renew`, {
     executionLeaseId,
   });
@@ -143,10 +60,7 @@ export async function renewAiRuntimeLease(
 }
 
 /** 确保当前 Run 已有助手消息占位，供文本增量事件引用稳定标识。 */
-export async function ensureAiAssistantMessage(
-  runId: string,
-  executionLeaseId: string,
-): Promise<string> {
+export async function ensureAiAssistantMessage(runId: string, executionLeaseId: string): Promise<string> {
   const result = await callRuntime<{ messageId: string }>(`/${runId}/assistant-message`, {
     executionLeaseId,
   });
@@ -180,6 +94,7 @@ export async function recordAiRuntimeStep(input: {
   totalTokens?: number;
   startedAt: string;
   finishedAt: string;
+  providerToolCallIds: string[];
 }): Promise<void> {
   const { runId, ...body } = input;
   await callRuntime<{ stepId: string; sequence: number }>(`/${runId}/steps`, body);
@@ -223,10 +138,13 @@ export async function completeAiRuntimeRun(input: {
 }
 
 /** 执行器已停止写入后确认取消，把取消请求唯一收敛为 CANCELLED。 */
-export async function confirmAiRuntimeCancellation(
-  runId: string,
-): Promise<AiRuntimeRunStopResult> {
+export async function confirmAiRuntimeCancellation(runId: string): Promise<AiRuntimeRunStopResult> {
   return callRuntime<AiRuntimeRunStopResult>(`/${runId}/cancel-confirm`, {});
+}
+
+/** 收敛全部过期执行租约，并取得需要由当前 Runtime 启动的后续 Run。 */
+export async function reconcileAiRuntimeRuns(): Promise<AiRuntimeReconciliationResult> {
+  return callRuntime<AiRuntimeReconciliationResult>('/reconcile', {});
 }
 
 /** 统一发起内部执行请求，并把统一失败响应转换为可判断的运行时错误。 */
@@ -248,7 +166,7 @@ async function callRuntime<TData>(path: string, body: unknown): Promise<TData> {
 function readRuntimeServiceToken(): string {
   const token = process.env.AI_RUNTIME_SERVICE_TOKEN;
 
-  if (!token) {
+  if (!token || token.length < 32) {
     throw new AiRuntimeRequestError(
       'AI.RUNTIME_SERVICE_UNAUTHORIZED',
       '未配置 AI_RUNTIME_SERVICE_TOKEN，AI 执行器无法调用内部接口',

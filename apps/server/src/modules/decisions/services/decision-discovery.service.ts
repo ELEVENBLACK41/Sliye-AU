@@ -37,6 +37,10 @@ export class DecisionDiscoveryService {
     trimmedQuery: string,
     limit: number,
   ): Promise<DecisionDiscoveryCandidate[]> {
+    this.authorizationService.assertPermission(
+      authorization,
+      DECISION_READ_PERMISSION,
+    );
     const boundedLimit = Math.min(
       Math.max(1, Math.trunc(limit)),
       ABSOLUTE_MAX_DISCOVERY_LIMIT,
@@ -77,9 +81,7 @@ export class DecisionDiscoveryService {
     decisionWhere: Prisma.DecisionWhereInput,
     trimmedQuery: string,
   ): Prisma.DecisionWhereInput {
-    const numericId = /^\d+$/.test(trimmedQuery)
-      ? Number(trimmedQuery)
-      : null;
+    const numericId = /^\d+$/.test(trimmedQuery) ? Number(trimmedQuery) : null;
 
     const matchConditions: Prisma.DecisionWhereInput[] = [
       { title: { contains: trimmedQuery, mode: 'insensitive' as const } },

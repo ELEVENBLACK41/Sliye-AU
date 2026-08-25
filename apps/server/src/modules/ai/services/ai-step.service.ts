@@ -8,6 +8,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { PrismaService } from '../../../database/prisma.service';
+import type { Prisma } from '../../../generated/prisma';
 import type { RecordAiStepInput } from '../types/ai-persistence.types';
 import { AiExecutionLeaseService } from './ai-execution-lease.service';
 
@@ -49,6 +50,7 @@ export class AiStepService {
           },
           select: { id: true, sequence: true },
         });
+        await this.attachToolCallsInTransaction(transaction, input, step.id);
 
         return { stepId: step.id, sequence: step.sequence };
       });
@@ -57,8 +59,41 @@ export class AiStepService {
         throw error;
       }
 
-      return this.findExistingStep(input.runId, input.sequence);
+      const existing = await this.findExistingStep(input.runId, input.sequence);
+      await this.prisma.$transaction(async (transaction) => {
+        await this.executionLeaseService.assertActiveExecutionLeaseInTransaction(
+          transaction,
+          { runId: input.runId, executionLeaseId: input.executionLeaseId },
+        );
+        await this.attachToolCallsInTransaction(
+          transaction,
+          input,
+          existing.stepId,
+        );
+      });
+
+      return existing;
     }
+  }
+
+  /** 把本步骤中已经持久化的工具调用关联到步骤，且禁止覆盖其他步骤的归属。 */
+  private async attachToolCallsInTransaction(
+    transaction: Prisma.TransactionClient,
+    input: RecordAiStepInput,
+    stepId: string,
+  ): Promise<void> {
+    if (input.providerToolCallIds.length === 0) {
+      return;
+    }
+
+    await transaction.aiToolCall.updateMany({
+      where: {
+        runId: input.runId,
+        providerToolCallId: { in: input.providerToolCallIds },
+        stepId: null,
+      },
+      data: { stepId },
+    });
   }
 
   /** 查询同一 Run 内已经写入的同序号步骤，用于并发或重放场景返回稳定结果。 */

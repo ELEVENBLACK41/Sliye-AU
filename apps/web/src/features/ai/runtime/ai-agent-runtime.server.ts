@@ -8,6 +8,7 @@
 import 'server-only';
 
 import { isStepCount, streamText, type ModelMessage } from 'ai';
+import type { AiRuntimeSession } from '@workspace/contracts/ai';
 
 import { DECISION_HUB_AGENT_INSTRUCTIONS } from '../agents/decision-hub-agent.ts';
 import { buildAiAgentTools } from './ai-agent-tools.server.ts';
@@ -23,8 +24,8 @@ import {
   isAiExecutionLeaseInvalid,
   recordAiRuntimeStep,
   renewAiRuntimeLease,
-  type AiRuntimeSession,
 } from './ai-runtime-client.server.ts';
+import { runAiRunChain } from './ai-run-chain.ts';
 
 /** 单轮运行允许的最大模型步骤数，避免工具循环无限进行。 */
 const MAX_AGENT_STEPS = 6;
@@ -48,31 +49,25 @@ type PendingAgentStep = {
   totalTokens?: number;
   startedAt: string;
   finishedAt: string;
+  providerToolCallIds: string[];
 };
 
 /**
- * 以“即发即忘”的方式启动一次 Agent 运行。
- * 领取是原子的，重复启动不会产生第二个执行器，因此调用方无需自行去重。
+ * 启动并等待一个 Agent 执行链完成。
+ * 领取是原子的，重复启动不会产生第二个执行器；返回 Promise 让 Next.js `after()`
+ * 能托管模型流、续租、终态写入以及同一 Thread 的后续排队 Run。
  */
-export function startAiAgentRun(runId: string): void {
-  void runAiAgentExecution(runId).catch((error: unknown) => {
+export async function startAiAgentRun(runId: string): Promise<void> {
+  try {
+    await runAiAgentExecution(runId);
+  } catch (error: unknown) {
     console.error('[ai-agent-runtime] 运行失败', { runId, error });
-  });
+  }
 }
 
-/** 领取并完整执行一次 Run；Run 已被其他执行器领取或已失效时直接返回。 */
+/** 串行领取并执行当前 Run 及其终态事务释放出的后续排队 Run。 */
 export async function runAiAgentExecution(runId: string): Promise<void> {
-  const session = await claimAiRuntimeSession(runId);
-
-  if (!session) {
-    return;
-  }
-
-  const nextRunId = await executeClaimedSession(session);
-
-  if (nextRunId) {
-    startAiAgentRun(nextRunId);
-  }
+  await runAiRunChain(runId, claimAiRuntimeSession, executeClaimedSession);
 }
 
 /** 执行一次已领取的会话，并返回终态事务领取到的下一个 Run 标识。 */
@@ -82,12 +77,7 @@ async function executeClaimedSession(session: AiRuntimeSession): Promise<string 
   const pendingSteps: PendingAgentStep[] = [];
   /** 续租失败会先中止模型流，中止原因不再是原始租约错误，因此单独记录该事实。 */
   const leaseState = { invalidated: false };
-  const leaseTimer = startLeaseRenewal(
-    execution.runId,
-    execution.executionLeaseId,
-    abortController,
-    leaseState,
-  );
+  const leaseTimer = startLeaseRenewal(execution.runId, execution.executionLeaseId, abortController, leaseState);
 
   let assistantMessageId: string | null = null;
   let assistantText = '';
@@ -100,10 +90,7 @@ async function executeClaimedSession(session: AiRuntimeSession): Promise<string 
       return;
     }
 
-    assistantMessageId ??= await ensureAiAssistantMessage(
-      execution.runId,
-      execution.executionLeaseId,
-    );
+    assistantMessageId ??= await ensureAiAssistantMessage(execution.runId, execution.executionLeaseId);
     const delta = pendingDelta;
     pendingDelta = '';
     lastFlushedAt = Date.now();
@@ -147,6 +134,7 @@ async function executeClaimedSession(session: AiRuntimeSession): Promise<string 
           totalTokens: step.usage.totalTokens,
           startedAt: stepStartedAt.value.toISOString(),
           finishedAt: finishedAt.toISOString(),
+          providerToolCallIds: step.toolCalls.map((toolCall) => toolCall.toolCallId),
         });
         stepStartedAt.value = finishedAt;
       },
@@ -159,10 +147,7 @@ async function executeClaimedSession(session: AiRuntimeSession): Promise<string 
       assistantText += delta;
       pendingDelta += delta;
 
-      if (
-        pendingDelta.length >= TEXT_FLUSH_CHARACTERS ||
-        Date.now() - lastFlushedAt >= TEXT_FLUSH_INTERVAL_MS
-      ) {
+      if (pendingDelta.length >= TEXT_FLUSH_CHARACTERS || Date.now() - lastFlushedAt >= TEXT_FLUSH_INTERVAL_MS) {
         await flushDelta();
       }
     }
@@ -188,13 +173,7 @@ async function executeClaimedSession(session: AiRuntimeSession): Promise<string 
 
     return settled.nextRunId;
   } catch (error) {
-    return await settleFailedRun(
-      session,
-      error,
-      assistantText,
-      pendingSteps,
-      leaseState.invalidated,
-    );
+    return await settleFailedRun(session, error, assistantText, pendingSteps, leaseState.invalidated);
   } finally {
     clearInterval(leaseTimer);
   }
@@ -260,11 +239,7 @@ async function safeConfirmCancellation(runId: string): Promise<string | null> {
 }
 
 /** 按顺序写入本轮已完成的模型步骤；租约失效时向上抛出由调用方统一处理。 */
-async function flushSteps(
-  runId: string,
-  executionLeaseId: string,
-  pendingSteps: PendingAgentStep[],
-): Promise<void> {
+async function flushSteps(runId: string, executionLeaseId: string, pendingSteps: PendingAgentStep[]): Promise<void> {
   while (pendingSteps.length > 0) {
     const step = pendingSteps.shift();
 

@@ -32,6 +32,12 @@ export class AiRuntimeController {
     private readonly runtimeSessionService: AiRuntimeSessionService,
   ) {}
 
+  /** 收敛过期租约，并返回需要由当前 Runtime 启动的后续排队 Run。 */
+  @Post('reconcile')
+  reconcileExpiredRuns() {
+    return this.runtimeSessionService.reconcileExpiredRuns();
+  }
+
   /** 原子领取一个排队 Run，并返回受限上下文与可用工具目录；已被领取时返回 null。 */
   @Post(':runId/claim')
   claim(@Param('runId') runId: string) {
@@ -92,6 +98,7 @@ export class AiRuntimeController {
       totalTokens: body.totalTokens ?? null,
       startedAt: new Date(body.startedAt),
       finishedAt: new Date(body.finishedAt),
+      providerToolCallIds: body.providerToolCallIds,
     });
   }
 

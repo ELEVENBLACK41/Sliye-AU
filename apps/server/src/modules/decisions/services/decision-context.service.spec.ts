@@ -50,24 +50,47 @@ function createDecisionRow(overrides: Record<string, unknown> = {}) {
 describe('DecisionContextService', () => {
   /** 创建 mock Prisma 与授权服务的服务实例。 */
   function createService() {
-    const findFirst = jest.fn().mockResolvedValue(createDecisionRow());
+    type FindFirstArgs = {
+      select?: {
+        resolutions?: {
+          where?: unknown;
+        };
+      };
+    };
+    type DecisionRow = ReturnType<typeof createDecisionRow>;
+
+    let lastFindFirstArgs: FindFirstArgs | undefined;
+    const findFirst = jest.fn<Promise<DecisionRow | null>, [FindFirstArgs]>(
+      (args) => {
+        lastFindFirstArgs = args;
+        return Promise.resolve(createDecisionRow());
+      },
+    );
     const prisma = { decision: { findFirst } };
     const buildDecisionWhere = jest.fn().mockResolvedValue({
       AND: [{ project: { members: { some: { userId: 42 } } } }],
     });
+    const assertPermission = jest.fn();
     const authorizationService = {
       buildDecisionWhere,
+      assertPermission,
     } as unknown as AuthorizationService;
 
     return {
-      service: new DecisionContextService(prisma as never, authorizationService),
+      service: new DecisionContextService(
+        prisma as never,
+        authorizationService,
+      ),
       findFirst,
       buildDecisionWhere,
+      assertPermission,
+      getLastFindFirstArgs: () => lastFindFirstArgs,
     };
   }
 
   it('主键条件叠加在统一授权范围之上，权限过滤发生在 SQL 层', async () => {
-    const { service, findFirst, buildDecisionWhere } = createService();
+    const { service, findFirst, buildDecisionWhere, assertPermission } =
+      createService();
 
     await service.getContext(AUTHORIZATION_CONTEXT, 17);
 
@@ -75,12 +98,20 @@ describe('DecisionContextService', () => {
       AUTHORIZATION_CONTEXT,
       'decision:read',
     );
-    expect(findFirst.mock.calls[0][0].where).toEqual({
-      AND: [
-        { AND: [{ project: { members: { some: { userId: 42 } } } }] },
-        { id: 17 },
-      ],
-    });
+    expect(assertPermission).toHaveBeenCalledWith(
+      AUTHORIZATION_CONTEXT,
+      'decision:read',
+    );
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            { AND: [{ project: { members: { some: { userId: 42 } } } }] },
+            { id: 17 },
+          ],
+        },
+      }),
+    );
   });
 
   it('决策不存在或不在授权范围内时返回 null', async () => {
@@ -159,11 +190,11 @@ describe('DecisionContextService', () => {
   });
 
   it('只读取仍然生效的决议，避免把已撤销决议当作当前结论', async () => {
-    const { service, findFirst } = createService();
+    const { service, getLastFindFirstArgs } = createService();
 
     await service.getContext(AUTHORIZATION_CONTEXT, 17);
 
-    expect(findFirst.mock.calls[0][0].select.resolutions.where).toEqual({
+    expect(getLastFindFirstArgs()?.select?.resolutions?.where).toEqual({
       status: 'ACTIVE',
     });
   });

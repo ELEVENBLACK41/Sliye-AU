@@ -18,6 +18,7 @@ import { AiAssistantMessageService } from './ai-assistant-message.service';
 import { AiEventService } from './ai-event.service';
 import { AiExecutionLeaseService } from './ai-execution-lease.service';
 import { AiQueueService } from './ai-queue.service';
+import { AiToolCallService } from './ai-tool-call.service';
 
 /** 调整方向在已锁定 Thread 的事务内取消当前 Run 时所需的内部输入。 */
 export type RequestActiveRunCancellationInput = {
@@ -35,6 +36,8 @@ export type ReconcileExpiredAiRunsResult = {
   scannedRunCount: number;
   /** 真正发生终态收敛的 Run 数量。 */
   reconciledRunCount: number;
+  /** 对账终态事务领取、需要 Agent Runtime 启动的后续 Run。 */
+  nextRunIds: string[];
 };
 
 @Injectable()
@@ -46,6 +49,7 @@ export class AiRunControlService {
     private readonly queueService: AiQueueService,
     private readonly executionLeaseService: AiExecutionLeaseService,
     private readonly assistantMessageService: AiAssistantMessageService,
+    private readonly toolCallService: AiToolCallService,
   ) {}
 
   /** 仅允许当前有效执行器将 RUNNING Run 收敛为完成或失败终态。 */
@@ -233,20 +237,29 @@ export class AiRunControlService {
       select: { id: true },
     });
     let reconciledRunCount = 0;
+    const nextRunIds: string[] = [];
     for (const candidate of candidates) {
-      if (await this.reconcileExpiredRun(candidate.id, now)) {
+      const reconciled = await this.reconcileExpiredRun(candidate.id, now);
+      if (reconciled.reconciled) {
         reconciledRunCount += 1;
+        if (reconciled.nextRunId) {
+          nextRunIds.push(reconciled.nextRunId);
+        }
       }
     }
 
-    return { scannedRunCount: candidates.length, reconciledRunCount };
+    return {
+      scannedRunCount: candidates.length,
+      reconciledRunCount,
+      nextRunIds,
+    };
   }
 
   /** 在单个 Run 的 Thread 锁内判断租约仍已过期，再收敛为失败或取消终态。 */
   private async reconcileExpiredRun(
     runId: string,
     now: Date,
-  ): Promise<boolean> {
+  ): Promise<{ reconciled: boolean; nextRunId: string | null }> {
     return this.prisma.$transaction(async (transaction) => {
       const run = await transaction.aiRun.findUnique({
         where: { id: runId },
@@ -265,14 +278,14 @@ export class AiRunControlService {
         (run.status !== AiRunStatus.RUNNING &&
           run.status !== AiRunStatus.CANCELLATION_REQUESTED)
       ) {
-        return false;
+        return { reconciled: false, nextRunId: null };
       }
       const thread = await this.queueService.lockThreadForExecution(
         transaction,
         run.threadId,
       );
       if (!thread) {
-        return false;
+        return { reconciled: false, nextRunId: null };
       }
       const toStatus =
         run.status === AiRunStatus.CANCELLATION_REQUESTED
@@ -298,10 +311,10 @@ export class AiRunControlService {
         },
       });
       if (reconciled.count !== 1) {
-        return false;
+        return { reconciled: false, nextRunId: null };
       }
 
-      await this.settleTerminalRunInTransaction(transaction, {
+      const settled = await this.settleTerminalRunInTransaction(transaction, {
         runId: run.id,
         threadId: run.threadId,
         fromStatus: run.status,
@@ -311,7 +324,7 @@ export class AiRunControlService {
         failureReason:
           toStatus === AiRunStatus.FAILED ? 'EXECUTION_LEASE_EXPIRED' : null,
       });
-      return true;
+      return { reconciled: true, nextRunId: settled.nextRunId };
     });
   }
 
@@ -411,6 +424,11 @@ export class AiRunControlService {
       failureReason: string | null;
     },
   ): Promise<AiRunStopResult> {
+    await this.toolCallService.failRunningToolCallsInTransaction(
+      transaction,
+      input.runId,
+      new Date(),
+    );
     await transaction.aiThread.updateMany({
       where: { id: input.threadId, activeRunId: input.runId },
       data: { activeRunId: null },

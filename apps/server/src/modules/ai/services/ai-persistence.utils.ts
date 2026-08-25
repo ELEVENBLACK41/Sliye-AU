@@ -14,6 +14,29 @@ export function createAiRequestFingerprint(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
+/** 为 JSON 兼容值生成与对象字段顺序无关的稳定 SHA-256 指纹。 */
+export function createAiJsonFingerprint(value: unknown): string {
+  return createAiRequestFingerprint(
+    JSON.stringify(sortJsonValue(value)) ?? 'undefined',
+  );
+}
+
+/** 递归排序对象键，数组顺序保持不变，供幂等请求比较语义相同的 JSON。 */
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortJsonValue);
+  }
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, sortJsonValue(child)]),
+  );
+}
+
 /** 校验 AI 持久化入口所需的非空字符串，避免把无意义记录写入数据库。 */
 export function assertAiRequiredText(value: string, field: string): void {
   if (value.trim().length > 0) {

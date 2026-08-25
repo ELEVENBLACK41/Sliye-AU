@@ -21,10 +21,7 @@ type RunIdField = 'runId' | 'nextRunId';
  * 从 BFF 转发结果中读取新创建的 Run，并安排在响应返回后启动执行器。
  * 转发失败、响应不符合统一契约或没有新 Run 时静默跳过。
  */
-export async function scheduleAgentRunFromProxyResponse(
-  response: Response,
-  field: RunIdField,
-): Promise<void> {
+export async function scheduleAgentRunFromProxyResponse(response: Response, field: RunIdField): Promise<void> {
   if (!response.ok) {
     return;
   }
@@ -32,9 +29,7 @@ export async function scheduleAgentRunFromProxyResponse(
   const runId = await readRunId(response, field);
 
   if (runId) {
-    after(() => {
-      startAiAgentRun(runId);
-    });
+    after(() => startAiAgentRun(runId));
   }
 }
 

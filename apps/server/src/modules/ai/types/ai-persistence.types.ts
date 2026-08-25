@@ -162,6 +162,8 @@ export type RecordAiStepInput = {
   startedAt: Date;
   /** 本步骤结束时间。 */
   finishedAt: Date;
+  /** 本步骤内由模型生成、需要关联到该步骤的工具调用标识。 */
+  providerToolCallIds: string[];
 };
 
 /** 执行器发起一次只读工具调用时使用的内部输入。 */

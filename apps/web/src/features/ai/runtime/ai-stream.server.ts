@@ -7,7 +7,7 @@
  */
 import 'server-only';
 
-import type { AiRunStatus } from '@workspace/contracts/ai';
+import type { AiRunEventPage } from '@workspace/contracts/ai';
 
 import { requestNest } from '@/services/bff-request';
 
@@ -18,36 +18,14 @@ const EVENT_POLL_INTERVAL_MS = 400;
 const MAX_STREAM_DURATION_MS = 10 * 60 * 1000;
 
 /** 已经不会再产生新事件的 Run 终态。 */
-const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
-  'CANCELLED',
-  'COMPLETED',
-  'FAILED',
-]);
-
-/** NestJS 事件补拉接口返回的一页事件与 Run 状态快照。 */
-type AiRunEventPage = {
-  runId: string;
-  threadId: string;
-  status: AiRunStatus;
-  cancellationReason: string | null;
-  failureReason: string | null;
-  failureCode: string | null;
-  events: Array<{
-    id: string;
-    runId: string;
-    sequence: number;
-    type: string;
-    data: unknown;
-    createdAt: string;
-  }>;
-  lastSequence: number;
-  hasMore: boolean;
-};
+const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set(['CANCELLED', 'COMPLETED', 'FAILED']);
 
 /** 创建一个按事件序号补拉的 SSE 响应。 */
 export function createAiRunEventStreamResponse(input: {
   /** 需要订阅的 Run 标识。 */
   runId: string;
+  /** URL 中的 Thread 标识，必须与 Run 的真实归属一致。 */
+  threadId: string;
   /** 浏览器已经收到的最后一个事件序号。 */
   afterSequence: number;
   /** 当前用户的访问令牌，用于向 NestJS 发起受权限保护的查询。 */
@@ -64,7 +42,7 @@ export function createAiRunEventStreamResponse(input: {
       try {
         while (!input.signal.aborted && Date.now() < deadline) {
           const upstream = await requestNest<AiRunEventPage>(
-            `/ai/runs/${encodeURIComponent(input.runId)}/events?afterSequence=${cursor}`,
+            `/ai/runs/${encodeURIComponent(input.runId)}/events?threadId=${encodeURIComponent(input.threadId)}&afterSequence=${cursor}`,
             { headers: { Authorization: `Bearer ${input.accessToken}` } },
           );
 

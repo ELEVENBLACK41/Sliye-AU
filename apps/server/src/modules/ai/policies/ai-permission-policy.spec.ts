@@ -5,6 +5,7 @@
  */
 
 import { UserStatus } from '../../../generated/prisma';
+import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import type { AuthorizationService } from '../../auth/services/authorization.service';
 import { AiPermissionPolicyService } from './ai-permission-policy';
@@ -15,8 +16,10 @@ describe('AiPermissionPolicyService', () => {
     const findUnique = jest.fn();
     const prisma = { user: { findUnique } };
     const buildContext = jest.fn();
+    const assertPermission = jest.fn();
     const authorizationService = {
       buildContext,
+      assertPermission,
     } as unknown as AuthorizationService;
 
     return {
@@ -26,11 +29,13 @@ describe('AiPermissionPolicyService', () => {
       ),
       findUnique,
       buildContext,
+      assertPermission,
     };
   }
 
   it('为 ACTIVE 用户按登录守卫同款结构组装授权上下文', async () => {
-    const { service, findUnique, buildContext } = createService();
+    const { service, findUnique, buildContext, assertPermission } =
+      createService();
     findUnique.mockResolvedValue({
       id: 7,
       deptId: 3,
@@ -72,6 +77,33 @@ describe('AiPermissionPolicyService', () => {
         },
       ],
     });
+    expect(assertPermission).toHaveBeenCalledWith(
+      expectedContext,
+      'ai:chat:use',
+    );
+  });
+
+  it('运行期间撤销 AI 使用权限时拒绝继续构造工具执行上下文', async () => {
+    const { service, findUnique, buildContext, assertPermission } =
+      createService();
+    findUnique.mockResolvedValue({
+      id: 7,
+      deptId: null,
+      status: UserStatus.ACTIVE,
+      roles: [],
+      permissions: [],
+    });
+    buildContext.mockReturnValue({ userId: 7 });
+    assertPermission.mockImplementation(() => {
+      throw new BusinessException({
+        code: API_ERROR_CODES.ACCESS_PERMISSION_DENIED,
+        message: '当前账号没有执行该操作的权限',
+      });
+    });
+
+    await expect(service.buildAuthorizationContext(7)).rejects.toThrow(
+      BusinessException,
+    );
   });
 
   it('用户不存在时拒绝并且不调用授权合并逻辑', async () => {

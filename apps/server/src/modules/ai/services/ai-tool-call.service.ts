@@ -4,10 +4,13 @@
  * 工具原始输入输出不进入消息正文，这里只保存受控快照与摘要。
  */
 
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
+import type { ApiErrorCode } from '@workspace/contracts/common';
+import { API_ERROR_CODES } from '@workspace/contracts/common';
+import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
-import { AiToolCallStatus } from '../../../generated/prisma';
+import { AiToolCallStatus, type Prisma } from '../../../generated/prisma';
 import type {
   SettleAiToolCallInput,
   StartAiToolCallInput,
@@ -15,12 +18,40 @@ import type {
 import { AiEventService } from './ai-event.service';
 import { AiExecutionLeaseService } from './ai-execution-lease.service';
 import { AiSourceDependencyService } from './ai-source-dependency.service';
+import { createAiJsonFingerprint } from './ai-persistence.utils';
 
 /** 一次已持久化工具调用的稳定标识。 */
-export type StartedAiToolCall = {
-  /** 工具调用记录主键，结束调用和事件负载都使用该标识。 */
-  toolCallId: string;
-};
+export type StartedAiToolCall =
+  | {
+      /** 本次请求新建了工具调用，调用方可以执行真实工具。 */
+      state: 'CREATED';
+      /** 工具调用记录主键。 */
+      toolCallId: string;
+    }
+  | {
+      /** 相同模型调用已经成功，直接重放持久化摘要。 */
+      state: 'REPLAY_SUCCEEDED';
+      /** 工具调用记录主键。 */
+      toolCallId: string;
+      /** 已持久化的窄输出摘要。 */
+      output: unknown;
+    }
+  | {
+      /** 相同模型调用已经失败，直接重放稳定失败。 */
+      state: 'REPLAY_FAILED';
+      /** 工具调用记录主键。 */
+      toolCallId: string;
+      /** 已持久化的稳定错误码。 */
+      failureCode: ApiErrorCode;
+      /** 已持久化的安全失败说明。 */
+      failureReason: string;
+    }
+  | {
+      /** 相同模型调用仍在执行，不允许启动第二次业务查询。 */
+      state: 'IN_PROGRESS';
+      /** 工具调用记录主键。 */
+      toolCallId: string;
+    };
 
 /** 一次已发现候选的历史工具调用摘要，用于强制 Agent 串联规则。 */
 export type AiDiscoveryToolCallSummary = {
@@ -69,17 +100,14 @@ export class AiToolCallService {
           },
         });
 
-        return { toolCallId: toolCall.id };
+        return { state: 'CREATED', toolCallId: toolCall.id };
       });
     } catch (error) {
       if (!this.isUniqueConstraintViolation(error)) {
         throw error;
       }
 
-      return this.findExistingToolCall(
-        input.runId,
-        input.providerToolCallId,
-      );
+      return this.findExistingToolCall(input);
     }
   }
 
@@ -139,6 +167,48 @@ export class AiToolCallService {
         },
       });
     });
+  }
+
+  /** 在 Run 终态事务内把遗留的运行中工具调用收敛为失败，避免审计状态永久悬挂。 */
+  async failRunningToolCallsInTransaction(
+    transaction: Prisma.TransactionClient,
+    runId: string,
+    finishedAt: Date,
+  ): Promise<void> {
+    const runningCalls = await transaction.aiToolCall.findMany({
+      where: { runId, status: AiToolCallStatus.RUNNING },
+      select: { id: true, toolName: true, startedAt: true },
+    });
+
+    for (const toolCall of runningCalls) {
+      const durationMs = Math.max(
+        0,
+        finishedAt.getTime() - toolCall.startedAt.getTime(),
+      );
+      const failed = await transaction.aiToolCall.updateMany({
+        where: { id: toolCall.id, status: AiToolCallStatus.RUNNING },
+        data: {
+          status: AiToolCallStatus.FAILED,
+          failureCode: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
+          failureReason: 'AI 运行已结束，工具调用未能完成',
+          durationMs,
+          finishedAt,
+        },
+      });
+      if (failed.count === 1) {
+        await this.eventService.appendToolCallSettledByControlInTransaction(
+          transaction,
+          {
+            runId,
+            toolCallId: toolCall.id,
+            toolName: toolCall.toolName,
+            failureCode: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
+            failureReason: 'AI 运行已结束，工具调用未能完成',
+            durationMs,
+          },
+        );
+      }
+    }
   }
 
   /**
@@ -204,20 +274,59 @@ export class AiToolCallService {
 
   /** 查询同一 Run 内已经登记的同一模型工具调用，用于并发或重放场景返回稳定结果。 */
   private async findExistingToolCall(
-    runId: string,
-    providerToolCallId: string,
+    input: StartAiToolCallInput,
   ): Promise<StartedAiToolCall> {
     const existing = await this.prisma.aiToolCall.findUnique({
       where: {
-        runId_providerToolCallId: { runId, providerToolCallId },
+        runId_providerToolCallId: {
+          runId: input.runId,
+          providerToolCallId: input.providerToolCallId,
+        },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        toolName: true,
+        input: true,
+        status: true,
+        outputSummary: true,
+        failureCode: true,
+        failureReason: true,
+      },
     });
     if (!existing) {
       throw new Error('AI 工具调用写入冲突后仍找不到既有记录。');
     }
 
-    return { toolCallId: existing.id };
+    if (
+      existing.toolName !== input.toolName ||
+      createAiJsonFingerprint(existing.input) !==
+        createAiJsonFingerprint(input.input)
+    ) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.AI_IDEMPOTENCY_CONFLICT,
+        message: '相同工具调用标识对应了不同的工具或输入',
+        status: HttpStatus.CONFLICT,
+      });
+    }
+    if (existing.status === AiToolCallStatus.SUCCEEDED) {
+      return {
+        state: 'REPLAY_SUCCEEDED',
+        toolCallId: existing.id,
+        output: existing.outputSummary,
+      };
+    }
+    if (existing.status === AiToolCallStatus.FAILED) {
+      return {
+        state: 'REPLAY_FAILED',
+        toolCallId: existing.id,
+        failureCode:
+          (existing.failureCode as ApiErrorCode | null) ??
+          API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
+        failureReason: existing.failureReason ?? '工具调用执行失败',
+      };
+    }
+
+    return { state: 'IN_PROGRESS', toolCallId: existing.id };
   }
 
   /** 判断异常是否由数据库唯一约束触发。 */

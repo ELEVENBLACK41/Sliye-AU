@@ -41,11 +41,13 @@ export class AiRunController {
   listEvents(
     @CurrentAuthorization() authorization: AuthorizationContext,
     @Param('runId') runId: string,
+    @Query('threadId') threadId: string,
     @Query('afterSequence', new DefaultValuePipe(0), ParseIntPipe)
     afterSequence: number,
   ) {
     return this.runQueryService.listRunEvents(
       authorization.userId,
+      threadId,
       runId,
       afterSequence,
     );

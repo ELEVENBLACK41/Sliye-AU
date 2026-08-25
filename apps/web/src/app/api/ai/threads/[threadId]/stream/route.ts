@@ -15,7 +15,7 @@ type AiThreadStreamRouteContext = {
 
 /** 订阅指定 Run 的事件流，并从浏览器给出的序号开始补拉。 */
 export async function GET(request: Request, context: AiThreadStreamRouteContext) {
-  await context.params;
+  const { threadId } = await context.params;
   const url = new URL(request.url);
   const runId = url.searchParams.get('runId');
 
@@ -39,6 +39,7 @@ export async function GET(request: Request, context: AiThreadStreamRouteContext)
 
   return createAiRunEventStreamResponse({
     runId,
+    threadId,
     afterSequence: toAfterSequence(url.searchParams.get('afterSequence')),
     accessToken,
     signal: request.signal,

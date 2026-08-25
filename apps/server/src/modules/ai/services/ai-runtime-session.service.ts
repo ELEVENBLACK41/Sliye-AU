@@ -9,6 +9,7 @@
  */
 
 import { HttpStatus, Injectable } from '@nestjs/common';
+import type { AiRuntimeSession } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
@@ -19,16 +20,10 @@ import type {
   CompleteAiRunInput,
   RecordAiStepInput,
 } from '../types/ai-persistence.types';
-import {
-  AI_RUNTIME_SERVICE_IDENTITY,
-  type ClaimedAiRuntimeExecution,
-} from '../types/ai-runtime.types';
-import type {
-  AiToolDescriptor,
-  AiToolExecutionContext,
-} from '../types/ai-tool-registry.types';
+import { AI_RUNTIME_SERVICE_IDENTITY } from '../types/ai-runtime.types';
+import type { AiToolExecutionContext } from '../types/ai-tool-registry.types';
 import { AiAssistantMessageService } from './ai-assistant-message.service';
-import { AiContextBudgetService, type AiContextMessage } from './ai-context-budget.service';
+import { AiContextBudgetService } from './ai-context-budget.service';
 import { AiEventService } from './ai-event.service';
 import { AiRunControlService } from './ai-run-control.service';
 import { AiRunService } from './ai-run.service';
@@ -40,16 +35,6 @@ import {
   type AiToolInvocationResult,
 } from './ai-tool-invocation.service';
 import { AiToolRegistryService } from './ai-tool-registry.service';
-
-/** Runtime 成功领取一个 Run 后可用于执行模型循环的完整会话数据。 */
-export type AiRuntimeSession = {
-  /** 从持久化 Run 重新读取的受控执行上下文。 */
-  execution: ClaimedAiRuntimeExecution;
-  /** 受基础预算限制的最近历史消息，按时间正序。 */
-  recentMessages: AiContextMessage[];
-  /** 当前允许模型使用的全部只读工具描述。 */
-  tools: readonly AiToolDescriptor[];
-};
 
 @Injectable()
 export class AiRuntimeSessionService {
@@ -66,6 +51,11 @@ export class AiRuntimeSessionService {
     private readonly runService: AiRunService,
     private readonly runControlService: AiRunControlService,
   ) {}
+
+  /** 收敛过期租约，并把已领取的后续 Run 标识交回 Agent Runtime。 */
+  reconcileExpiredRuns() {
+    return this.runControlService.reconcileExpiredRuns();
+  }
 
   /**
    * 原子领取一个排队 Run，并组装模型循环所需的受限上下文与工具目录。
@@ -86,9 +76,13 @@ export class AiRuntimeSessionService {
     });
 
     return {
-      execution,
+      execution: {
+        ...execution,
+        executionLeaseExpiresAt:
+          execution.executionLeaseExpiresAt.toISOString(),
+      },
       recentMessages,
-      tools: this.toolRegistry.listDescriptors(),
+      tools: [...this.toolRegistry.listDescriptors()],
     };
   }
 

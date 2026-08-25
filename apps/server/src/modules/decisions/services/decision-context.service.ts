@@ -33,6 +33,10 @@ export class DecisionContextService {
     authorization: AuthorizationContext,
     decisionId: number,
   ): Promise<DecisionContext | null> {
+    this.authorizationService.assertPermission(
+      authorization,
+      DECISION_READ_PERMISSION,
+    );
     const decisionWhere = await this.authorizationService.buildDecisionWhere(
       authorization,
       DECISION_READ_PERMISSION,
