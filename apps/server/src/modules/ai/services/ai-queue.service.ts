@@ -39,6 +39,23 @@ export class AiQueueService {
     return rows[0] ?? null;
   }
 
+  /** 锁定任意 Thread 的执行门禁行，仅供不经过浏览器身份的内部执行与故障收敛任务调用。 */
+  async lockThreadForExecution(
+    transaction: Prisma.TransactionClient,
+    threadId: string,
+  ): Promise<{ id: string; activeRunId: string | null } | null> {
+    const rows = await transaction.$queryRaw<
+      Array<{ id: string; activeRunId: string | null }>
+    >(Prisma.sql`
+      SELECT "id", "activeRunId"
+      FROM "AiThread"
+      WHERE "id" = ${threadId}
+      FOR UPDATE
+    `);
+
+    return rows[0] ?? null;
+  }
+
   /** 为已经锁定的 Thread 原子分配下一条用户输入的稳定队列序号。 */
   async allocateQueueSequence(
     transaction: Prisma.TransactionClient,

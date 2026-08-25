@@ -26,6 +26,7 @@ import {
   toPrismaAiLanguageModelRole,
 } from './ai-persistence.utils';
 import { AiQueueService } from './ai-queue.service';
+import { AiRunControlService } from './ai-run-control.service';
 
 @Injectable()
 export class AiThreadService {
@@ -33,6 +34,7 @@ export class AiThreadService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly queueService: AiQueueService,
+    private readonly runControlService: AiRunControlService,
   ) {}
 
   /** 原子创建 Thread、首条用户消息和首个排队 Run，并处理创建请求的幂等重放。 */
@@ -135,7 +137,7 @@ export class AiThreadService {
 
   /**
    * 原子持久化既有 Thread 的用户输入；空闲 Thread 只领取队首，活跃 Run 期间仅入队。
-   * 调整方向会替代全部尚未领取的旧用户输入，不在这里执行取消器或模型调用。
+   * 调整方向会替代全部尚未领取的旧用户输入，并在同一事务中请求取消当前 Run。
    */
   async createMessageWithRun(
     input: CreateAiThreadMessageRunInput,
@@ -212,18 +214,29 @@ export class AiThreadService {
           },
         });
 
-        const claimed = thread.activeRunId
-          ? null
-          : await this.queueService.claimNextQueuedMessage(tx, thread.id);
+        const stopResult =
+          submissionMode === 'STEER'
+            ? await this.runControlService.requestActiveRunCancellationInTransaction(
+                tx,
+                {
+                  threadId: thread.id,
+                  activeRunId: thread.activeRunId,
+                  cancellationReason: 'USER_REDIRECTED',
+                },
+              )
+            : null;
+        const claimed = stopResult?.nextRunId
+          ? { messageId: message.id, runId: stopResult.nextRunId }
+          : thread.activeRunId || stopResult
+            ? null
+            : await this.queueService.claimNextQueuedMessage(tx, thread.id);
 
         return {
           threadId: thread.id,
           messageId: message.id,
           runId: claimed?.messageId === message.id ? claimed.runId : null,
           dispatchState:
-            claimed?.messageId === message.id
-              ? 'DISPATCHED'
-              : 'QUEUED',
+            claimed?.messageId === message.id ? 'DISPATCHED' : 'QUEUED',
           queueSequence,
           submissionMode,
           replayed: false,

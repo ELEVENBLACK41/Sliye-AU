@@ -87,14 +87,40 @@ export type CompleteAiRunInput = {
   ownerUserId: number;
   /** 要收敛的 Run 标识。 */
   runId: string;
-  /** 目标终态；第二阶段只允许收敛到取消、完成或失败。 */
-  status: Extract<AiRunStatus, 'CANCELLED' | 'COMPLETED' | 'FAILED'>;
-  /** 取消路径的稳定原因；非取消终态传入 `null`。 */
-  cancellationReason: AiRunCancellationReason | null;
+  /** 只有持有当前有效执行租约的执行器可以收敛成功或失败终态。 */
+  executionLeaseId: string;
+  /** 目标终态；用户取消必须先进入取消请求再单独确认。 */
+  status: Extract<AiRunStatus, 'COMPLETED' | 'FAILED'>;
   /** 失败路径的稳定原因；非失败终态传入 `null`。 */
   failureReason: string | null;
   /** 失败路径的稳定业务错误码；非失败终态传入 `null`。 */
   failureCode: ApiErrorCode | null;
+};
+
+/** 用户请求停止当前 Run 的服务端输入；该操作不会直接向模型流注入新的文本。 */
+export type RequestAiRunStopInput = {
+  /** 当前操作用户，必须是 Run 所属 Thread 的拥有者。 */
+  ownerUserId: number;
+  /** 当前用户希望停止的 Run 标识。 */
+  runId: string;
+  /** 用户主动停止或调整方向触发的稳定取消原因。 */
+  cancellationReason: Extract<
+    AiRunCancellationReason,
+    'USER_REQUESTED' | 'USER_REDIRECTED'
+  >;
+};
+
+/** 取消请求或确认取消后返回的当前 Run 状态。 */
+export type AiRunStopResult = {
+  /** 被处理的 Run 标识。 */
+  runId: string;
+  /** 事务完成后的最新 Run 状态。 */
+  status: Extract<
+    AiRunStatus,
+    'CANCELLATION_REQUESTED' | 'CANCELLED' | 'COMPLETED' | 'FAILED'
+  >;
+  /** 旧 Run 已终态后由队列领取的下一条用户消息对应 Run；没有则为 null。 */
+  nextRunId: string | null;
 };
 
 /** 追加一条已冻结负载结构的 AI 流事件时使用的内部输入。 */

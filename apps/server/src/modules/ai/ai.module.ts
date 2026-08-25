@@ -4,12 +4,28 @@
 
 import { Module } from '@nestjs/common';
 import { AiEventService } from './services/ai-event.service';
+import { AiExecutionLeaseService } from './services/ai-execution-lease.service';
+import { AiRunControlService } from './services/ai-run-control.service';
 import { AiRunService } from './services/ai-run.service';
 import { AiQueueService } from './services/ai-queue.service';
 import { AiThreadService } from './services/ai-thread.service';
 
 @Module({
-  providers: [AiEventService, AiQueueService, AiRunService, AiThreadService],
-  exports: [AiEventService, AiQueueService, AiRunService, AiThreadService],
+  providers: [
+    AiExecutionLeaseService,
+    AiEventService,
+    AiQueueService,
+    AiRunControlService,
+    AiRunService,
+    AiThreadService,
+  ],
+  exports: [
+    AiExecutionLeaseService,
+    AiEventService,
+    AiQueueService,
+    AiRunControlService,
+    AiRunService,
+    AiThreadService,
+  ],
 })
 export class AiModule {}

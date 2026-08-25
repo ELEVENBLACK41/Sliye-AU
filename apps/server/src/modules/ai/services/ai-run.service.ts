@@ -11,24 +11,43 @@ import { AiRunStatus, Prisma } from '../../../generated/prisma';
 import { assertAiRunStatusTransition } from '../state/ai-state-transition';
 import type {
   AiThreadRunCreationResult,
-  CompleteAiRunInput,
   RetryAiRunInput,
 } from '../types/ai-persistence.types';
 import {
   assertAiRequiredText,
   createAiRequestFingerprint,
 } from './ai-persistence.utils';
-import { AiEventService } from './ai-event.service';
+import {
+  AiExecutionLeaseService,
+  type AiExecutionLeaseInput,
+  type ClaimedAiRunExecutionLease,
+} from './ai-execution-lease.service';
 import { AiQueueService } from './ai-queue.service';
 
 @Injectable()
 export class AiRunService {
-  /** 注入数据库、事件和队列服务，保证终态、活跃指针与后续分发位于同一事务。 */
+  /** 注入数据库、队列和租约服务，保证重试、领取与续租遵守同一持久化约束。 */
   constructor(
     private readonly prisma: PrismaService,
-    private readonly eventService: AiEventService,
     private readonly queueService: AiQueueService,
+    private readonly executionLeaseService: AiExecutionLeaseService,
   ) {}
+
+  /**
+   * 原子领取一个仍处于 QUEUED 的 Run，并为唯一成功的执行器签发短期租约。
+   * 返回 null 表示 Run 不存在、已被领取或已不再可执行；调用方不得据此再次启动执行器。
+   */
+  async claimQueuedRun(
+    runId: string,
+  ): Promise<ClaimedAiRunExecutionLease | null> {
+    assertAiRunStatusTransition(AiRunStatus.QUEUED, AiRunStatus.RUNNING);
+    return this.executionLeaseService.claimQueuedRun(runId);
+  }
+
+  /** 仅允许当前有效执行器延长自己的 RUNNING 租约。 */
+  async renewExecutionLease(input: AiExecutionLeaseInput): Promise<Date> {
+    return this.executionLeaseService.renewExecutionLease(input);
+  }
 
   /** 为已取消或失败的 Run 创建关联的新 Run，并在重试作用域内支持幂等重放。 */
   async retryRun(input: RetryAiRunInput): Promise<AiThreadRunCreationResult> {
@@ -161,65 +180,6 @@ export class AiRunService {
       }
       throw error;
     }
-  }
-
-  /** 在同一事务中完成合法终态转换、清除活跃指针、领取唯一队首并追加状态变化事件。 */
-  async completeRun(input: CompleteAiRunInput): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      const run = await tx.aiRun.findFirst({
-        where: {
-          id: input.runId,
-          thread: { ownerUserId: input.ownerUserId },
-        },
-        select: { id: true, threadId: true, status: true },
-      });
-      if (!run) {
-        throw this.createRunNotFoundException();
-      }
-      const thread = await this.queueService.lockThread(
-        tx,
-        run.threadId,
-        input.ownerUserId,
-      );
-      if (!thread) {
-        throw this.createRunNotFoundException();
-      }
-      assertAiRunStatusTransition(run.status, input.status);
-
-      const updated = await tx.aiRun.updateMany({
-        where: { id: run.id, status: run.status },
-        data: {
-          status: input.status,
-          cancellationReason: input.cancellationReason,
-          failureReason: input.failureReason,
-          failureCode: input.failureCode,
-          finishedAt: new Date(),
-        },
-      });
-      if (updated.count !== 1) {
-        throw new BusinessException({
-          code: API_ERROR_CODES.AI_RUN_INVALID_STATUS_TRANSITION,
-          message: 'AI 运行状态已被其他请求改变，请刷新后重试',
-          status: HttpStatus.CONFLICT,
-        });
-      }
-
-      await tx.aiThread.updateMany({
-        where: { id: run.threadId, activeRunId: run.id },
-        data: { activeRunId: null },
-      });
-      await this.queueService.claimNextQueuedMessage(tx, run.threadId);
-      await this.eventService.appendInTransaction(tx, {
-        runId: run.id,
-        type: 'RUN_STATUS_CHANGED',
-        data: {
-          fromStatus: run.status,
-          toStatus: input.status,
-          cancellationReason: input.cancellationReason,
-          failureReason: input.failureReason,
-        },
-      });
-    });
   }
 
   /** 查询同一旧 Run 和幂等键已经创建过的重试记录。 */
