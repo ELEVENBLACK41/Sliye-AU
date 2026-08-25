@@ -24,6 +24,7 @@ import { AiRunControlService } from './ai-run-control.service';
 import { AiRunService } from './ai-run.service';
 import { AiSourceDependencyService } from './ai-source-dependency.service';
 import { AiStepService } from './ai-step.service';
+import { AiThreadQueryService } from './ai-thread-query.service';
 import { AiThreadService } from './ai-thread.service';
 import { AiToolCallService } from './ai-tool-call.service';
 
@@ -42,6 +43,7 @@ describePersistence('AI 持久化事务地基', () => {
   let assistantMessageService: AiAssistantMessageService;
   let stepService: AiStepService;
   let toolCallService: AiToolCallService;
+  let threadQueryService: AiThreadQueryService;
   const createdUserIds: number[] = [];
 
   /** 连接隔离数据库并组装不依赖 HTTP 或模型调用的持久化服务。 */
@@ -80,6 +82,7 @@ describePersistence('AI 持久化事务地基', () => {
       runControlService,
     );
     runService = new AiRunService(prisma, queueService, executionLeaseService);
+    threadQueryService = new AiThreadQueryService(prisma);
   });
 
   /** 每个用例结束后删除本用例 AI 数据和独立创建的用户，避免测试之间共享状态。 */
@@ -556,6 +559,82 @@ describePersistence('AI 持久化事务地基', () => {
         select: { status: true },
       }),
     ).resolves.toMatchObject({ status: 'QUEUED' });
+  });
+
+  it('同一最后活动时间的多条会话翻页不重复不漏项，且排除已固定会话', async () => {
+    const ownerUserId = await createTestUser();
+    const createdThreadIds: string[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      const created = await threadService.createThreadWithInitialRun({
+        ownerUserId,
+        message: `分页稳定性会话 ${index}。`,
+        idempotencyKey: `thread-pagination-${index}`,
+        modelRole: 'standard',
+      });
+      createdThreadIds.push(created.threadId);
+    }
+
+    // 制造游标最容易出错的场景：全部会话的排序时间完全相同，只能靠标识区分先后。
+    const sharedUpdatedAt = new Date('2026-08-25T12:00:00.000Z');
+    await prisma.aiThread.updateMany({
+      where: { id: { in: createdThreadIds } },
+      data: { updatedAt: sharedUpdatedAt },
+    });
+    // 固定其中一条，它应当从分页列表中消失。
+    const pinnedThreadId = createdThreadIds[0];
+    await prisma.aiThread.update({
+      where: { id: pinnedThreadId },
+      data: { pinnedAt: new Date() },
+    });
+
+    const visitedThreadIds: string[] = [];
+    let cursor: string | undefined;
+    let pageCount = 0;
+    do {
+      const page = await threadQueryService.listThreads(ownerUserId, {
+        limit: 2,
+        cursor,
+      });
+      visitedThreadIds.push(...page.items.map((item) => item.id));
+      cursor = page.nextCursor ?? undefined;
+      pageCount += 1;
+      expect(pageCount).toBeLessThanOrEqual(10);
+    } while (cursor);
+
+    const expectedThreadIds = createdThreadIds.filter(
+      (threadId) => threadId !== pinnedThreadId,
+    );
+    expect(visitedThreadIds).toHaveLength(expectedThreadIds.length);
+    expect(new Set(visitedThreadIds).size).toBe(expectedThreadIds.length);
+    expect([...visitedThreadIds].sort()).toEqual([...expectedThreadIds].sort());
+  });
+
+  it('会话详情只对所有者可见，并返回非终态活跃 Run 快照', async () => {
+    const ownerUserId = await createTestUser();
+    const otherUserId = await createTestUser();
+    const created = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证详情权限。',
+      idempotencyKey: 'thread-detail-001',
+      modelRole: 'standard',
+    });
+
+    await expect(
+      threadQueryService.getThreadDetail(ownerUserId, created.threadId),
+    ).resolves.toMatchObject({
+      id: created.threadId,
+      pinnedAt: null,
+      archivedAt: null,
+      activeRun: { runId: created.runId, status: 'QUEUED' },
+    });
+
+    // 非所有者不得区分“无权”与“不存在”。
+    await expect(
+      threadQueryService.getThreadDetail(otherUserId, created.threadId),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
+    await expect(
+      threadQueryService.getThreadDetail(ownerUserId, 'thread-does-not-exist'),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
   });
 
   it('从未被领取的孤儿排队 Run 会在宽限期后被对账重新交回派发', async () => {

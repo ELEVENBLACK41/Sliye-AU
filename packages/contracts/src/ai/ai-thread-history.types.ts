@@ -5,6 +5,12 @@
  * 所有接口都以“当前登录用户即 Thread 所有者”为唯一数据范围，
  * 因此列表项不再重复返回 `ownerUserId`：它恒等于调用方，返回它既冗余也无意义。
  * 越权访问统一表现为“不存在”，不区分“无权”与“不存在”，避免探测他人 Thread 是否存在。
+ *
+ * 会话在侧栏分为“已固定”和“最近”两组，对应两个互斥的列表：
+ * 固定会话数量有上限、一次性返回，最近会话按游标分页且排除已固定会话。
+ * 这样分页列表始终只有 `updatedAt` 一个排序键，游标不需要额外编码固定状态。
+ * 固定与归档互斥：归档一个会话会同时清除它的固定状态，
+ * 因此固定列表永远不含已归档会话，不需要在固定接口上再叠加归档筛选。
  */
 
 import type { AiRunNonTerminalStatus } from './ai-run.types.ts';
@@ -25,8 +31,15 @@ export const AI_THREAD_PAGE_DEFAULT_LIMIT = 20;
 /** Thread 列表单页允许请求的最大条数，防止一次拉取超长历史。 */
 export const AI_THREAD_PAGE_MAX_LIMIT = 50;
 
+/** 单个用户允许同时固定的最大会话数。 */
+export const AI_THREAD_PINNED_MAX = 20;
+
 /**
  * Thread 列表接口的游标查询参数。
+ *
+ * 该接口只返回**未固定**的会话；固定会话数量有上限、由独立接口一次性返回，
+ * 因此不参与游标分页，也不会与本列表重复。这样列表始终只有一个排序键，
+ * 游标规则不需要额外编码固定状态。
  *
  * 游标规则：
  * - 列表按“最后活动时间倒序”返回，即最近有变化的会话排在最前；
@@ -35,7 +48,10 @@ export const AI_THREAD_PAGE_MAX_LIMIT = 50;
  *   避免仅按时间分页时出现重复项或漏项；
  * - 不透明还意味着服务端以后调整排序键不会破坏本契约；
  * - 首页请求省略 `cursor`；后续请求传上一页返回的 `nextCursor`；
- * - 更换 `filter` 时必须丢弃旧 `cursor` 重新从首页开始，跨筛选条件复用游标的行为未定义。
+ * - 游标内部记录了生成它时的 `filter`：更换筛选条件后继续使用旧游标会返回
+ *   `AI.THREAD_CURSOR_INVALID`，客户端必须丢弃游标重新从首页开始。
+ *   这里刻意选择稳定报错而不是静默按新条件继续，避免分页结果错乱却无人察觉；
+ * - 游标非法、结构不符或版本失效同样返回 `AI.THREAD_CURSOR_INVALID`，不会降级为首页。
  */
 export type AiThreadListQuery = {
   /** 上一页返回的不透明游标；首页省略。 */
@@ -57,6 +73,8 @@ export type AiThreadListItem = {
   title: string;
   /** 当前非终态 Run 标识；没有正在处理的 Run 时为 `null`。 */
   activeRunId: string | null;
+  /** 用户把会话固定在侧栏的时间；未固定时为 `null`，也是置顶列表的排序依据。 */
+  pinnedAt: string | null;
   /** 用户归档 Thread 的时间；未归档时为 `null`。 */
   archivedAt: string | null;
   /** Thread 创建时间，使用 ISO 8601 字符串。 */
@@ -65,7 +83,7 @@ export type AiThreadListItem = {
   updatedAt: string;
 };
 
-/** Thread 列表的游标分页结果。 */
+/** Thread 列表的游标分页结果；只包含未固定的会话。 */
 export type AiThreadPage = {
   /** 按最后活动时间倒序排列的当前页会话。 */
   items: AiThreadListItem[];
@@ -73,6 +91,26 @@ export type AiThreadPage = {
   nextCursor: string | null;
   /** 是否仍有更多会话可以继续拉取。 */
   hasMore: boolean;
+};
+
+/**
+ * 固定会话列表。
+ *
+ * 固定数量由 `AI_THREAD_PINNED_MAX` 硬性限制，超出时置顶写接口返回稳定业务错误，
+ * 因此读取侧不会被截断，也就不需要游标或 `hasMore`。
+ * 列表按 `pinnedAt` 倒序，即最近固定的排在最前；已归档会话不会出现在这里。
+ */
+export type AiPinnedThreadList = {
+  /** 按固定时间倒序排列的全部固定会话。 */
+  items: AiThreadListItem[];
+  /** 当前生效的固定数量上限，供客户端提前禁用超限操作。 */
+  limit: number;
+};
+
+/** 固定或取消固定一个会话的请求体。 */
+export type SetAiThreadPinnedRequest = {
+  /** `true` 固定会话，`false` 取消固定；重复设置为同一状态是幂等的。 */
+  pinned: boolean;
 };
 
 /**

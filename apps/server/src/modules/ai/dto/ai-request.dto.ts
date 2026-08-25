@@ -7,6 +7,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type {
   CreateAiThreadRequest,
   AiMessageSubmissionMode,
+  AiThreadListFilter,
+} from '@workspace/contracts/ai';
+import {
+  AI_THREAD_LIST_FILTERS,
+  AI_THREAD_PAGE_DEFAULT_LIMIT,
 } from '@workspace/contracts/ai';
 import { Transform } from 'class-transformer';
 import {
@@ -27,6 +32,9 @@ const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
 
 /** Thread 与 Run 标识（cuid）允许的最大长度。 */
 const MAX_AI_RESOURCE_ID_LENGTH = 64;
+
+/** 不透明分页游标允许的最大长度，避免超长输入进入解码流程。 */
+const MAX_AI_CURSOR_LENGTH = 512;
 
 /** 校验创建 AI 会话的首条消息与幂等键；Thread 不接收任何业务目标字段。 */
 export class CreateAiThreadDto implements CreateAiThreadRequest {
@@ -72,6 +80,34 @@ export class CreateAiThreadMessageDto {
   @IsOptional()
   @IsIn(['NORMAL', 'STEER'])
   submissionMode?: AiMessageSubmissionMode;
+}
+
+/**
+ * 校验 Thread 列表的游标查询参数。
+ *
+ * `cursor` 只做长度与类型校验，内容合法性由游标解码统一判断并返回稳定错误码；
+ * `limit` 超出上限时由服务端收敛，不在这里直接拒绝，避免客户端因为默认值变化而失败。
+ */
+export class ListAiThreadsQueryDto {
+  /** 上一页返回的不透明游标；首页省略。 */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_AI_CURSOR_LENGTH)
+  cursor?: string;
+
+  /** 单页条数，缺省与上限由 contracts 常量定义。 */
+  @ApiPropertyOptional({ default: AI_THREAD_PAGE_DEFAULT_LIMIT })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  limit?: number;
+
+  /** 归档筛选条件，缺省为 `ACTIVE`。 */
+  @ApiPropertyOptional({ enum: AI_THREAD_LIST_FILTERS })
+  @IsOptional()
+  @IsIn(AI_THREAD_LIST_FILTERS)
+  filter?: AiThreadListFilter;
 }
 
 /**

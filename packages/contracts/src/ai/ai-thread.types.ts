@@ -21,6 +21,8 @@ export type AiThread = {
   title: string;
   /** 当前非终态 Run 标识；没有正在处理的 Run 时为 `null`。 */
   activeRunId: string | null;
+  /** 用户把会话固定在侧栏的时间；未固定时为 `null`。 */
+  pinnedAt: string | null;
   /** 用户归档 Thread 的时间；未归档时为 `null`。 */
   archivedAt: string | null;
   /** Thread 创建时间，使用 ISO 8601 字符串。 */

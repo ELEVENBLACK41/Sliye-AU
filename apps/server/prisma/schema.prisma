@@ -1462,6 +1462,8 @@ model AiThread {
   activeRunId String?   @unique
   /// 为 Thread 内用户输入原子分配单调队列序号的下一个可用值。
   nextQueueSequence Int @default(1)
+  /// 用户把该会话固定在侧栏的时间；未固定时为 null，同时作为置顶列表的排序依据。
+  pinnedAt    DateTime?
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
@@ -1473,6 +1475,7 @@ model AiThread {
 
   @@unique([ownerUserId, createIdempotencyKey])
   @@index([ownerUserId, archivedAt, updatedAt])
+  @@index([ownerUserId, pinnedAt])
 }
 
 /// Thread 中用于展示和审计的用户或助手消息；工具原文不写入该表。
