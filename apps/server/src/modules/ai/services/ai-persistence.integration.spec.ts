@@ -93,7 +93,13 @@ describePersistence('AI 持久化事务地基', () => {
     runService = new AiRunService(prisma, queueService, executionLeaseService);
     threadQueryService = new AiThreadQueryService(prisma);
     threadPinService = new AiThreadPinService(prisma);
-    messageQueryService = new AiMessageQueryService(prisma);
+    messageQueryService = new AiMessageQueryService(
+      prisma,
+      new AiSourceVisibilityService(
+        prisma,
+        new DecisionVisibilityService(prisma, new AuthorizationService(prisma)),
+      ),
+    );
     threadMetadataService = new AiThreadMetadataService(prisma, queueService);
   });
 
@@ -134,6 +140,21 @@ describePersistence('AI 持久化事务地基', () => {
   afterAll(async () => {
     await prisma.onModuleDestroy();
   });
+
+  /** 构造一个只用于只读查询的授权上下文，权限范围为全量。 */
+  function buildAuthorization(userId: number): AuthorizationContext {
+    return {
+      userId,
+      deptId: null,
+      isSuperAdmin: false,
+      roleCodes: new Set(),
+      deniedPermissions: new Set(),
+      grants: new Map([
+        ['ai:chat:use', new Set([DataScope.ALL])],
+        ['decision:read', new Set([DataScope.ALL])],
+      ]),
+    };
+  }
 
   /** 创建一位只属于当前测试用例的用户。 */
   async function createTestUser(): Promise<number> {
@@ -772,7 +793,7 @@ describePersistence('AI 持久化事务地基', () => {
     let pageCount = 0;
     do {
       const page = await messageQueryService.listMessages(
-        ownerUserId,
+        buildAuthorization(ownerUserId),
         initial.threadId,
         { limit: 2, cursor },
       );
@@ -821,7 +842,7 @@ describePersistence('AI 持久化事务地基', () => {
     });
 
     const page = await messageQueryService.listMessages(
-      ownerUserId,
+      buildAuthorization(ownerUserId),
       initial.threadId,
       {},
     );
@@ -867,11 +888,15 @@ describePersistence('AI 持久化事务地基', () => {
     });
 
     await expect(
-      messageQueryService.listMessages(otherUserId, first.threadId, {}),
+      messageQueryService.listMessages(
+        buildAuthorization(otherUserId),
+        first.threadId,
+        {},
+      ),
     ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
 
     const firstPage = await messageQueryService.listMessages(
-      ownerUserId,
+      buildAuthorization(ownerUserId),
       first.threadId,
       { limit: 1 },
     );
@@ -879,9 +904,13 @@ describePersistence('AI 持久化事务地基', () => {
     const reusableCursor = firstPage.nextCursor;
     if (reusableCursor) {
       await expect(
-        messageQueryService.listMessages(ownerUserId, second.threadId, {
-          cursor: reusableCursor,
-        }),
+        messageQueryService.listMessages(
+          buildAuthorization(ownerUserId),
+          second.threadId,
+          {
+            cursor: reusableCursor,
+          },
+        ),
       ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_CURSOR_INVALID });
     }
   });
@@ -1320,6 +1349,144 @@ describePersistence('AI 持久化事务地基', () => {
           withoutSource.runId,
         ]),
       ).resolves.toEqual(new Map([[withoutSource.runId, false]]));
+    } finally {
+      await clearAiTables();
+      await prisma.decision.deleteMany({ where: { id: decision.id } });
+      await prisma.project.deleteMany({ where: { id: project.id } });
+      await prisma.department.deleteMany({ where: { id: department.id } });
+    }
+  });
+
+  it('来源失权后消息历史隐藏助手正文与工具调用，用户消息不受影响', async () => {
+    const ownerUserId = await createTestUser();
+    const department = await prisma.department.create({
+      data: {
+        code: `AI-PROJECTION-${randomUUID()}`,
+        name: 'AI 失权投影测试部门',
+      },
+    });
+    const project = await prisma.project.create({
+      data: {
+        title: 'AI 失权投影测试项目',
+        createdById: ownerUserId,
+        deptId: department.id,
+        members: { create: { userId: ownerUserId } },
+      },
+    });
+    const decision = await prisma.decision.create({
+      data: {
+        title: '不应出现在失权后历史中的决策标题',
+        projectId: project.id,
+        creatorId: ownerUserId,
+        deptId: department.id,
+      },
+    });
+
+    try {
+      const created = await threadService.createThreadWithInitialRun({
+        ownerUserId,
+        message: '用户自己写的问题，失权后仍应可见。',
+        idempotencyKey: 'source-projection-001',
+        modelRole: 'standard',
+      });
+      const lease = await runService.claimQueuedRun(created.runId);
+      const assistant = await assistantMessageService.ensureAssistantMessage({
+        runId: created.runId,
+        executionLeaseId: lease!.executionLeaseId,
+      });
+      await prisma.aiMessage.update({
+        where: { id: assistant.messageId },
+        data: { content: '不应出现在失权后历史中的助手回答' },
+      });
+      const toolCall = await toolCallService.startToolCall({
+        runId: created.runId,
+        executionLeaseId: lease!.executionLeaseId,
+        providerToolCallId: 'provider-projection-1',
+        toolName: 'getDecisionContext',
+        input: { decisionId: decision.id },
+      });
+      await toolCallService.settleToolCall({
+        runId: created.runId,
+        executionLeaseId: lease!.executionLeaseId,
+        toolCallId: toolCall.toolCallId,
+        status: 'SUCCEEDED',
+        outputSummary: { decisionId: decision.id },
+        failureCode: null,
+        failureReason: null,
+        sources: [
+          {
+            sourceType: 'DECISION',
+            sourceId: String(decision.id),
+            label: decision.title,
+          },
+        ],
+        durationMs: 5,
+      });
+
+      // 有权限时助手正文与工具调用正常返回。
+      const visiblePage = await messageQueryService.listMessages(
+        buildAuthorization(ownerUserId),
+        created.threadId,
+        {},
+      );
+      const visibleAssistant = visiblePage.items.find(
+        (item) => item.id === assistant.messageId,
+      );
+      expect(visibleAssistant).toMatchObject({
+        contentVisibility: 'VISIBLE',
+        content: '不应出现在失权后历史中的助手回答',
+      });
+      expect(visibleAssistant?.run?.toolCalls).toHaveLength(1);
+
+      // 撤销项目成员身份，来源随之失权。
+      await prisma.projectMember.deleteMany({
+        where: { projectId: project.id, userId: ownerUserId },
+      });
+      const revokedPage = await messageQueryService.listMessages(
+        buildAuthorization(ownerUserId),
+        created.threadId,
+        {},
+      );
+      const revokedAssistant = revokedPage.items.find(
+        (item) => item.id === assistant.messageId,
+      );
+      expect(revokedAssistant).toMatchObject({
+        contentVisibility: 'SOURCE_REVOKED',
+        content: '',
+      });
+      // 工具名称与数量同样能反推信息，必须一并清空。
+      expect(revokedAssistant?.run?.toolCalls).toEqual([]);
+      // Run 状态描述用户自己这次运行的结果，不承载来源内容，保留。
+      expect(revokedAssistant?.run?.runId).toBe(created.runId);
+
+      // 整页响应中不得残留任何来源内容或标题。
+      const serialized = JSON.stringify(revokedPage);
+      expect(serialized).not.toContain('不应出现在失权后历史中的助手回答');
+      expect(serialized).not.toContain('不应出现在失权后历史中的决策标题');
+      expect(serialized).not.toContain('getDecisionContext');
+
+      // 用户自己写的消息不依赖他人授权，始终可见。
+      const userItem = revokedPage.items.find((item) => item.role === 'USER');
+      expect(userItem).toMatchObject({
+        contentVisibility: 'VISIBLE',
+        content: '用户自己写的问题，失权后仍应可见。',
+      });
+
+      // 权限恢复后正文与工具调用实时回来。
+      await prisma.projectMember.create({
+        data: { projectId: project.id, userId: ownerUserId },
+      });
+      const restoredPage = await messageQueryService.listMessages(
+        buildAuthorization(ownerUserId),
+        created.threadId,
+        {},
+      );
+      expect(
+        restoredPage.items.find((item) => item.id === assistant.messageId),
+      ).toMatchObject({
+        contentVisibility: 'VISIBLE',
+        content: '不应出现在失权后历史中的助手回答',
+      });
     } finally {
       await clearAiTables();
       await prisma.decision.deleteMany({ where: { id: decision.id } });

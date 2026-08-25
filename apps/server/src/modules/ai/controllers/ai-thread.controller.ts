@@ -88,11 +88,10 @@ export class AiThreadController {
     @Param('threadId') threadId: string,
     @Query() query: ListAiMessagesQueryDto,
   ) {
-    return this.messageQueryService.listMessages(
-      authorization.userId,
-      threadId,
-      { cursor: query.cursor, limit: query.limit },
-    );
+    return this.messageQueryService.listMessages(authorization, threadId, {
+      cursor: query.cursor,
+      limit: query.limit,
+    });
   }
 
   /** 重命名会话；不改变会话的最后活动时间与列表排序位置。 */

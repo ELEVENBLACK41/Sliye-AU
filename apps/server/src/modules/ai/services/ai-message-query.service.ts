@@ -23,8 +23,10 @@ import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
+import type { AuthorizationContext } from '../../auth/types/auth.types';
 import { Prisma } from '../../../generated/prisma';
 import { AI_CURSOR_KINDS, decodeAiCursor, encodeAiCursor } from './ai-cursor';
+import { AiSourceVisibilityService } from './ai-source-visibility.service';
 
 /**
  * 消息及其所属 Run、工具调用的字段投影。
@@ -73,8 +75,11 @@ type AiMessageHistoryRow = Prisma.AiMessageGetPayload<{
 
 @Injectable()
 export class AiMessageQueryService {
-  /** 注入唯一 Prisma 服务；查询始终先校验会话归属。 */
-  constructor(private readonly prisma: PrismaService) {}
+  /** 注入 Prisma 与来源可见性服务；查询始终先校验会话归属。 */
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sourceVisibilityService: AiSourceVisibilityService,
+  ) {}
 
   /**
    * 按创建时间从新到旧分页读取会话消息，返回时转为正序。
@@ -82,11 +87,11 @@ export class AiMessageQueryService {
    * 投递状态由 `dispatchState` 表达，由客户端决定如何呈现。
    */
   async listMessages(
-    ownerUserId: number,
+    authorization: AuthorizationContext,
     threadId: string,
     query: { cursor?: string; limit?: number },
   ): Promise<AiMessagePage> {
-    await this.assertThreadOwnership(ownerUserId, threadId);
+    await this.assertThreadOwnership(authorization.userId, threadId);
 
     const limit = this.normalizeLimit(query.limit);
     // 多取一条用于判断是否还有更早的消息，返回前再截断到请求的条数。
@@ -100,9 +105,19 @@ export class AiMessageQueryService {
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
     // 查询按倒序取最新一页，渲染顺序是正序，因此这里统一反转。
     const oldestRow = pageRows.at(-1);
+    // 整页一次性判定来源可见性，不在映射循环里逐条查询。
+    const runVisibility =
+      await this.sourceVisibilityService.evaluateRunsSourceVisibility(
+        authorization,
+        pageRows
+          .map((row) => row.run?.id)
+          .filter((runId): runId is string => runId !== undefined),
+      );
 
     return {
-      items: [...pageRows].reverse().map((row) => this.toHistoryItem(row)),
+      items: [...pageRows]
+        .reverse()
+        .map((row) => this.toHistoryItem(row, runVisibility)),
       nextCursor:
         hasMore && oldestRow
           ? encodeAiCursor({
@@ -168,8 +183,20 @@ export class AiMessageQueryService {
     };
   }
 
-  /** 把数据库行转换为对外契约；时间统一为 ISO 8601 字符串。 */
-  private toHistoryItem(row: AiMessageHistoryRow): AiMessageHistoryItem {
+  /**
+   * 把数据库行转换为对外契约；时间统一为 ISO 8601 字符串。
+   *
+   * 来源已失权时清空正文与工具调用，只保留 Run 的状态信息：
+   * 状态描述的是用户自己这次运行的结果，不承载任何来源内容。
+   * 用户消息不依赖他人授权，始终按可见返回。
+   */
+  private toHistoryItem(
+    row: AiMessageHistoryRow,
+    runVisibility: ReadonlyMap<string, boolean>,
+  ): AiMessageHistoryItem {
+    const isSourceRevoked =
+      row.run !== null && runVisibility.get(row.run.id) === false;
+
     return {
       id: row.id,
       threadId: row.threadId,
@@ -179,15 +206,20 @@ export class AiMessageQueryService {
       dispatchState: row.dispatchState,
       queueSequence: row.queueSequence,
       submissionMode: row.submissionMode,
-      content: row.content,
+      content: isSourceRevoked ? '' : row.content,
       createdAt: row.createdAt.toISOString(),
-      run: row.run ? this.toRunSummary(row.run) : null,
+      run: row.run ? this.toRunSummary(row.run, isSourceRevoked) : null,
+      contentVisibility: isSourceRevoked ? 'SOURCE_REVOKED' : 'VISIBLE',
     };
   }
 
-  /** 把 Run 与其工具调用转换为展示快照。 */
+  /**
+   * 把 Run 与其工具调用转换为展示快照。
+   * 来源已失权时清空工具调用：工具名称与数量同样能反推出用户无权知道的信息。
+   */
   private toRunSummary(
     run: NonNullable<AiMessageHistoryRow['run']>,
+    isSourceRevoked: boolean,
   ): AiMessageRun {
     return {
       runId: run.id,
@@ -196,7 +228,9 @@ export class AiMessageQueryService {
       failureCode: run.failureCode as ApiErrorCode | null,
       cancellationReason:
         run.cancellationReason as AiMessageRun['cancellationReason'],
-      toolCalls: run.toolCalls.map((toolCall) => this.toToolCall(toolCall)),
+      toolCalls: isSourceRevoked
+        ? []
+        : run.toolCalls.map((toolCall) => this.toToolCall(toolCall)),
     };
   }
 

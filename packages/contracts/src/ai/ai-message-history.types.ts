@@ -66,15 +66,39 @@ export type AiMessageRun = {
   toolCalls: AiMessageToolCall[];
 };
 
+/** 一条消息正文当前的可见性判定结果。 */
+export const AI_MESSAGE_CONTENT_VISIBILITIES = [
+  'VISIBLE',
+  'SOURCE_REVOKED',
+] as const;
+
+/**
+ * 消息正文可见性。
+ *
+ * `SOURCE_REVOKED` 表示这条回答依赖的业务来源已经不在当前用户的权限范围内。
+ * 判定是**实时**的：来源权限恢复后会自动回到 `VISIBLE`，不需要任何显式重评。
+ * 只会影响助手消息；用户自己写的消息不依赖他人授权，始终为 `VISIBLE`。
+ */
+export type AiMessageContentVisibility =
+  (typeof AI_MESSAGE_CONTENT_VISIBILITIES)[number];
+
 /**
  * 消息历史中的一条消息。
  *
  * 引用数据暂不提供：真实引用映射表尚未建立，本接口不返回占位或伪造的引用，
  * 客户端应按真实空状态渲染，不要据此推断“该回答没有依据”。
+ *
+ * **来源失权时的呈现约定**：`contentVisibility` 为 `SOURCE_REVOKED` 时，
+ * 服务端已经把 `content` 清空、`run.toolCalls` 清空，不返回任何可推断信息。
+ * 客户端必须渲染中性占位，且占位文案**不得**包含来源标题、摘要、名称或数量——
+ * 从“有几处被隐藏”同样能反推出用户无权知道的信息。
+ * 同时不要把它渲染成“AI 没有回答”：内容存在，只是当前不可见。
  */
 export type AiMessageHistoryItem = AiMessage & {
   /** 助手消息所属 Run 的展示快照；用户消息为 `null`。 */
   run: AiMessageRun | null;
+  /** 本条消息正文当前是否可见；不可见时正文与工具调用均已被清空。 */
+  contentVisibility: AiMessageContentVisibility;
 };
 
 /**
