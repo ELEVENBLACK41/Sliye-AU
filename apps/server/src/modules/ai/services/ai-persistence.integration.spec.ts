@@ -23,6 +23,7 @@ import {
 } from './ai-execution-lease.service';
 import { AiQueueService } from './ai-queue.service';
 import { AiRunControlService } from './ai-run-control.service';
+import { AiRunQueryService } from './ai-run-query.service';
 import { AiRunService } from './ai-run.service';
 import { AiSourceDependencyService } from './ai-source-dependency.service';
 import { AiStepService } from './ai-step.service';
@@ -53,6 +54,7 @@ describePersistence('AI 持久化事务地基', () => {
   let threadPinService: AiThreadPinService;
   let messageQueryService: AiMessageQueryService;
   let threadMetadataService: AiThreadMetadataService;
+  let runQueryService: AiRunQueryService;
   const createdUserIds: number[] = [];
 
   /** 连接隔离数据库并组装不依赖 HTTP 或模型调用的持久化服务。 */
@@ -101,6 +103,7 @@ describePersistence('AI 持久化事务地基', () => {
       ),
     );
     threadMetadataService = new AiThreadMetadataService(prisma, queueService);
+    runQueryService = new AiRunQueryService(prisma);
   });
 
   /**
@@ -1355,6 +1358,74 @@ describePersistence('AI 持久化事务地基', () => {
       await prisma.project.deleteMany({ where: { id: project.id } });
       await prisma.department.deleteMany({ where: { id: department.id } });
     }
+  });
+
+  it('换一个用户后，列表、详情、消息与事件四类入口都读不到他人会话', async () => {
+    const ownerUserId = await createTestUser();
+    const otherUserId = await createTestUser();
+    const owned = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '只属于所有者的会话。',
+      idempotencyKey: 'bypass-owner-001',
+      modelRole: 'standard',
+    });
+    const foreign = await threadService.createThreadWithInitialRun({
+      ownerUserId: otherUserId,
+      message: '另一个用户的会话。',
+      idempotencyKey: 'bypass-other-001',
+      modelRole: 'standard',
+    });
+
+    // 列表：只返回自己的会话，不会因为分页参数而带出他人数据。
+    const ownerList = await threadQueryService.listThreads(ownerUserId, {
+      filter: 'ALL',
+    });
+    expect(ownerList.items.map((item) => item.id)).toEqual([owned.threadId]);
+    const otherList = await threadQueryService.listThreads(otherUserId, {
+      filter: 'ALL',
+    });
+    expect(otherList.items.map((item) => item.id)).toEqual([foreign.threadId]);
+
+    // 直接 URL：拿到他人 Thread 标识也只会得到“不存在”，而不是“无权”。
+    await expect(
+      threadQueryService.getThreadDetail(otherUserId, owned.threadId),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
+
+    // 消息与工具结果：消息历史是工具调用摘要的唯一出口，一并被会话归属挡住。
+    await expect(
+      messageQueryService.listMessages(
+        buildAuthorization(otherUserId),
+        owned.threadId,
+        {},
+      ),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_NOT_FOUND });
+
+    // 事件补拉：换用户、或拿正确 runId 配错误 threadId，都读不到事件。
+    await expect(
+      runQueryService.listRunEvents(
+        otherUserId,
+        owned.threadId,
+        owned.runId,
+        0,
+      ),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_RUN_NOT_FOUND });
+    await expect(
+      runQueryService.listRunEvents(
+        ownerUserId,
+        foreign.threadId,
+        owned.runId,
+        0,
+      ),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_RUN_NOT_FOUND });
+    // 所有者本人按正确组合可以正常补拉。
+    await expect(
+      runQueryService.listRunEvents(
+        ownerUserId,
+        owned.threadId,
+        owned.runId,
+        0,
+      ),
+    ).resolves.toMatchObject({ runId: owned.runId, threadId: owned.threadId });
   });
 
   it('来源失权后消息历史隐藏助手正文与工具调用，用户消息不受影响', async () => {

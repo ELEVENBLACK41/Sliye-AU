@@ -16,7 +16,7 @@ import { requestNest, requestNestRaw, type NestResponse } from '@/services/bff-r
 const refreshFlights = new Map<string, Promise<NestResponse<AuthSession>>>();
 
 /** 受保护 BFF 请求支持的 HTTP 方法。 */
-type ProxyHttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type ProxyHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** 受保护 BFF 转发函数参数。 */
 type AuthenticatedProxyOptions = {
