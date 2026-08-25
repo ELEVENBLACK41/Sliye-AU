@@ -25,6 +25,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { RelationshipGraphModule } from './modules/relationship-graph/relationship-graph.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { AiModule } from './modules/ai/ai.module';
 // import { AppController } from './app.controller';
 // import { AppService } from './app.service';
 
@@ -45,6 +46,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     NotificationsModule,
     RelationshipGraphModule,
     DashboardModule,
+    AiModule,
   ],
   providers: [
     {

@@ -270,6 +270,35 @@ enum DecisionEventType {
   AI_SUMMARY_CREATED
 }
 
+/// AI Thread 中持久化消息的发送方类型。
+enum AiMessageRole {
+  USER
+  ASSISTANT
+}
+
+/// 一次 AI Run 的持久化生命周期状态，必须与共享契约中的状态集合保持一致。
+enum AiRunStatus {
+  QUEUED
+  RUNNING
+  WAITING_APPROVAL
+  CANCELLATION_REQUESTED
+  CANCELLED
+  COMPLETED
+  FAILED
+}
+
+/// 当前已冻结负载结构的 AI 追加事件类型。
+enum AiEventType {
+  RUN_STATUS_CHANGED
+  ASSISTANT_TEXT_DELTA
+}
+
+/// AI Run 使用的逻辑语言模型角色，不记录具体供应商模型标识。
+enum AiLanguageModelRole {
+  STANDARD
+  DEEP_REVIEW
+}
+
 model User {
   id    Int     @id @default(autoincrement())
   email String  @unique
@@ -325,6 +354,8 @@ model User {
   meetingsCreated            MeetingSession[]       @relation("MeetingSessionCreator")
   meetingParticipants        MeetingParticipant[]
   meetingPresenceEvents      MeetingPresenceEvent[]
+  aiThreads                  AiThread[]
+  aiMessages                 AiMessage[]            @relation("AiMessageAuthor")
 
   @@index([deptId])
   @@index([status])
@@ -1381,4 +1412,112 @@ model DecisionEvent {
   @@index([taskId])
   @@index([type])
   @@index([occurredAt])
+}
+
+/// 不保存业务目标、只归属于一位用户的 AI 会话容器。
+model AiThread {
+  id String @id @default(cuid())
+
+  ownerUserId              Int
+  /// 创建 Thread 请求的用户级幂等键。
+  createIdempotencyKey     String
+  /// 创建请求正文的 SHA-256 指纹，用于识别同键不同正文冲突。
+  createRequestFingerprint String
+
+  title       String
+  activeRunId String?   @unique
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  owner     User        @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  activeRun AiRun?      @relation("AiThreadActiveRun", fields: [activeRunId], references: [id], onDelete: SetNull)
+  messages  AiMessage[]
+  runs      AiRun[]     @relation("AiThreadRuns")
+
+  @@unique([ownerUserId, createIdempotencyKey])
+  @@index([ownerUserId, archivedAt, updatedAt])
+}
+
+/// Thread 中用于展示和审计的用户或助手消息；工具原文不写入该表。
+model AiMessage {
+  id String @id @default(cuid())
+
+  threadId           String
+  authorUserId       Int?
+  /// Thread 内用户消息的幂等键；助手消息始终为空。
+  clientRequestId    String?
+  /// 用户消息正文的 SHA-256 指纹；助手消息始终为空。
+  requestFingerprint String?
+  /// 助手消息所属 Run；用户消息始终为空。
+  runId              String? @unique
+
+  role      AiMessageRole
+  content   String
+  createdAt DateTime      @default(now())
+
+  thread      AiThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author      User?    @relation("AiMessageAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  run         AiRun?   @relation("AiRunAssistantMessage", fields: [runId], references: [id], onDelete: SetNull)
+  runsAsInput AiRun[]  @relation("AiRunUserMessage")
+
+  @@unique([threadId, authorUserId, clientRequestId])
+  @@index([threadId, createdAt, id])
+}
+
+/// 一次可审计的 AI 执行；非终态 Run 由部分唯一索引保证同 Thread 只存在一个。
+model AiRun {
+  id String @id @default(cuid())
+
+  threadId                String
+  userMessageId           String
+  retryOfRunId            String?
+  /// 同一旧 Run 的重试请求幂等键；首次执行始终为空。
+  retryIdempotencyKey     String?
+  /// 重试请求正文的 SHA-256 指纹；当前无额外正文时仍保存作用域指纹。
+  retryRequestFingerprint String?
+
+  status                  AiRunStatus         @default(QUEUED)
+  modelRole               AiLanguageModelRole @default(STANDARD)
+  resolvedModelId         String?
+  executionLeaseId        String?
+  executionLeaseExpiresAt DateTime?
+  cancellationReason      String?
+  failureReason           String?
+  failureCode             String?
+  usage                   Json?
+  /// 供事件追加事务原子分配、从 1 开始的下一事件序号。
+  nextEventSequence       Int                 @default(1)
+  startedAt               DateTime?
+  finishedAt              DateTime?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @default(now()) @updatedAt
+
+  thread           AiThread   @relation("AiThreadRuns", fields: [threadId], references: [id], onDelete: Cascade)
+  userMessage      AiMessage  @relation("AiRunUserMessage", fields: [userMessageId], references: [id], onDelete: Restrict)
+  assistantMessage AiMessage? @relation("AiRunAssistantMessage")
+  retryOfRun       AiRun?     @relation("AiRunRetries", fields: [retryOfRunId], references: [id], onDelete: Restrict)
+  retries          AiRun[]    @relation("AiRunRetries")
+  activeForThread  AiThread?  @relation("AiThreadActiveRun")
+  events           AiEvent[]
+
+  @@unique([retryOfRunId, retryIdempotencyKey])
+  @@index([threadId, status])
+  @@index([userMessageId])
+  @@index([retryOfRunId])
+}
+
+/// 可按 Run 内严格递增序号补拉的只追加 AI 流事件。
+model AiEvent {
+  id String @id @default(cuid())
+
+  runId     String
+  sequence  Int
+  type      AiEventType
+  data      Json
+  createdAt DateTime    @default(now())
+
+  run AiRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sequence])
 }
