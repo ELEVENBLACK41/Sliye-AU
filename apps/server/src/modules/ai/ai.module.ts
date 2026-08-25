@@ -5,10 +5,11 @@
 import { Module } from '@nestjs/common';
 import { AiEventService } from './services/ai-event.service';
 import { AiRunService } from './services/ai-run.service';
+import { AiQueueService } from './services/ai-queue.service';
 import { AiThreadService } from './services/ai-thread.service';
 
 @Module({
-  providers: [AiEventService, AiRunService, AiThreadService],
-  exports: [AiEventService, AiRunService, AiThreadService],
+  providers: [AiEventService, AiQueueService, AiRunService, AiThreadService],
+  exports: [AiEventService, AiQueueService, AiRunService, AiThreadService],
 })
 export class AiModule {}

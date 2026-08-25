@@ -30,7 +30,10 @@ export type AiRunNonTerminalStatus = Extract<
 export type AiRunTerminalStatus = Extract<AiRunStatus, 'CANCELLED' | 'COMPLETED' | 'FAILED'>;
 
 /** 第一版 Run 被取消时保存的稳定原因。 */
-export type AiRunCancellationReason = 'USER_REQUESTED' | 'SOURCE_ACCESS_REVOKED';
+export type AiRunCancellationReason =
+  | 'USER_REQUESTED'
+  | 'USER_REDIRECTED'
+  | 'SOURCE_ACCESS_REVOKED';
 
 /** 第一版 Run 失败时保存的稳定原因。 */
 export type AiRunFailureReason = 'MODEL_ERROR' | 'TOOL_ERROR' | 'EXECUTION_LEASE_EXPIRED' | 'INTERNAL_ERROR';

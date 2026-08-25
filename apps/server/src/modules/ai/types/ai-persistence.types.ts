@@ -3,7 +3,13 @@
  * 这些类型不属于浏览器 API 或共享 contracts，避免过早冻结尚未开放的服务端实现细节。
  */
 
-import type { AiLanguageModelRole, AiRunStatus } from '@workspace/contracts/ai';
+import type {
+  AiLanguageModelRole,
+  AiRunCancellationReason,
+  AiMessageDispatchState,
+  AiMessageSubmissionMode,
+  AiRunStatus,
+} from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import type { Prisma } from '../../../generated/prisma';
 
@@ -43,6 +49,26 @@ export type CreateAiThreadMessageRunInput = {
   idempotencyKey: string;
   /** 本次 Run 采用的逻辑语言模型角色。 */
   modelRole: AiLanguageModelRole;
+  /** 普通输入顺序排队；调整方向替代尚未领取的旧输入。 */
+  submissionMode?: AiMessageSubmissionMode;
+};
+
+/** 已持久化用户输入的投递结果；排队状态下不会关联新的 Run。 */
+export type AiThreadMessageSubmissionResult = {
+  /** 消息所属 Thread 标识。 */
+  threadId: string;
+  /** 新建或幂等重放得到的用户消息标识。 */
+  messageId: string;
+  /** 当前消息已被领取时关联的新 Run；仍在队列或已被替代时为 `null`。 */
+  runId: string | null;
+  /** 当前消息的持久化投递状态。 */
+  dispatchState: AiMessageDispatchState;
+  /** 当前消息在 Thread 内的稳定队列顺序。 */
+  queueSequence: number;
+  /** 本次消息使用的提交模式。 */
+  submissionMode: AiMessageSubmissionMode;
+  /** 结果是否来自同一幂等键的既有消息。 */
+  replayed: boolean;
 };
 
 /** 从一个已结束 Run 创建重试 Run 的服务输入。 */
@@ -64,7 +90,7 @@ export type CompleteAiRunInput = {
   /** 目标终态；第二阶段只允许收敛到取消、完成或失败。 */
   status: Extract<AiRunStatus, 'CANCELLED' | 'COMPLETED' | 'FAILED'>;
   /** 取消路径的稳定原因；非取消终态传入 `null`。 */
-  cancellationReason: string | null;
+  cancellationReason: AiRunCancellationReason | null;
   /** 失败路径的稳定原因；非失败终态传入 `null`。 */
   failureReason: string | null;
   /** 失败路径的稳定业务错误码；非失败终态传入 `null`。 */

@@ -19,13 +19,15 @@ import {
   createAiRequestFingerprint,
 } from './ai-persistence.utils';
 import { AiEventService } from './ai-event.service';
+import { AiQueueService } from './ai-queue.service';
 
 @Injectable()
 export class AiRunService {
-  /** 注入数据库和事件服务，保证终态与状态事件位于同一事务。 */
+  /** 注入数据库、事件和队列服务，保证终态、活跃指针与后续分发位于同一事务。 */
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventService: AiEventService,
+    private readonly queueService: AiQueueService,
   ) {}
 
   /** 为已取消或失败的 Run 创建关联的新 Run，并在重试作用域内支持幂等重放。 */
@@ -161,7 +163,7 @@ export class AiRunService {
     }
   }
 
-  /** 在同一事务中完成合法终态转换、清除活跃指针并追加状态变化事件。 */
+  /** 在同一事务中完成合法终态转换、清除活跃指针、领取唯一队首并追加状态变化事件。 */
   async completeRun(input: CompleteAiRunInput): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       const run = await tx.aiRun.findFirst({
@@ -172,6 +174,14 @@ export class AiRunService {
         select: { id: true, threadId: true, status: true },
       });
       if (!run) {
+        throw this.createRunNotFoundException();
+      }
+      const thread = await this.queueService.lockThread(
+        tx,
+        run.threadId,
+        input.ownerUserId,
+      );
+      if (!thread) {
         throw this.createRunNotFoundException();
       }
       assertAiRunStatusTransition(run.status, input.status);
@@ -198,6 +208,7 @@ export class AiRunService {
         where: { id: run.threadId, activeRunId: run.id },
         data: { activeRunId: null },
       });
+      await this.queueService.claimNextQueuedMessage(tx, run.threadId);
       await this.eventService.appendInTransaction(tx, {
         runId: run.id,
         type: 'RUN_STATUS_CHANGED',

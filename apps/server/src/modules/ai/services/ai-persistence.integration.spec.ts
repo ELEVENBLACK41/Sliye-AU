@@ -8,6 +8,7 @@ import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../../database/prisma.service';
 import { AiEventService } from './ai-event.service';
+import { AiQueueService } from './ai-queue.service';
 import { AiRunService } from './ai-run.service';
 import { AiThreadService } from './ai-thread.service';
 
@@ -20,6 +21,7 @@ describePersistence('AI 持久化事务地基', () => {
   let threadService: AiThreadService;
   let runService: AiRunService;
   let eventService: AiEventService;
+  let queueService: AiQueueService;
   const createdUserIds: number[] = [];
 
   /** 连接隔离数据库并组装不依赖 HTTP 或模型调用的持久化服务。 */
@@ -30,8 +32,9 @@ describePersistence('AI 持久化事务地基', () => {
     prisma = new PrismaService(configService);
     await prisma.onModuleInit();
     eventService = new AiEventService(prisma);
-    threadService = new AiThreadService(prisma);
-    runService = new AiRunService(prisma, eventService);
+    queueService = new AiQueueService();
+    threadService = new AiThreadService(prisma, queueService);
+    runService = new AiRunService(prisma, eventService, queueService);
   });
 
   /** 每个用例结束后删除本用例 AI 数据和独立创建的用户，避免测试之间共享状态。 */
@@ -88,7 +91,7 @@ describePersistence('AI 持久化事务地基', () => {
     await expect(prisma.aiRun.count()).resolves.toBe(1);
   });
 
-  it('同一 Thread 的不同并发消息只允许一个非终态 Run', async () => {
+  it('活跃 Run 期间的并发普通输入稳定入队，不创建第二个非终态 Run', async () => {
     const ownerUserId = await createTestUser();
     const initial = await threadService.createThreadWithInitialRun({
       ownerUserId,
@@ -96,16 +99,8 @@ describePersistence('AI 持久化事务地基', () => {
       idempotencyKey: 'create-002',
       modelRole: 'standard',
     });
-    await runService.completeRun({
-      ownerUserId,
-      runId: initial.runId,
-      status: 'CANCELLED',
-      cancellationReason: 'USER_REQUESTED',
-      failureReason: null,
-      failureCode: null,
-    });
 
-    const results = await Promise.allSettled([
+    const results = await Promise.all([
       threadService.createMessageWithRun({
         ownerUserId,
         threadId: initial.threadId,
@@ -123,12 +118,10 @@ describePersistence('AI 持久化事务地基', () => {
     ]);
 
     expect(
-      results.filter((result) => result.status === 'fulfilled'),
-    ).toHaveLength(1);
-    const rejected = results.find((result) => result.status === 'rejected');
-    expect(rejected).toMatchObject({
-      reason: { code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE },
-    });
+      results.every(
+        (result) => result.dispatchState === 'QUEUED' && result.runId === null,
+      ),
+    ).toBe(true);
     await expect(
       prisma.aiRun.count({
         where: {
@@ -144,6 +137,50 @@ describePersistence('AI 持久化事务地基', () => {
         },
       }),
     ).resolves.toBe(1);
+    const queuedMessages = await prisma.aiMessage.findMany({
+      where: { id: { in: results.map((result) => result.messageId) } },
+      orderBy: { queueSequence: 'asc' },
+      select: { id: true, dispatchState: true, queueSequence: true },
+    });
+    expect(queuedMessages).toEqual([
+      expect.objectContaining({ dispatchState: 'QUEUED', queueSequence: 2 }),
+      expect.objectContaining({ dispatchState: 'QUEUED', queueSequence: 3 }),
+    ]);
+
+    await runService.completeRun({
+      ownerUserId,
+      runId: initial.runId,
+      status: 'CANCELLED',
+      cancellationReason: 'USER_REQUESTED',
+      failureReason: null,
+      failureCode: null,
+    });
+    const dispatched = await prisma.aiRun.findFirst({
+      where: {
+        threadId: initial.threadId,
+        userMessageId: queuedMessages[0].id,
+      },
+      select: { id: true, status: true },
+    });
+    expect(dispatched).toMatchObject({ status: 'QUEUED' });
+
+    await runService.completeRun({
+      ownerUserId,
+      runId: dispatched!.id,
+      status: 'CANCELLED',
+      cancellationReason: 'USER_REQUESTED',
+      failureReason: null,
+      failureCode: null,
+    });
+    await expect(
+      prisma.aiRun.findFirst({
+        where: {
+          threadId: initial.threadId,
+          userMessageId: queuedMessages[1].id,
+        },
+        select: { status: true },
+      }),
+    ).resolves.toMatchObject({ status: 'QUEUED' });
   });
 
   it('Thread 内消息幂等键会重放同一消息和 Run，并拒绝不同正文', async () => {
@@ -153,14 +190,6 @@ describePersistence('AI 持久化事务地基', () => {
       message: '先建立可发送消息的会话。',
       idempotencyKey: 'create-002-message',
       modelRole: 'standard',
-    });
-    await runService.completeRun({
-      ownerUserId,
-      runId: initial.runId,
-      status: 'CANCELLED',
-      cancellationReason: 'USER_REQUESTED',
-      failureReason: null,
-      failureCode: null,
     });
     const input = {
       ownerUserId,
@@ -177,12 +206,100 @@ describePersistence('AI 持久化事务地基', () => {
 
     expect(first.messageId).toBe(replay.messageId);
     expect(first.runId).toBe(replay.runId);
+    expect(first.dispatchState).toBe('QUEUED');
     await expect(
       threadService.createMessageWithRun({
         ...input,
         message: '这是相同消息幂等键下的不同正文。',
       }),
     ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_IDEMPOTENCY_CONFLICT });
+    await expect(
+      threadService.createMessageWithRun({
+        ...input,
+        submissionMode: 'STEER',
+      }),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_IDEMPOTENCY_CONFLICT });
+  });
+
+  it('调整方向替代全部尚未领取的输入，只保留最新方向等待分发', async () => {
+    const ownerUserId = await createTestUser();
+    const initial = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '先回答当前问题。',
+      idempotencyKey: 'create-redirect-001',
+      modelRole: 'standard',
+    });
+    const normal = await threadService.createMessageWithRun({
+      ownerUserId,
+      threadId: initial.threadId,
+      message: '查一下投票结果。',
+      idempotencyKey: 'message-redirect-normal',
+      modelRole: 'standard',
+    });
+    const firstSteer = await threadService.createMessageWithRun({
+      ownerUserId,
+      threadId: initial.threadId,
+      message: '改为总结会议结论。',
+      idempotencyKey: 'message-redirect-first',
+      modelRole: 'standard',
+      submissionMode: 'STEER',
+    });
+    const latestSteer = await threadService.createMessageWithRun({
+      ownerUserId,
+      threadId: initial.threadId,
+      message: '只总结王五的观点。',
+      idempotencyKey: 'message-redirect-latest',
+      modelRole: 'standard',
+      submissionMode: 'STEER',
+    });
+
+    expect(normal.dispatchState).toBe('QUEUED');
+    expect(firstSteer.dispatchState).toBe('QUEUED');
+    await expect(
+      prisma.aiMessage.findMany({
+        where: {
+          id: {
+            in: [normal.messageId, firstSteer.messageId, latestSteer.messageId],
+          },
+        },
+        orderBy: { queueSequence: 'asc' },
+        select: { id: true, dispatchState: true, submissionMode: true },
+      }),
+    ).resolves.toEqual([
+      {
+        id: normal.messageId,
+        dispatchState: 'SUPERSEDED',
+        submissionMode: 'NORMAL',
+      },
+      {
+        id: firstSteer.messageId,
+        dispatchState: 'SUPERSEDED',
+        submissionMode: 'STEER',
+      },
+      {
+        id: latestSteer.messageId,
+        dispatchState: 'QUEUED',
+        submissionMode: 'STEER',
+      },
+    ]);
+
+    await runService.completeRun({
+      ownerUserId,
+      runId: initial.runId,
+      status: 'CANCELLED',
+      cancellationReason: 'USER_REDIRECTED',
+      failureReason: null,
+      failureCode: null,
+    });
+    await expect(
+      prisma.aiRun.findFirst({
+        where: {
+          threadId: initial.threadId,
+          userMessageId: latestSteer.messageId,
+        },
+        select: { status: true },
+      }),
+    ).resolves.toMatchObject({ status: 'QUEUED' });
   });
 
   it('并发追加事件分配连续唯一序号，并可从 afterSequence 补拉', async () => {

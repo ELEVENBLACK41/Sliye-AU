@@ -7,8 +7,14 @@ import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
-import { AiMessageRole, AiRunStatus, Prisma } from '../../../generated/prisma';
+import {
+  AiMessageDispatchState,
+  AiMessageRole,
+  AiMessageSubmissionMode,
+  AiRunStatus,
+} from '../../../generated/prisma';
 import type {
+  AiThreadMessageSubmissionResult,
   AiThreadRunCreationResult,
   CreateAiThreadMessageRunInput,
   CreateAiThreadRunInput,
@@ -19,11 +25,15 @@ import {
   createAiThreadTitle,
   toPrismaAiLanguageModelRole,
 } from './ai-persistence.utils';
+import { AiQueueService } from './ai-queue.service';
 
 @Injectable()
 export class AiThreadService {
-  /** 注入唯一的 Prisma 数据访问服务。 */
-  constructor(private readonly prisma: PrismaService) {}
+  /** 注入数据库和队列事务服务。 */
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly queueService: AiQueueService,
+  ) {}
 
   /** 原子创建 Thread、首条用户消息和首个排队 Run，并处理创建请求的幂等重放。 */
   async createThreadWithInitialRun(
@@ -70,6 +80,7 @@ export class AiThreadService {
             createIdempotencyKey: input.idempotencyKey,
             createRequestFingerprint: requestFingerprint,
             title: createAiThreadTitle(input.message),
+            nextQueueSequence: 2,
           },
         });
         const message = await tx.aiMessage.create({
@@ -80,6 +91,10 @@ export class AiThreadService {
             requestFingerprint,
             role: AiMessageRole.USER,
             content: input.message,
+            dispatchState: AiMessageDispatchState.DISPATCHED,
+            queueSequence: 1,
+            submissionMode: AiMessageSubmissionMode.NORMAL,
+            requestedModelRole: toPrismaAiLanguageModelRole(input.modelRole),
           },
         });
         const run = await tx.aiRun.create({
@@ -118,12 +133,18 @@ export class AiThreadService {
     }
   }
 
-  /** 原子创建既有 Thread 的用户消息和新 Run，并拒绝第二个非终态 Run。 */
+  /**
+   * 原子持久化既有 Thread 的用户输入；空闲 Thread 只领取队首，活跃 Run 期间仅入队。
+   * 调整方向会替代全部尚未领取的旧用户输入，不在这里执行取消器或模型调用。
+   */
   async createMessageWithRun(
     input: CreateAiThreadMessageRunInput,
-  ): Promise<AiThreadRunCreationResult> {
+  ): Promise<AiThreadMessageSubmissionResult> {
     this.assertThreadMessageInput(input);
-    const requestFingerprint = createAiRequestFingerprint(input.message);
+    const submissionMode = input.submissionMode ?? 'NORMAL';
+    const requestFingerprint = createAiRequestFingerprint(
+      JSON.stringify({ message: input.message, submissionMode }),
+    );
     const existing = await this.findThreadMessageReplay(input);
     if (existing) {
       return this.resolveThreadMessageReplay(existing, requestFingerprint);
@@ -146,7 +167,7 @@ export class AiThreadService {
           );
         }
 
-        const thread = await this.lockThreadForRunCreation(
+        const thread = await this.queueService.lockThread(
           tx,
           input.threadId,
           input.ownerUserId,
@@ -168,10 +189,14 @@ export class AiThreadService {
             requestFingerprint,
           );
         }
-        if (thread.activeRunId) {
-          throw this.createThreadRunActiveException();
+        if (submissionMode === 'STEER') {
+          await this.queueService.supersedeQueuedMessages(tx, thread.id);
         }
 
+        const queueSequence = await this.queueService.allocateQueueSequence(
+          tx,
+          thread.id,
+        );
         const message = await tx.aiMessage.create({
           data: {
             threadId: thread.id,
@@ -180,25 +205,27 @@ export class AiThreadService {
             requestFingerprint,
             role: AiMessageRole.USER,
             content: input.message,
+            dispatchState: AiMessageDispatchState.QUEUED,
+            queueSequence,
+            submissionMode: this.toPrismaSubmissionMode(submissionMode),
+            requestedModelRole: toPrismaAiLanguageModelRole(input.modelRole),
           },
         });
-        const run = await tx.aiRun.create({
-          data: {
-            threadId: thread.id,
-            userMessageId: message.id,
-            status: AiRunStatus.QUEUED,
-            modelRole: toPrismaAiLanguageModelRole(input.modelRole),
-          },
-        });
-        await tx.aiThread.update({
-          where: { id: thread.id },
-          data: { activeRunId: run.id },
-        });
+
+        const claimed = thread.activeRunId
+          ? null
+          : await this.queueService.claimNextQueuedMessage(tx, thread.id);
 
         return {
           threadId: thread.id,
           messageId: message.id,
-          runId: run.id,
+          runId: claimed?.messageId === message.id ? claimed.runId : null,
+          dispatchState:
+            claimed?.messageId === message.id
+              ? 'DISPATCHED'
+              : 'QUEUED',
+          queueSequence,
+          submissionMode,
           replayed: false,
         };
       });
@@ -212,13 +239,6 @@ export class AiThreadService {
         return this.resolveThreadMessageReplay(concurrent, requestFingerprint);
       }
 
-      const thread = await this.prisma.aiThread.findFirst({
-        where: { id: input.threadId, ownerUserId: input.ownerUserId },
-        select: { activeRunId: true },
-      });
-      if (thread?.activeRunId) {
-        throw this.createThreadRunActiveException();
-      }
       throw error;
     }
   }
@@ -290,46 +310,53 @@ export class AiThreadService {
     });
   }
 
-  /** 校验后续消息重放的正文一致性，并还原对应 Run 标识。 */
+  /** 校验后续消息重放的请求语义，并还原已持久化的投递状态。 */
   private resolveThreadMessageReplay(
     message: Awaited<ReturnType<AiThreadService['findThreadMessageReplay']>>,
     requestFingerprint: string,
-  ): AiThreadRunCreationResult {
+  ): AiThreadMessageSubmissionResult {
     if (!message) {
       throw new Error('AI 消息幂等重放缺少既有记录。');
     }
     if (message.requestFingerprint !== requestFingerprint) {
       throw this.createIdempotencyConflictException();
     }
-    const run = message.runsAsInput[0];
-    if (!run) {
-      throw new Error('AI 消息幂等记录缺少对应 Run。');
+    if (
+      !message.dispatchState ||
+      message.queueSequence === null ||
+      !message.submissionMode
+    ) {
+      throw new Error('AI 消息幂等记录缺少投递状态。');
     }
+    const run = message.runsAsInput[0];
 
     return {
       threadId: message.threadId,
       messageId: message.id,
-      runId: run.id,
+      runId: run?.id ?? null,
+      dispatchState: message.dispatchState,
+      queueSequence: message.queueSequence,
+      submissionMode: this.toContractSubmissionMode(message.submissionMode),
       replayed: true,
     };
   }
 
-  /** 锁定 Thread 行后再判断活跃指针，避免两个不同请求同时争抢单 Run 门禁而发生死锁。 */
-  private async lockThreadForRunCreation(
-    transaction: Prisma.TransactionClient,
-    threadId: string,
-    ownerUserId: number,
-  ): Promise<{ id: string; activeRunId: string | null } | null> {
-    const rows = await transaction.$queryRaw<
-      Array<{ id: string; activeRunId: string | null }>
-    >(Prisma.sql`
-      SELECT "id", "activeRunId"
-      FROM "AiThread"
-      WHERE "id" = ${threadId} AND "ownerUserId" = ${ownerUserId}
-      FOR UPDATE
-    `);
+  /** 将 contracts 的提交模式转换为 Prisma 持久化枚举。 */
+  private toPrismaSubmissionMode(
+    submissionMode: 'NORMAL' | 'STEER',
+  ): AiMessageSubmissionMode {
+    return submissionMode === 'STEER'
+      ? AiMessageSubmissionMode.STEER
+      : AiMessageSubmissionMode.NORMAL;
+  }
 
-    return rows[0] ?? null;
+  /** 将 Prisma 持久化枚举转换为 contracts 的稳定提交模式。 */
+  private toContractSubmissionMode(
+    submissionMode: AiMessageSubmissionMode,
+  ): 'NORMAL' | 'STEER' {
+    return submissionMode === AiMessageSubmissionMode.STEER
+      ? 'STEER'
+      : 'NORMAL';
   }
 
   /** 判断异常是否由数据库唯一约束触发，供并发幂等重放使用。 */
@@ -347,15 +374,6 @@ export class AiThreadService {
       code: API_ERROR_CODES.AI_THREAD_NOT_FOUND,
       message: 'AI 会话不存在或无权访问',
       status: HttpStatus.NOT_FOUND,
-    });
-  }
-
-  /** 创建单 Thread 已有活跃 Run 时的稳定冲突异常。 */
-  private createThreadRunActiveException(): BusinessException {
-    return new BusinessException({
-      code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE,
-      message: '当前 AI 会话仍有正在处理的请求',
-      status: HttpStatus.CONFLICT,
     });
   }
 

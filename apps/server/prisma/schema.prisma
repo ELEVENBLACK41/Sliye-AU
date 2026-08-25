@@ -276,6 +276,19 @@ enum AiMessageRole {
   ASSISTANT
 }
 
+/// 用户输入从持久化到创建 Run 期间的投递状态；助手消息不使用该字段。
+enum AiMessageDispatchState {
+  QUEUED
+  DISPATCHED
+  SUPERSEDED
+}
+
+/// 用户提交消息时选择的语义模式；调整方向会替代尚未领取的旧输入。
+enum AiMessageSubmissionMode {
+  NORMAL
+  STEER
+}
+
 /// 一次 AI Run 的持久化生命周期状态，必须与共享契约中的状态集合保持一致。
 enum AiRunStatus {
   QUEUED
@@ -1426,6 +1439,8 @@ model AiThread {
 
   title       String
   activeRunId String?   @unique
+  /// 为 Thread 内用户输入原子分配单调队列序号的下一个可用值。
+  nextQueueSequence Int @default(1)
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
@@ -1451,6 +1466,14 @@ model AiMessage {
   requestFingerprint String?
   /// 助手消息所属 Run；用户消息始终为空。
   runId              String? @unique
+  /// 尚未被 Run 领取的用户输入排队状态；助手消息始终为空。
+  dispatchState      AiMessageDispatchState?
+  /// 用户输入在所属 Thread 内的单调队列序号；助手消息始终为空。
+  queueSequence      Int?
+  /// 普通发送或调整方向的用户提交模式；助手消息始终为空。
+  submissionMode     AiMessageSubmissionMode?
+  /// 用户输入在未来创建 Run 时使用的逻辑模型角色；助手消息始终为空。
+  requestedModelRole AiLanguageModelRole?
 
   role      AiMessageRole
   content   String
@@ -1462,7 +1485,9 @@ model AiMessage {
   runsAsInput AiRun[]  @relation("AiRunUserMessage")
 
   @@unique([threadId, authorUserId, clientRequestId])
+  @@unique([threadId, queueSequence])
   @@index([threadId, createdAt, id])
+  @@index([threadId, dispatchState, queueSequence])
 }
 
 /// 一次可审计的 AI 执行；非终态 Run 由部分唯一索引保证同 Thread 只存在一个。
