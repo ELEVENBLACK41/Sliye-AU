@@ -35,7 +35,7 @@ const chatRequestSchema = z.object({
 
 /** 当前 AI 测试机器人的联调规则，确保全量工具展示可被稳定触发。 */
 const AI_TEST_ASSISTANT_INSTRUCTIONS = `
-你是 NextNest 的决策协作测试助手。所有工具返回均为 MOCK 数据，必须在最终回答中明确说明这一点。
+你是 Descition Hub的决策协作测试助手。所有工具返回均为 MOCK 数据，必须在最终回答中明确说明这一点。
 
 当用户输入“运行完整模拟工具链”时：
 1. 不要先输出解释文本。
@@ -114,17 +114,17 @@ export async function POST(request: Request) {
       feature: 'chat',
     });
     const { configuration } = resolvedModel;
-    const result = streamText({
+    const result = streamText({   //sys提示词每次调用streamText都会作为系统上下文一起传入
       model: resolvedModel.model,
       system: enableWebSearch
         ? `${AI_TEST_ASSISTANT_INSTRUCTIONS}\n${WEB_SEARCH_ASSISTANT_INSTRUCTIONS}`
         : AI_TEST_ASSISTANT_INSTRUCTIONS,
-      messages: await convertToModelMessages(messages),
-      abortSignal: request.signal,
-      timeout: getChatTimeout(resolvedModel.timeout, enableWebSearch),
-      maxOutputTokens: configuration.budget.maxOutputTokens,
-      maxRetries: configuration.budget.maxRetries,
-      providerOptions: resolvedModel.providerOptions,
+      messages: await convertToModelMessages(messages),//把前端传来的聊天记录转成模型能理解的消息格式；通常历史对话也会随本次请求传入。
+      abortSignal: request.signal,//用户断开连接、切换页面或主动取消时，中止模型生成。
+      timeout: getChatTimeout(resolvedModel.timeout, enableWebSearch),  //本次模型调用最长允许多久
+      maxOutputTokens: configuration.budget.maxOutputTokens,//限制模型最多输出多少 token
+      maxRetries: configuration.budget.maxRetries,//调用失败时最多自动重试几次
+      providerOptions: resolvedModel.providerOptions,//某个模型供应商专属配置，比如思考预算、缓存、工具参数等。
       stopWhen: isStepCount(5),
       tools: {
         /** 查询项目当前协作状态的模拟快照，仅用于 AI 工具调用联调。 */
