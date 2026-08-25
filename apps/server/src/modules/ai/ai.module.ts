@@ -42,6 +42,7 @@ import { AiQueueService } from './services/ai-queue.service';
 import { AiSourceDependencyService } from './services/ai-source-dependency.service';
 import { AiStepService } from './services/ai-step.service';
 import { AiMessageQueryService } from './services/ai-message-query.service';
+import { AiSourceVisibilityService } from './services/ai-source-visibility.service';
 import { AiThreadMetadataService } from './services/ai-thread-metadata.service';
 import { AiThreadPinService } from './services/ai-thread-pin.service';
 import { AiThreadQueryService } from './services/ai-thread-query.service';
@@ -99,6 +100,7 @@ const AI_TOOL_DESCRIPTOR_REGISTRATIONS: readonly AiToolDescriptor[] = [
     AiSourceDependencyService,
     AiStepService,
     AiMessageQueryService,
+    AiSourceVisibilityService,
     AiThreadMetadataService,
     AiThreadPinService,
     AiThreadQueryService,
@@ -118,6 +120,7 @@ const AI_TOOL_DESCRIPTOR_REGISTRATIONS: readonly AiToolDescriptor[] = [
     AiRunControlService,
     AiRunService,
     AiMessageQueryService,
+    AiSourceVisibilityService,
     AiThreadMetadataService,
     AiThreadPinService,
     AiThreadQueryService,

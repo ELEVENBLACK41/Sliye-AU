@@ -12,6 +12,7 @@ import { DataScope } from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 import { DecisionContextService } from '../../decisions/services/decision-context.service';
+import { DecisionVisibilityService } from '../../decisions/services/decision-visibility.service';
 import type { AiPermissionPolicyService } from '../policies/ai-permission-policy';
 import { GetDecisionContextToolService } from '../tools/decision/get-decision-context.service';
 import { AiAssistantMessageService } from './ai-assistant-message.service';
@@ -26,6 +27,7 @@ import { AiRunService } from './ai-run.service';
 import { AiSourceDependencyService } from './ai-source-dependency.service';
 import { AiStepService } from './ai-step.service';
 import { AiMessageQueryService } from './ai-message-query.service';
+import { AiSourceVisibilityService } from './ai-source-visibility.service';
 import { AiThreadMetadataService } from './ai-thread-metadata.service';
 import { AiThreadPinService } from './ai-thread-pin.service';
 import { AiThreadQueryService } from './ai-thread-query.service';
@@ -1204,6 +1206,126 @@ describePersistence('AI 持久化事务地基', () => {
     ).rejects.toMatchObject({
       code: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
     });
+  });
+
+  it('来源失权后对应 Run 被判定为不可见，权限恢复后自动重新可见', async () => {
+    const ownerUserId = await createTestUser();
+    const department = await prisma.department.create({
+      data: {
+        code: `AI-VISIBILITY-${randomUUID()}`,
+        name: 'AI 来源可见性测试部门',
+      },
+    });
+    const project = await prisma.project.create({
+      data: {
+        title: 'AI 来源可见性测试项目',
+        createdById: ownerUserId,
+        deptId: department.id,
+        members: { create: { userId: ownerUserId } },
+      },
+    });
+    const decision = await prisma.decision.create({
+      data: {
+        title: 'AI 来源可见性测试决策',
+        projectId: project.id,
+        creatorId: ownerUserId,
+        deptId: department.id,
+      },
+    });
+    const authorization: AuthorizationContext = {
+      userId: ownerUserId,
+      deptId: null,
+      isSuperAdmin: false,
+      roleCodes: new Set(),
+      deniedPermissions: new Set(),
+      grants: new Map([['decision:read', new Set([DataScope.ALL])]]),
+    };
+    const visibilityService = new AiSourceVisibilityService(
+      prisma,
+      new DecisionVisibilityService(prisma, new AuthorizationService(prisma)),
+    );
+
+    try {
+      const withSource = await threadService.createThreadWithInitialRun({
+        ownerUserId,
+        message: '依赖决策来源的会话。',
+        idempotencyKey: 'source-visibility-001',
+        modelRole: 'standard',
+      });
+      const withoutSource = await threadService.createThreadWithInitialRun({
+        ownerUserId,
+        message: '没有登记任何来源的会话。',
+        idempotencyKey: 'source-visibility-002',
+        modelRole: 'standard',
+      });
+      await prisma.aiSourceDependency.create({
+        data: {
+          runId: withSource.runId,
+          sourceType: 'DECISION',
+          sourceId: String(decision.id),
+          usage: 'READ',
+          label: decision.title,
+        },
+      });
+      const runIds = [withSource.runId, withoutSource.runId];
+
+      // 有权限时两个 Run 都可见；没有来源依赖的 Run 不受影响。
+      await expect(
+        visibilityService.evaluateRunsSourceVisibility(authorization, runIds),
+      ).resolves.toEqual(
+        new Map([
+          [withSource.runId, true],
+          [withoutSource.runId, true],
+        ]),
+      );
+
+      // 撤销项目成员身份，决策随之退出可见范围。
+      await prisma.projectMember.deleteMany({
+        where: { projectId: project.id, userId: ownerUserId },
+      });
+      await expect(
+        visibilityService.evaluateRunsSourceVisibility(authorization, runIds),
+      ).resolves.toEqual(
+        new Map([
+          [withSource.runId, false],
+          [withoutSource.runId, true],
+        ]),
+      );
+
+      // 权限恢复后判定实时回到可见，不需要任何显式重评（D2-07 选择 A）。
+      await prisma.projectMember.create({
+        data: { projectId: project.id, userId: ownerUserId },
+      });
+      await expect(
+        visibilityService.evaluateRunsSourceVisibility(authorization, runIds),
+      ).resolves.toEqual(
+        new Map([
+          [withSource.runId, true],
+          [withoutSource.runId, true],
+        ]),
+      );
+
+      // 无法解析的来源标识按 fail closed 判定为不可见，不会因解析失败而放行。
+      await prisma.aiSourceDependency.create({
+        data: {
+          runId: withoutSource.runId,
+          sourceType: 'DECISION',
+          sourceId: 'not-a-number',
+          usage: 'READ',
+          label: '无法解析的来源',
+        },
+      });
+      await expect(
+        visibilityService.evaluateRunsSourceVisibility(authorization, [
+          withoutSource.runId,
+        ]),
+      ).resolves.toEqual(new Map([[withoutSource.runId, false]]));
+    } finally {
+      await clearAiTables();
+      await prisma.decision.deleteMany({ where: { id: decision.id } });
+      await prisma.project.deleteMany({ where: { id: project.id } });
+      await prisma.department.deleteMany({ where: { id: department.id } });
+    }
   });
 
   it('执行中撤销项目成员身份后，后续决策上下文工具调用被实时拒绝', async () => {
