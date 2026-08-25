@@ -304,6 +304,31 @@ describe('AiToolInvocationService', () => {
     expect(settleToolCall).not.toHaveBeenCalled();
   });
 
+  it('落库摘要被截断时不重放，返回可驱动模型重新调用的稳定失败', async () => {
+    const { service, execute, settleToolCall } = createService({
+      startResult: {
+        state: 'REPLAY_UNAVAILABLE',
+        toolCallId: 'tool-call-truncated',
+      },
+    });
+
+    const result = await service.invokeTool(EXECUTION_CONTEXT, {
+      providerToolCallId: 'call-truncated',
+      toolName: 'getDecisionContext',
+      input: { decisionId: 17 },
+    });
+
+    expect(result).toMatchObject({
+      status: 'FAILED',
+      toolCallId: 'tool-call-truncated',
+      failureCode: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
+    });
+    // 截断标记绝不能被当成成功输出交回模型。
+    expect(result).not.toMatchObject({ status: 'SUCCEEDED' });
+    expect(execute).not.toHaveBeenCalled();
+    expect(settleToolCall).not.toHaveBeenCalled();
+  });
+
   it('工具抛出未知异常时只返回脱敏说明', async () => {
     const { service } = createService({
       discoveries: [{ toolCallId: 'tool-call-0', candidateIdentifiers: [17] }],

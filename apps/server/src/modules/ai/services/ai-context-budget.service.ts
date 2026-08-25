@@ -63,15 +63,13 @@ export class AiContextBudgetService {
     });
 
     return this.applyTotalBudget(
-      messages
-        .reverse()
-        .map((message) => ({
-          role:
-            message.role === AiMessageRole.USER
-              ? ('USER' as const)
-              : ('ASSISTANT' as const),
-          content: this.truncate(message.content),
-        })),
+      messages.reverse().map((message) => ({
+        role:
+          message.role === AiMessageRole.USER
+            ? ('USER' as const)
+            : ('ASSISTANT' as const),
+        content: this.truncate(message.content),
+      })),
     );
   }
 

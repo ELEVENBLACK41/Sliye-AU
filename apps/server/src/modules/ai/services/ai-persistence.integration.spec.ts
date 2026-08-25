@@ -537,6 +537,7 @@ describePersistence('AI 持久化事务地基', () => {
     await expect(runControlService.reconcileExpiredRuns()).resolves.toEqual({
       scannedRunCount: 1,
       reconciledRunCount: 1,
+      orphanQueuedRunCount: 0,
       nextRunIds: [expect.any(String)],
     });
     await expect(
@@ -555,6 +556,48 @@ describePersistence('AI 持久化事务地基', () => {
         select: { status: true },
       }),
     ).resolves.toMatchObject({ status: 'QUEUED' });
+  });
+
+  it('从未被领取的孤儿排队 Run 会在宽限期后被对账重新交回派发', async () => {
+    const ownerUserId = await createTestUser();
+    const initial = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证调度回调丢失后的恢复。',
+      idempotencyKey: 'orphan-queued-run-001',
+      modelRole: 'standard',
+    });
+
+    // 刚创建的排队 Run 仍在宽限期内，不应该被判定为孤儿。
+    await expect(
+      runControlService.reconcileExpiredRuns(),
+    ).resolves.toMatchObject({
+      orphanQueuedRunCount: 0,
+      nextRunIds: [],
+    });
+
+    // 模拟调度回调随进程重启丢失：Run 一直是 QUEUED 且没有任何执行租约。
+    await prisma.aiRun.update({
+      where: { id: initial.runId },
+      data: { createdAt: new Date(Date.now() - 60_000) },
+    });
+
+    await expect(
+      runControlService.reconcileExpiredRuns(),
+    ).resolves.toMatchObject({
+      reconciledRunCount: 0,
+      orphanQueuedRunCount: 1,
+      nextRunIds: [initial.runId],
+    });
+    // 对账只负责重新派发，不改动 Run 状态，领取仍由执行器原子完成。
+    await expect(
+      prisma.aiRun.findUnique({
+        where: { id: initial.runId },
+        select: { status: true, executionLeaseId: true },
+      }),
+    ).resolves.toEqual({ status: 'QUEUED', executionLeaseId: null });
+    await expect(
+      runService.claimQueuedRun(initial.runId),
+    ).resolves.not.toBeNull();
   });
 
   it('模型步骤关联工具调用，Run 终态会收敛遗留的运行中工具审计', async () => {
@@ -606,6 +649,21 @@ describePersistence('AI 持久化事务地基', () => {
       }),
     ).resolves.toEqual({ stepId: step.stepId });
 
+    // 同一模型调用标识重放时直接返回已持久化结果，不重复执行业务查询。
+    await expect(
+      toolCallService.startToolCall({
+        runId: initial.runId,
+        executionLeaseId: lease!.executionLeaseId,
+        providerToolCallId: 'provider-tool-settled',
+        toolName: 'findDecisionCandidates',
+        input: { query: '测试' },
+      }),
+    ).resolves.toMatchObject({
+      state: 'REPLAY_SUCCEEDED',
+      toolCallId: settledCall.toolCallId,
+      output: { candidates: [] },
+    });
+
     const runningCall = await toolCallService.startToolCall({
       runId: initial.runId,
       executionLeaseId: lease!.executionLeaseId,
@@ -629,6 +687,19 @@ describePersistence('AI 持久化事务地基', () => {
       failureCode: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
     });
     expect(failedToolCall?.finishedAt).toBeInstanceOf(Date);
+
+    // 租约已失效的旧执行器不得再把已登记的工具结果读回模型。
+    await expect(
+      toolCallService.startToolCall({
+        runId: initial.runId,
+        executionLeaseId: lease!.executionLeaseId,
+        providerToolCallId: 'provider-tool-settled',
+        toolName: 'findDecisionCandidates',
+        input: { query: '测试' },
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
+    });
   });
 
   it('执行中撤销项目成员身份后，后续决策上下文工具调用被实时拒绝', async () => {

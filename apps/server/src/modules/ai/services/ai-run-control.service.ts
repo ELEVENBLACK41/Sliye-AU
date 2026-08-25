@@ -30,13 +30,22 @@ export type RequestActiveRunCancellationInput = {
   cancellationReason: 'USER_REDIRECTED';
 };
 
-/** 过期租约对账的批次处理结果。 */
+/**
+ * 已创建但迟迟没有被任何执行器领取的 QUEUED Run 判定为孤儿前的宽限时间。
+ * 需要明显长于一次正常的“响应返回 → 后台调度 → 原子领取”耗时，
+ * 避免把刚排上队、执行器正在启动的 Run 误判为孤儿并重复派发。
+ */
+const AI_ORPHAN_QUEUED_RUN_GRACE_MS = 30_000;
+
+/** 过期租约与孤儿排队 Run 的批次对账结果。 */
 export type ReconcileExpiredAiRunsResult = {
-  /** 本轮扫描到的候选 Run 数量。 */
+  /** 本轮扫描到的过期租约候选 Run 数量。 */
   scannedRunCount: number;
   /** 真正发生终态收敛的 Run 数量。 */
   reconciledRunCount: number;
-  /** 对账终态事务领取、需要 Agent Runtime 启动的后续 Run。 */
+  /** 本轮识别出的、需要重新派发的孤儿排队 Run 数量。 */
+  orphanQueuedRunCount: number;
+  /** 需要 Agent Runtime 启动的 Run：对账终态领取的后续 Run 与孤儿排队 Run。 */
   nextRunIds: string[];
 };
 
@@ -220,7 +229,11 @@ export class AiRunControlService {
     );
   }
 
-  /** 扫描并确定性收敛租约已过期的 Run；不尝试在其他进程接管或续跑旧执行器。 */
+  /**
+   * 扫描并确定性收敛租约已过期的 Run；不尝试在其他进程接管或续跑旧执行器。
+   * 同时把从未被领取过的孤儿排队 Run 交回 Runtime 重新派发，
+   * 避免调度回调随进程重启丢失后 Thread 被永久占住。
+   */
   async reconcileExpiredRuns(
     limit = 100,
   ): Promise<ReconcileExpiredAiRunsResult> {
@@ -248,11 +261,44 @@ export class AiRunControlService {
       }
     }
 
+    const orphanQueuedRunIds = await this.findOrphanQueuedRunIds(now, limit);
+    nextRunIds.push(...orphanQueuedRunIds);
+
     return {
       scannedRunCount: candidates.length,
       reconciledRunCount,
+      orphanQueuedRunCount: orphanQueuedRunIds.length,
       nextRunIds,
     };
+  }
+
+  /**
+   * 查询超过宽限时间仍未被任何执行器领取的 QUEUED Run。
+   *
+   * 这类 Run 在创建时就占用了 Thread 的 `activeRunId`，但没有执行租约：
+   * 过期租约扫描的 `executionLeaseExpiresAt <= now` 条件在 SQL 里对 NULL 不成立，
+   * 队列领取又因为 `activeRunId` 非空而始终跳过，因此一旦调度回调随进程重启丢失，
+   * 这条 Thread 会被永久堵住。这里只负责识别并交回 Runtime 重新领取，
+   * 不改动 Run 状态；领取本身是原子的，多实例重复派发是安全的。
+   */
+  private async findOrphanQueuedRunIds(
+    now: Date,
+    limit: number,
+  ): Promise<string[]> {
+    const orphans = await this.prisma.aiRun.findMany({
+      where: {
+        status: AiRunStatus.QUEUED,
+        executionLeaseId: null,
+        createdAt: {
+          lte: new Date(now.getTime() - AI_ORPHAN_QUEUED_RUN_GRACE_MS),
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
+
+    return orphans.map((orphan) => orphan.id);
   }
 
   /** 在单个 Run 的 Thread 锁内判断租约仍已过期，再收敛为失败或取消终态。 */

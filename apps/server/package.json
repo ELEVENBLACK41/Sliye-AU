@@ -19,7 +19,7 @@
     "collaboration-data:reset": "ts-node --skipIgnore --project tsconfig.script.json prisma/reset-collaboration-data.ts --reset --confirm=RESET_DECISION_COLLABORATION",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "test:ai:evaluation": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js modules/ai/evaluation --runInBand",
     "check-types:ai:evaluation": "tsc --project src/modules/ai/evaluation/tsconfig.json",
     "test:watch": "jest --watch",

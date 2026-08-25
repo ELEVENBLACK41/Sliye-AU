@@ -25,7 +25,9 @@ function createExecutionContext(
 }
 
 /** 构造返回指定密钥的配置服务。 */
-function createGuard(configuredToken: string | undefined): AiRuntimeServiceGuard {
+function createGuard(
+  configuredToken: string | undefined,
+): AiRuntimeServiceGuard {
   const configService = {
     get: jest.fn().mockReturnValue(configuredToken),
   } as unknown as ConfigService<ServerEnvConfig, true>;
@@ -42,7 +44,9 @@ function expectRuntimeUnauthorized(run: () => unknown): void {
     throw new Error('守卫应当拒绝该调用');
   } catch (error) {
     expect(error).toBeInstanceOf(BusinessException);
-    expect((error as BusinessException).code).toBe('AI.RUNTIME_SERVICE_UNAUTHORIZED');
+    expect((error as BusinessException).code).toBe(
+      'AI.RUNTIME_SERVICE_UNAUTHORIZED',
+    );
   }
 }
 
@@ -52,7 +56,9 @@ describe('AiRuntimeServiceGuard', () => {
 
     expectRuntimeUnauthorized(() =>
       guard.canActivate(
-        createExecutionContext({ [AI_RUNTIME_SERVICE_TOKEN_HEADER]: CONFIGURED_TOKEN }),
+        createExecutionContext({
+          [AI_RUNTIME_SERVICE_TOKEN_HEADER]: CONFIGURED_TOKEN,
+        }),
       ),
     );
   });
@@ -60,15 +66,21 @@ describe('AiRuntimeServiceGuard', () => {
   it('缺少请求头、密钥不匹配或请求头重复时拒绝', () => {
     const guard = createGuard(CONFIGURED_TOKEN);
 
-    expectRuntimeUnauthorized(() => guard.canActivate(createExecutionContext({})));
+    expectRuntimeUnauthorized(() =>
+      guard.canActivate(createExecutionContext({})),
+    );
     expectRuntimeUnauthorized(() =>
       guard.canActivate(
-        createExecutionContext({ [AI_RUNTIME_SERVICE_TOKEN_HEADER]: 'b'.repeat(32) }),
+        createExecutionContext({
+          [AI_RUNTIME_SERVICE_TOKEN_HEADER]: 'b'.repeat(32),
+        }),
       ),
     );
     expectRuntimeUnauthorized(() =>
       guard.canActivate(
-        createExecutionContext({ [AI_RUNTIME_SERVICE_TOKEN_HEADER]: ['array', 'value'] }),
+        createExecutionContext({
+          [AI_RUNTIME_SERVICE_TOKEN_HEADER]: ['array', 'value'],
+        }),
       ),
     );
   });
@@ -78,7 +90,9 @@ describe('AiRuntimeServiceGuard', () => {
 
     expectRuntimeUnauthorized(() =>
       guard.canActivate(
-        createExecutionContext({ [AI_RUNTIME_SERVICE_TOKEN_HEADER]: 'a'.repeat(16) }),
+        createExecutionContext({
+          [AI_RUNTIME_SERVICE_TOKEN_HEADER]: 'a'.repeat(16),
+        }),
       ),
     );
   });
@@ -88,7 +102,9 @@ describe('AiRuntimeServiceGuard', () => {
 
     expect(
       guard.canActivate(
-        createExecutionContext({ [AI_RUNTIME_SERVICE_TOKEN_HEADER]: CONFIGURED_TOKEN }),
+        createExecutionContext({
+          [AI_RUNTIME_SERVICE_TOKEN_HEADER]: CONFIGURED_TOKEN,
+        }),
       ),
     ).toBe(true);
   });

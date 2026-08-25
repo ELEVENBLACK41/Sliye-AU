@@ -27,10 +27,10 @@ import type {
 const MAX_DECISION_CANDIDATES = 5;
 
 @Injectable()
-export class FindDecisionCandidatesToolService
-  implements
-    AiToolExecutor<FindDecisionCandidatesInput, FindDecisionCandidatesResult>
-{
+export class FindDecisionCandidatesToolService implements AiToolExecutor<
+  FindDecisionCandidatesInput,
+  FindDecisionCandidatesResult
+> {
   /** 与中心注册表描述一致的稳定工具名称。 */
   readonly toolName = FIND_DECISION_CANDIDATES_DESCRIPTOR.name;
 

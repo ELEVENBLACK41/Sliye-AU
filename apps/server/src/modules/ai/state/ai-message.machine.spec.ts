@@ -20,9 +20,10 @@ import { assertAiMessageDispatchStateTransition } from './ai-message-state-trans
 const LEGAL_TRANSITIONS = [
   ['QUEUED', 'DISPATCHED'],
   ['QUEUED', 'SUPERSEDED'],
-] as const satisfies readonly (
-  readonly [AiMessageDispatchState, AiMessageDispatchState]
-)[];
+] as const satisfies readonly (readonly [
+  AiMessageDispatchState,
+  AiMessageDispatchState,
+])[];
 
 /** 为未被合法白名单覆盖的状态组合生成拒绝测试样例。 */
 function createIllegalTransitions(): Array<
@@ -50,7 +51,9 @@ describe('AI Message 投递状态机', () => {
   it.each(createIllegalTransitions())(
     '应拒绝 %s -> %s',
     (fromState, toState) => {
-      expect(canTransitionAiMessageDispatchState(fromState, toState)).toBe(false);
+      expect(canTransitionAiMessageDispatchState(fromState, toState)).toBe(
+        false,
+      );
 
       try {
         assertAiMessageDispatchStateTransition(fromState, toState);

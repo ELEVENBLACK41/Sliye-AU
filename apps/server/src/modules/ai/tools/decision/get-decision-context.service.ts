@@ -30,9 +30,10 @@ import type {
 const MAX_DECISION_SUMMARY_LENGTH = 500;
 
 @Injectable()
-export class GetDecisionContextToolService
-  implements AiToolExecutor<GetDecisionContextInput, GetDecisionContextResult>
-{
+export class GetDecisionContextToolService implements AiToolExecutor<
+  GetDecisionContextInput,
+  GetDecisionContextResult
+> {
   /** 与中心注册表描述一致的稳定工具名称。 */
   readonly toolName = GET_DECISION_CONTEXT_DESCRIPTOR.name;
 
@@ -110,8 +111,7 @@ export class GetDecisionContextToolService
             resolutionId: context.latestActiveResolution.resolutionId,
             title: context.latestActiveResolution.title,
             kind: context.latestActiveResolution.kind,
-            decidedAt:
-              context.latestActiveResolution.decidedAt.toISOString(),
+            decidedAt: context.latestActiveResolution.decidedAt.toISOString(),
           }
         : null,
       decidedAt: context.decidedAt?.toISOString() ?? null,

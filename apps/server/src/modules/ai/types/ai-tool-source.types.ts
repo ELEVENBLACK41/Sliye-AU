@@ -8,7 +8,10 @@
 import type { AiToolExecutionContext } from './ai-tool-registry.types';
 
 /** 第二阶段最小工具链允许登记的业务来源类型。 */
-export const AI_TOOL_SOURCE_TYPES = ['DECISION', 'DECISION_RESOLUTION'] as const;
+export const AI_TOOL_SOURCE_TYPES = [
+  'DECISION',
+  'DECISION_RESOLUTION',
+] as const;
 
 /** 一条来源依赖的稳定业务来源类型。 */
 export type AiToolSourceType = (typeof AI_TOOL_SOURCE_TYPES)[number];

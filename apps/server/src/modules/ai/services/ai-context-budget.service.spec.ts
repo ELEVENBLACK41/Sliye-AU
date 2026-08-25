@@ -4,12 +4,17 @@
  * 不连接真实数据库，Prisma 为内存 mock。
  */
 
+import type { Prisma } from '../../../generated/prisma';
 import { AiContextBudgetService } from './ai-context-budget.service';
 
 describe('AiContextBudgetService', () => {
   /** 创建 mock Prisma 的上下文预算服务。 */
   function createService() {
-    const findMany = jest.fn().mockResolvedValue([]);
+    const findMany = jest.fn<
+      Promise<Array<{ role: string; content: string }>>,
+      [Prisma.AiMessageFindManyArgs]
+    >();
+    findMany.mockResolvedValue([]);
     const prisma = { aiMessage: { findMany } };
 
     return {

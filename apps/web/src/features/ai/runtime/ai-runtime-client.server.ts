@@ -20,6 +20,16 @@ const AI_RUNTIME_PATH_PREFIX = '/internal/ai/runs';
 /** 携带共享密钥的请求头名称，必须与 NestJS 守卫保持一致。 */
 const AI_RUNTIME_TOKEN_HEADER = 'x-ai-runtime-token';
 
+/** 共享密钥的最小长度，必须与 NestJS 侧的生产校验保持一致。 */
+const AI_RUNTIME_SERVICE_TOKEN_MIN_LENGTH = 32;
+
+/** 判断当前进程是否具备调用内部执行接口的条件，供后台协调能力提前退出。 */
+export function hasAiRuntimeServiceToken(): boolean {
+  const token = process.env.AI_RUNTIME_SERVICE_TOKEN;
+
+  return typeof token === 'string' && token.length >= AI_RUNTIME_SERVICE_TOKEN_MIN_LENGTH;
+}
+
 /** NestJS 内部执行接口返回业务失败时抛出的错误。 */
 export class AiRuntimeRequestError extends Error {
   /** 稳定业务错误码，Runtime 据此判断租约是否已失效。 */
@@ -162,14 +172,14 @@ async function callRuntime<TData>(path: string, body: unknown): Promise<TData> {
   return response.body.data;
 }
 
-/** 读取只有服务端持有的共享密钥；未配置时立即失败，不降级为无鉴权调用。 */
+/** 读取只有服务端持有的共享密钥；未配置或长度不足时立即失败，不降级为无鉴权调用。 */
 function readRuntimeServiceToken(): string {
   const token = process.env.AI_RUNTIME_SERVICE_TOKEN;
 
-  if (!token || token.length < 32) {
+  if (!token || token.length < AI_RUNTIME_SERVICE_TOKEN_MIN_LENGTH) {
     throw new AiRuntimeRequestError(
       'AI.RUNTIME_SERVICE_UNAUTHORIZED',
-      '未配置 AI_RUNTIME_SERVICE_TOKEN，AI 执行器无法调用内部接口',
+      '未配置有效的 AI_RUNTIME_SERVICE_TOKEN，AI 执行器无法调用内部接口',
       500,
     );
   }

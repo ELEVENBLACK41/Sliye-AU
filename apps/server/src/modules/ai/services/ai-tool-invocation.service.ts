@@ -24,10 +24,8 @@ import type {
   AiToolSourceRef,
 } from '../types/ai-tool-source.types';
 import { AiToolCallService } from './ai-tool-call.service';
+import { toAiToolOutputSummary } from './ai-tool-output-summary';
 import { AiToolRegistryService } from './ai-tool-registry.service';
-
-/** 工具窄输出摘要允许写入数据库的最大 JSON 长度，超出时只保留截断标记。 */
-const MAX_TOOL_OUTPUT_SUMMARY_LENGTH = 16_000;
 
 /** 模型发起一次工具调用时提供的最小请求数据。 */
 export type AiToolInvocationRequest = {
@@ -109,6 +107,15 @@ export class AiToolInvocationService {
         failureReason: started.failureReason,
       };
     }
+    if (started.state === 'REPLAY_UNAVAILABLE') {
+      return {
+        status: 'FAILED',
+        toolCallId: started.toolCallId,
+        failureCode: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
+        failureReason:
+          '上一次调用的结果过大未完整保留，请重新发起一次该工具调用。',
+      };
+    }
     if (started.state === 'IN_PROGRESS') {
       return {
         status: 'FAILED',
@@ -134,7 +141,7 @@ export class AiToolInvocationService {
       await this.settle(executionContext, {
         toolCallId,
         status: 'SUCCEEDED',
-        outputSummary: this.toOutputSummary(result.output),
+        outputSummary: toAiToolOutputSummary(result.output),
         failureCode: null,
         failureReason: null,
         sources: result.sources,
@@ -282,16 +289,6 @@ export class AiToolInvocationService {
       executionLeaseId: executionContext.executionLeaseId,
       ...input,
     });
-  }
-
-  /** 把窄输出转换为可落库的受控摘要；异常大的结果只保留截断标记。 */
-  private toOutputSummary(output: unknown): Prisma.InputJsonValue {
-    const serialized = JSON.stringify(output ?? null);
-    if (serialized.length <= MAX_TOOL_OUTPUT_SUMMARY_LENGTH) {
-      return JSON.parse(serialized) as Prisma.InputJsonValue;
-    }
-
-    return { truncated: true, length: serialized.length };
   }
 
   /** 把异常归一化为稳定错误码和可以安全交回模型的说明。 */

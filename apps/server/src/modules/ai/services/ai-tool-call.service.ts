@@ -19,6 +19,7 @@ import { AiEventService } from './ai-event.service';
 import { AiExecutionLeaseService } from './ai-execution-lease.service';
 import { AiSourceDependencyService } from './ai-source-dependency.service';
 import { createAiJsonFingerprint } from './ai-persistence.utils';
+import { isTruncatedAiToolOutputSummary } from './ai-tool-output-summary';
 
 /** 一次已持久化工具调用的稳定标识。 */
 export type StartedAiToolCall =
@@ -45,6 +46,12 @@ export type StartedAiToolCall =
       failureCode: ApiErrorCode;
       /** 已持久化的安全失败说明。 */
       failureReason: string;
+    }
+  | {
+      /** 相同模型调用已成功，但落库摘要被截断，无法还原真实输出。 */
+      state: 'REPLAY_UNAVAILABLE';
+      /** 工具调用记录主键。 */
+      toolCallId: string;
     }
   | {
       /** 相同模型调用仍在执行，不允许启动第二次业务查询。 */
@@ -272,26 +279,37 @@ export class AiToolCallService {
       );
   }
 
-  /** 查询同一 Run 内已经登记的同一模型工具调用，用于并发或重放场景返回稳定结果。 */
+  /**
+   * 查询同一 Run 内已经登记的同一模型工具调用，用于并发或重放场景返回稳定结果。
+   * 读取前重新校验执行租约：租约失效说明用户已停止或该 Run 已被对账收敛，
+   * 此时不允许旧执行器把已登记的工具结果再读回模型，与步骤重放路径保持一致。
+   */
   private async findExistingToolCall(
     input: StartAiToolCallInput,
   ): Promise<StartedAiToolCall> {
-    const existing = await this.prisma.aiToolCall.findUnique({
-      where: {
-        runId_providerToolCallId: {
-          runId: input.runId,
-          providerToolCallId: input.providerToolCallId,
+    const existing = await this.prisma.$transaction(async (transaction) => {
+      await this.executionLeaseService.assertActiveExecutionLeaseInTransaction(
+        transaction,
+        { runId: input.runId, executionLeaseId: input.executionLeaseId },
+      );
+
+      return transaction.aiToolCall.findUnique({
+        where: {
+          runId_providerToolCallId: {
+            runId: input.runId,
+            providerToolCallId: input.providerToolCallId,
+          },
         },
-      },
-      select: {
-        id: true,
-        toolName: true,
-        input: true,
-        status: true,
-        outputSummary: true,
-        failureCode: true,
-        failureReason: true,
-      },
+        select: {
+          id: true,
+          toolName: true,
+          input: true,
+          status: true,
+          outputSummary: true,
+          failureCode: true,
+          failureReason: true,
+        },
+      });
     });
     if (!existing) {
       throw new Error('AI 工具调用写入冲突后仍找不到既有记录。');
@@ -309,11 +327,14 @@ export class AiToolCallService {
       });
     }
     if (existing.status === AiToolCallStatus.SUCCEEDED) {
-      return {
-        state: 'REPLAY_SUCCEEDED',
-        toolCallId: existing.id,
-        output: existing.outputSummary,
-      };
+      // 摘要被截断时数据库里只有一个截断标记，把它当成成功输出会误导模型。
+      return isTruncatedAiToolOutputSummary(existing.outputSummary)
+        ? { state: 'REPLAY_UNAVAILABLE', toolCallId: existing.id }
+        : {
+            state: 'REPLAY_SUCCEEDED',
+            toolCallId: existing.id,
+            output: existing.outputSummary,
+          };
     }
     if (existing.status === AiToolCallStatus.FAILED) {
       return {

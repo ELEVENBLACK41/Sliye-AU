@@ -133,13 +133,19 @@ export type AiRuntimeRunStopResult = {
   nextRunId: string | null;
 };
 
-/** 一次过期 Run 对账的内部响应。 */
+/** 一次过期租约与孤儿排队 Run 对账的内部响应。 */
 export type AiRuntimeReconciliationResult = {
-  /** 扫描到的过期候选数量。 */
+  /** 扫描到的过期租约候选数量。 */
   scannedRunCount: number;
   /** 实际完成终态收敛的数量。 */
   reconciledRunCount: number;
-  /** 对账事务释放并领取、需要 Runtime 启动的后续 Run。 */
+  /**
+   * 识别出的孤儿排队 Run 数量。
+   * 指已创建并占用 Thread 活跃指针、但始终没有被任何执行器领取的 Run，
+   * 它们没有执行租约，只能靠本次对账重新交回 Runtime 派发。
+   */
+  orphanQueuedRunCount: number;
+  /** 需要 Runtime 启动的 Run：对账事务领取的后继 Run 与孤儿排队 Run。 */
   nextRunIds: string[];
 };
 

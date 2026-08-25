@@ -94,7 +94,9 @@ export class AiToolRegistryService {
       throw new Error(`AI 工具前置发现工具名称非法：${descriptor.name}`);
     }
     if (requirement.discoveryToolName === descriptor.name) {
-      throw new Error(`AI 工具不能把自己声明为前置发现工具：${descriptor.name}`);
+      throw new Error(
+        `AI 工具不能把自己声明为前置发现工具：${descriptor.name}`,
+      );
     }
     if (
       !descriptor.input.fields.some(
@@ -109,7 +111,9 @@ export class AiToolRegistryService {
       requirement.candidateListField.trim().length === 0 ||
       requirement.candidateIdentifierField.trim().length === 0
     ) {
-      throw new Error(`AI 工具前置发现声明的候选字段不能为空：${descriptor.name}`);
+      throw new Error(
+        `AI 工具前置发现声明的候选字段不能为空：${descriptor.name}`,
+      );
     }
   }
 

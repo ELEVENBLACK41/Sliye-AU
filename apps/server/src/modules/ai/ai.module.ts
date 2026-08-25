@@ -65,7 +65,10 @@ const AI_TOOL_DESCRIPTOR_REGISTRATIONS: readonly AiToolDescriptor[] = [
     },
     {
       provide: AI_TOOL_EXECUTORS,
-      inject: [FindDecisionCandidatesToolService, GetDecisionContextToolService],
+      inject: [
+        FindDecisionCandidatesToolService,
+        GetDecisionContextToolService,
+      ],
       /** 汇总全部已注册工具执行器，供编排层按稳定名称解析。 */
       useFactory: (
         findDecisionCandidates: FindDecisionCandidatesToolService,

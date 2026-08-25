@@ -4,21 +4,12 @@
  * 所有查询都以 Thread 所有者为条件，越权访问统一返回不存在。
  */
 
-import {
-  Controller,
-  DefaultValuePipe,
-  Get,
-  Param,
-  ParseIntPipe,
-  Post,
-  Query,
-  Body,
-} from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Body } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAuthorization } from '../../auth/decorators/current-authorization.decorator';
 import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
-import { RetryAiRunDto } from '../dto/ai-request.dto';
+import { ListAiRunEventsQueryDto, RetryAiRunDto } from '../dto/ai-request.dto';
 import { AiRunControlService } from '../services/ai-run-control.service';
 import { AiRunQueryService } from '../services/ai-run-query.service';
 import { AiRunService } from '../services/ai-run.service';
@@ -41,15 +32,13 @@ export class AiRunController {
   listEvents(
     @CurrentAuthorization() authorization: AuthorizationContext,
     @Param('runId') runId: string,
-    @Query('threadId') threadId: string,
-    @Query('afterSequence', new DefaultValuePipe(0), ParseIntPipe)
-    afterSequence: number,
+    @Query() query: ListAiRunEventsQueryDto,
   ) {
     return this.runQueryService.listRunEvents(
       authorization.userId,
-      threadId,
+      query.threadId,
       runId,
-      afterSequence,
+      query.afterSequence ?? 0,
     );
   }
 

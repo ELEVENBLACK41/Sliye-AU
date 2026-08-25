@@ -16,7 +16,7 @@ import type {
   AiRunTerminalStatus,
 } from '@workspace/contracts/ai';
 
-/** AI Run 从每个状态允许进入的下一状态，终态不再提供任何出口。 
+/** AI Run 从每个状态允许进入的下一状态，终态不再提供任何出口。
  *  QUEUED：已进入队列，等待执行器处理
  *  QUEUED ->> RUNNING：执行器已经领取 正在调用模型或执行AI任务
  *  QUEUED ->> CANCELLED：表示用户主动取消了当前 Run
@@ -31,8 +31,8 @@ import type {
  *  CANCELLED：任务已取消，终态
  *  COMPLETED：任务已经成功完成，终态
  *  FAILED：任务执行失败，终态
- * 
-*/
+ *
+ */
 export const AI_RUN_STATUS_TRANSITIONS = {
   QUEUED: ['RUNNING', 'CANCELLED'],
   RUNNING: [
