@@ -61,7 +61,20 @@ function AiWorkspaceContent({ workspace }: { workspace: ReturnType<typeof useAiT
   const activeRunStatus = workspace.runEventState?.status ?? workspace.threadState.activeRun?.status ?? null;
 
   if (!workspace.threadId) {
-    return <AiWorkspaceEmpty />;
+    return (
+      <AiChatSurface
+        messages={[]}
+        activeRunStatus={null}
+        streamState={workspace.streamState}
+        streamError={workspace.streamError}
+        queuedMessages={workspace.queuedMessages}
+        commandState={workspace.commandState}
+        commandError={workspace.commandError}
+        onSubmitMessage={workspace.submitMessage}
+        onStop={() => void workspace.stopCurrentRun()}
+        onRetry={(runId) => void workspace.retryRun(runId)}
+      />
+    );
   }
 
   if (workspace.threadLoadState === 'LOADING') {
@@ -101,17 +114,5 @@ function AiWorkspaceContent({ workspace }: { workspace: ReturnType<typeof useAiT
       onStop={() => void workspace.stopCurrentRun()}
       onRetry={(runId) => void workspace.retryRun(runId)}
     />
-  );
-}
-
-/** 渲染还没有任何历史消息的真实空工作区。 */
-function AiWorkspaceEmpty({ title }: { title?: string } = {}) {
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-center">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">{title ?? '开始一段新的决策对话'}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">描述你正在推进的决策，开始记录它的讨论过程。</p>
-      </div>
-    </div>
   );
 }

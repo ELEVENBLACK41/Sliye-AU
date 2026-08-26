@@ -25,7 +25,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@workspace/ui/components/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@workspace/ui/components/sheet';
 
 import type { AiWorkspaceLoadState, AiWorkspaceThreadPreview } from '../types/ai-workspace';
 
@@ -86,6 +86,7 @@ export function AiWorkspaceMobileHeader({
         <SheetContent side="left" className="w-[min(18rem,86vw)] bg-background p-3 pt-6 lg:hidden">
           <SheetHeader className="sr-only">
             <SheetTitle>对话记录</SheetTitle>
+            <SheetDescription>查看和管理最近、已固定及已归档的 AI 会话。</SheetDescription>
           </SheetHeader>
           <AiWorkspaceSidebarContent data={data} {...actions} />
         </SheetContent>
