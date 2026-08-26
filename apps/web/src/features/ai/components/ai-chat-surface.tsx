@@ -1,15 +1,17 @@
 /**
- * 本文件提供 AI 工作台的流式对话画布、消息呈现和输入框。
+ * 本文件提供 AI 工作台的持久化对话画布、消息呈现和输入框视觉层。
  */
 'use client';
 
 import { useState } from 'react';
-import { useChat } from '@ai-sdk/react';
-import type { ChatStatus, UIMessage } from 'ai';
-import { ChevronDown, Copy, Globe2 } from 'lucide-react';
+import type { ChatStatus } from 'ai';
+import { Copy, Globe2 } from 'lucide-react';
+
+import type { AiRunStatus } from '@workspace/contracts/ai';
 
 import { Switch } from '@workspace/ui/components/switch';
 
+import { AiCitationList } from './ai-citation-list';
 import { AiRunActivityLabel, AiToolCallGroup, type AiToolMessagePart } from './ai-tool-call-card';
 import {
   Message,
@@ -18,11 +20,7 @@ import {
   MessageContent,
   MessageResponse,
 } from '@/components/ai-elements/message';
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from '@/components/ai-elements/conversation';
+import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation';
 import {
   PromptInput,
   type PromptInputMessage,
@@ -30,26 +28,41 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input';
-import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai-elements/sources';
+import type { AiWorkspaceMessage } from '../types/ai-message';
+import type { AiWorkspaceStreamState } from '../types/ai-workspace';
+import { isAiRunActive } from '../utils/ai-event-reducer';
 
 /**
  * 渲染 AI 对话主画布。
  *
- * 2.6-A 会以只读模式保留既有布局；持久化消息与领域 SSE 在 2.6-B 接入。
+ * 2.6-B 只消费工作区 Hook 适配后的历史消息与领域事件，不再读取 `useChat()`。
  */
-export function AiChatSurface({ readOnly = false }: { readOnly?: boolean }) {
+export function AiChatSurface({
+  messages,
+  activeRunStatus,
+  streamState,
+  streamError,
+  readOnly = true,
+}: {
+  /** 已按服务端时间顺序适配好的历史与实时消息。 */
+  messages: AiWorkspaceMessage[];
+  /** 当前详情或事件快照中的 Run 状态。 */
+  activeRunStatus: AiRunStatus | null;
+  /** 标准领域 SSE 当前连接状态。 */
+  streamState: AiWorkspaceStreamState;
+  /** 标准领域 SSE 明确返回的错误。 */
+  streamError: string | null;
+  /** 2.6-B 保留输入框视觉层，但不连接 `/api/chat` Mock。 */
+  readOnly?: boolean;
+}) {
   const [input, setInput] = useState('');
   const [enableWebSearch, setEnableWebSearch] = useState(false);
-  const { messages, sendMessage, status, stop, error } = useChat();
-  const isRunning = status === 'submitted' || status === 'streaming';
+  const isRunning = isAiRunActive(activeRunStatus);
 
-  /** 提交当前输入内容，并交给既有 AI SDK 流式聊天链路处理。 */
+  /** 2.6-B 不提交消息；输入框继续保留为下一增量的视觉入口。 */
   function handleMessageSubmit(message: PromptInputMessage): void {
     const text = message.text.trim();
     if (!text || isRunning || readOnly) return;
-
-    void sendMessage({ text }, { body: { enableWebSearch } });
-    setInput('');
   }
 
   if (messages.length > 0) {
@@ -59,16 +72,16 @@ export function AiChatSurface({ readOnly = false }: { readOnly?: boolean }) {
         <div className="mx-auto w-full max-w-3xl pt-4">
           <AiComposer
             input={input}
-            status={status}
+            status="ready"
             isRunning={isRunning}
             enableWebSearch={enableWebSearch}
             onInputChange={setInput}
             onWebSearchChange={setEnableWebSearch}
-            onStop={stop}
+            onStop={() => undefined}
             onSubmit={handleMessageSubmit}
             readOnly={readOnly}
           />
-          <AiChatError error={error} />
+          <AiChatError error={streamError} streamState={streamState} />
         </div>
       </div>
     );
@@ -82,40 +95,37 @@ export function AiChatSurface({ readOnly = false }: { readOnly?: boolean }) {
         </h1>
         <AiComposer
           input={input}
-          status={status}
+          status="ready"
           isRunning={isRunning}
           enableWebSearch={enableWebSearch}
           onInputChange={setInput}
           onWebSearchChange={setEnableWebSearch}
-          onStop={stop}
+          onStop={() => undefined}
           onSubmit={handleMessageSubmit}
           readOnly={readOnly}
         />
-        <AiChatError error={error} />
+        <AiChatError error={streamError} streamState={streamState} />
       </div>
     </div>
   );
 }
 
-/** 渲染消息流中的用户、AI 文本、运行提示和工具调用卡片。 */
-function AiConversation({ messages, isRunning }: { messages: UIMessage[]; isRunning: boolean }) {
+/** 渲染持久化消息、实时助手文本、运行提示和工具调用卡片。 */
+function AiConversation({ messages, isRunning }: { messages: AiWorkspaceMessage[]; isRunning: boolean }) {
   const latestMessage = messages[messages.length - 1];
-  const hasLatestAssistantText =
-    latestMessage?.role === 'assistant' && latestMessage.parts.some((part) => part.type === 'text' && part.text.trim());
-  const hasLatestToolCall =
-    latestMessage?.role === 'assistant' && latestMessage.parts.some((part) => part.type.startsWith('tool-'));
+  const hasLatestAssistantText = latestMessage?.role === 'assistant' && latestMessage.content.trim().length > 0;
+  const hasLatestToolCall = latestMessage?.role === 'assistant' && (latestMessage.run?.toolCalls.length ?? 0) > 0;
 
   return (
-    <Conversation
-      className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-5 py-5"
-      aria-live="polite"
-    >
+    <Conversation className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-5 py-5" aria-live="polite">
       <ConversationContent className="gap-5 px-0 py-0">
         {messages.map((message, index) => (
           <AiConversationMessage
             key={message.id}
             message={message}
-            isStreaming={isRunning && index === messages.length - 1}
+            isStreaming={
+              message.isStreaming || (isRunning && index === messages.length - 1 && message.role === 'assistant')
+            }
           />
         ))}
         {isRunning && !hasLatestAssistantText && !hasLatestToolCall ? <AiRunningIndicator /> : null}
@@ -125,25 +135,17 @@ function AiConversation({ messages, isRunning }: { messages: UIMessage[]; isRunn
   );
 }
 
-/** 按用户或 AI 的不同信息密度，渲染一条聊天消息及其工具轨迹。 */
-function AiConversationMessage({ message, isStreaming }: { message: UIMessage; isStreaming: boolean }) {
-  const messageText = getMessageText(message);
-  const hasAssistantText =
-    message.role === 'assistant' && message.parts.some((part) => part.type === 'text' && part.text.trim());
-  const toolParts = message.parts.filter((part) => part.type.startsWith('tool-')) as AiToolMessagePart[];
-  const webSources = getWebSources(toolParts);
+/** 按用户或 AI 的不同信息密度，渲染一条持久化消息及其工具轨迹。 */
+function AiConversationMessage({ message, isStreaming }: { message: AiWorkspaceMessage; isStreaming: boolean }) {
+  const messageText = message.content;
+  const hasAssistantText = message.role === 'assistant' && message.content.trim().length > 0;
+  const toolParts = toAiToolMessageParts(message);
 
   if (message.role === 'user') {
     return (
       <Message from="user" className="ml-auto w-auto max-w-[85%] gap-0">
         <MessageContent className="rounded-2xl rounded-tr-md bg-decision-accent-soft px-4 py-2.5 text-sm leading-6 text-decision-ink">
-          {message.parts.map((part, index) =>
-            part.type === 'text' ? (
-              <p key={`${message.id}-${index}`} className="whitespace-pre-wrap">
-                {part.text}
-              </p>
-            ) : null,
-          )}
+          <p className="whitespace-pre-wrap">{message.content}</p>
         </MessageContent>
         {messageText ? <AiMessageCopyAction text={messageText} label="复制我的消息" /> : null}
       </Message>
@@ -153,86 +155,60 @@ function AiConversationMessage({ message, isStreaming }: { message: UIMessage; i
   return (
     <Message from="assistant" className="mr-auto w-full max-w-[85%] gap-0">
       <MessageContent className="w-full max-w-full gap-2 overflow-visible text-sm leading-6 text-foreground">
-        {toolParts.length > 0 ? <AiToolCallGroup parts={toolParts} /> : null}
-        {message.parts.map((part, index) => {
-          if (part.type === 'text') {
-            return (
-              <MessageResponse key={`${message.id}-${index}`} isAnimating={isStreaming}>
-                {part.text}
-              </MessageResponse>
-            );
-          }
-
-          return null;
-        })}
-        {webSources.length > 0 ? <AiWebSources sources={webSources} /> : null}
+        {message.contentVisibility === 'SOURCE_REVOKED' ? (
+          <p className="text-sm text-muted-foreground">这条回答当前无法显示。</p>
+        ) : (
+          <>
+            {toolParts.length > 0 ? <AiToolCallGroup parts={toolParts} /> : null}
+            {message.content ? <MessageResponse isAnimating={isStreaming}>{message.content}</MessageResponse> : null}
+            {hasAssistantText ? <AiCitationList /> : null}
+          </>
+        )}
+        <AiRunStatusNotice status={message.run?.status ?? null} />
       </MessageContent>
-      {hasAssistantText && messageText ? <AiMessageCopyAction text={messageText} label="复制 AI 回复" /> : null}
+      {hasAssistantText && message.contentVisibility === 'VISIBLE' && messageText ? (
+        <AiMessageCopyAction text={messageText} label="复制 AI 回复" />
+      ) : null}
     </Message>
   );
 }
 
-/** 渲染当前回答实际使用的外部网页来源，保持来源与对应工具结果同一条消息内。 */
-function AiWebSources({ sources }: { sources: AiWebSource[] }) {
-  return (
-    <Sources defaultOpen className="mb-0 pt-1 text-decision-meeting">
-      <SourcesTrigger count={sources.length} className="w-fit text-decision-meeting hover:text-decision-meeting/80">
-        <Globe2 className="size-3.5" aria-hidden />
-        <span>引用了 {sources.length} 个网页来源</span>
-        <ChevronDown className="size-3.5" aria-hidden />
-      </SourcesTrigger>
-      <SourcesContent className="mt-2 flex w-full flex-col gap-1">
-        {sources.map((source) => (
-          <Source
-            key={source.url}
-            className="w-fit max-w-full text-decision-meeting hover:text-decision-meeting/80"
-            href={source.url}
-            title={source.title}
-          />
-        ))}
-      </SourcesContent>
-    </Sources>
-  );
-}
-
-/** 从网页检索工具的真实输出中提取去重后的可点击来源。 */
-function getWebSources(parts: AiToolMessagePart[]): AiWebSource[] {
-  const sources = new Map<string, AiWebSource>();
-
-  for (const part of parts) {
-    if (part.type !== 'tool-parallel_search') continue;
-
-    for (const source of getWebSearchOutputSources(part.output)) {
-      sources.set(source.url, source);
-    }
+/** 将历史 Run 工具摘要转换为既有工具卡需要的最小 AI SDK 风格结构。 */
+function toAiToolMessageParts(message: AiWorkspaceMessage): AiToolMessagePart[] {
+  if (message.role !== 'assistant' || message.contentVisibility === 'SOURCE_REVOKED' || !message.run) {
+    return [];
   }
 
-  return [...sources.values()];
+  return message.run.toolCalls.map((toolCall) => ({
+    type: `tool-${toolCall.toolName}`,
+    toolCallId: toolCall.id,
+    state:
+      toolCall.status === 'SUCCEEDED'
+        ? 'output-available'
+        : toolCall.status === 'FAILED'
+          ? 'output-error'
+          : 'input-available',
+    errorText: toolCall.failureReason ?? undefined,
+  }));
 }
 
-/** 校验并转换网页检索输出，防止工具失败对象或不完整数据被当作来源展示。 */
-function getWebSearchOutputSources(output: unknown): AiWebSource[] {
-  if (!isWebSearchResult(output)) return [];
+/** 渲染失败、取消和取消中的回答状态，避免它们被误显示为完成。 */
+function AiRunStatusNotice({ status }: { status: AiRunStatus | null }) {
+  const notice =
+    status === 'FAILED'
+      ? '本次回答生成失败。'
+      : status === 'CANCELLED'
+        ? '本次回答已取消。'
+        : status === 'CANCELLATION_REQUESTED'
+          ? '正在停止本次回答…'
+          : status === 'QUEUED'
+            ? '回答排队中…'
+            : status === 'WAITING_APPROVAL'
+              ? '回答正在等待确认。'
+              : null;
 
-  return output.results.flatMap((result) =>
-    typeof result.url === 'string' && result.url && typeof result.title === 'string' && result.title
-      ? [{ title: result.title, url: result.url }]
-      : [],
-  );
+  return notice ? <p className="text-xs text-muted-foreground">{notice}</p> : null;
 }
-
-/** 判断未知工具输出是否符合 Parallel 网页检索成功结果的最小结构。 */
-function isWebSearchResult(output: unknown): output is { results: Array<{ title?: unknown; url?: unknown }> } {
-  return typeof output === 'object' && output !== null && 'results' in output && Array.isArray(output.results);
-}
-
-/** 单条外部网页来源在界面上需要的最小安全字段。 */
-type AiWebSource = {
-  /** 用户可打开的 HTTPS 或 HTTP 网页地址。 */
-  url: string;
-  /** 搜索服务返回的网页标题。 */
-  title: string;
-};
 
 /** 渲染单条消息下方的复制操作，并调用兼容 HTTPS 与本地开发环境的复制逻辑。 */
 function AiMessageCopyAction({ text, label }: { text: string; label: string }) {
@@ -250,14 +226,6 @@ function AiMessageCopyAction({ text, label }: { text: string; label: string }) {
       </MessageAction>
     </MessageActions>
   );
-}
-
-/** 返回消息内全部文本部分拼接后的可复制内容。 */
-function getMessageText(message: UIMessage): string {
-  return message.parts
-    .filter((part) => part.type === 'text')
-    .map((part) => part.text)
-    .join('');
 }
 
 /** 优先通过浏览器 Clipboard API 复制内容，权限受限时回退到传统选择复制。 */
@@ -295,16 +263,25 @@ function AiRunningIndicator() {
   );
 }
 
-/** 渲染对话请求失败时的统一错误提示。 */
-function AiChatError({ error }: { error: Error | undefined }) {
-  if (!error) return null;
+/** 渲染领域 SSE 的明确错误或断线重连状态。 */
+function AiChatError({ error, streamState }: { error: string | null; streamState: AiWorkspaceStreamState }) {
+  const message =
+    error ??
+    (streamState === 'RECONNECTING'
+      ? '实时回答连接已断开，正在重连…'
+      : streamState === 'CONNECTING'
+        ? '正在连接实时回答…'
+        : null);
+
+  if (!message) return null;
 
   return (
     <p
-      role="alert"
+      role={error ? 'alert' : undefined}
+      aria-live="polite"
       className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
     >
-      {error.message || 'AI 对话暂时不可用，请稍后重试'}
+      {message}
     </p>
   );
 }

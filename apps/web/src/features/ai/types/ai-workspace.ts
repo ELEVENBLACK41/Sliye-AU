@@ -9,6 +9,9 @@ import type { AiMessageHistoryItem, AiThreadActiveRun, AiThreadListItem } from '
 /** 工作区异步资源的统一加载状态。 */
 export type AiWorkspaceLoadState = 'IDLE' | 'LOADING' | 'SUCCESS' | 'ERROR';
 
+/** 浏览器侧标准领域 SSE 订阅的生命周期状态。 */
+export type AiWorkspaceStreamState = 'IDLE' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'ERROR';
+
 /** 侧栏展示的会话预览，当前选中态仅由 URL 的 Thread 标识决定。 */
 export type AiWorkspaceThreadPreview = Pick<AiThreadListItem, 'id' | 'title' | 'activeRunId' | 'archivedAt'> & {
   /** 该会话是否与当前 URL 中的 Thread 标识匹配。 */

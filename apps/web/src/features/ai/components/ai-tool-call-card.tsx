@@ -8,12 +8,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@workspace/
 
 /** 当前 AI 测试机器人工具名对应的界面中文名称。 */
 const AI_TOOL_LABELS: Record<string, string> = {
-  getProjectSnapshot: '读取项目概览',
-  listActiveDecisions: '列出活跃决策',
-  getDecisionTimeline: '读取决策时间线',
-  compareDecisionProposals: '比较候选提案',
-  getMeetingSummary: '读取会议纪要',
-  parallel_search: '网页检索',
+  findDecisionCandidates: '查找决策候选',
+  getDecisionContext: '读取决策上下文',
 };
 
 /** AI SDK 工具消息在自定义 UI 中渲染所需的最小结构。 */
