@@ -7,13 +7,19 @@
  */
 
 import type {
+  AiRunControlResult,
   AiMessageListQuery,
   AiMessagePage,
   AiPinnedThreadList,
+  AiThreadMessageSubmissionResult,
   AiThreadDetail,
   AiThreadListItem,
   AiThreadListQuery,
   AiThreadPage,
+  AiThreadRunCommandResult,
+  CreateAiThreadMessageRequest,
+  CreateAiThreadRequest,
+  RetryAiRunRequest,
 } from '@workspace/contracts/ai';
 
 import { requestData } from '@/services/request';
@@ -64,6 +70,52 @@ export function getAiMessagePage(
     {
       signal,
       errorMessage: 'AI 消息历史加载失败，请稍后重试',
+    },
+  );
+}
+
+/** 创建新 AI Thread，并提交首条用户消息。 */
+export function createAiThread(
+  body: CreateAiThreadRequest,
+): Promise<AiThreadRunCommandResult> {
+  return requestData<AiThreadRunCommandResult, CreateAiThreadRequest>('/api/ai/threads', {
+    method: 'POST',
+    body,
+    errorMessage: 'AI 会话创建失败，请稍后重试',
+  });
+}
+
+/** 在既有 Thread 中提交用户消息，普通模式由服务端决定立即执行或进入队列。 */
+export function createAiThreadMessage(
+  threadId: string,
+  body: CreateAiThreadMessageRequest,
+): Promise<AiThreadMessageSubmissionResult> {
+  return requestData<AiThreadMessageSubmissionResult, CreateAiThreadMessageRequest>(
+    `/api/ai/threads/${encodeURIComponent(threadId)}/messages`,
+    {
+      method: 'POST',
+      body,
+      errorMessage: 'AI 消息发送失败，请稍后重试',
+    },
+  );
+}
+
+/** 请求停止当前 Run；调用方继续等待 SSE 或历史状态确认最终终态。 */
+export function stopAiRun(runId: string): Promise<AiRunControlResult> {
+  return requestData<AiRunControlResult>(`/api/ai/runs/${encodeURIComponent(runId)}/stop`, {
+    method: 'POST',
+    errorMessage: 'AI 运行停止失败，请稍后重试',
+  });
+}
+
+/** 从失败或取消的旧 Run 创建新的重试 Run。 */
+export function retryAiRun(runId: string, body: RetryAiRunRequest): Promise<AiThreadRunCommandResult> {
+  return requestData<AiThreadRunCommandResult, RetryAiRunRequest>(
+    `/api/ai/runs/${encodeURIComponent(runId)}/retry`,
+    {
+      method: 'POST',
+      body,
+      errorMessage: 'AI 运行重试失败，请稍后重试',
     },
   );
 }

@@ -8,7 +8,7 @@ import { AiChatSurface } from './ai-chat-surface';
 import { useAiThreadWorkspace } from '../hooks/use-ai-thread-workspace';
 import { toAiWorkspaceMessages } from '../utils/ai-workspace-message';
 
-/** 渲染由 URL 驱动的 AI Thread 工作区；运行控制留给后续增量。 */
+/** 渲染由 URL 驱动的 AI Thread 工作区，并连接真实 Thread 命令。 */
 export function AiWorkspace() {
   const workspace = useAiThreadWorkspace();
   const sidebarData = {
@@ -40,7 +40,7 @@ export function AiWorkspace() {
   );
 }
 
-/** 渲染 2.6-B 的详情、历史消息、实时事件和四态反馈。 */
+/** 渲染详情、历史消息、实时事件、Thread 命令和四态反馈。 */
 function AiWorkspaceContent({ workspace }: { workspace: ReturnType<typeof useAiThreadWorkspace> }) {
   const messages = useMemo(
     () => toAiWorkspaceMessages(workspace.threadState.messages, workspace.runEventState),
@@ -82,7 +82,12 @@ function AiWorkspaceContent({ workspace }: { workspace: ReturnType<typeof useAiT
       activeRunStatus={activeRunStatus}
       streamState={workspace.streamState}
       streamError={workspace.streamError}
-      readOnly
+      queuedMessages={workspace.queuedMessages}
+      commandState={workspace.commandState}
+      commandError={workspace.commandError}
+      onSubmitMessage={workspace.submitMessage}
+      onStop={() => void workspace.stopCurrentRun()}
+      onRetry={(runId) => void workspace.retryRun(runId)}
     />
   );
 }
@@ -93,7 +98,7 @@ function AiWorkspaceEmpty({ title }: { title?: string } = {}) {
     <div className="flex min-h-0 flex-1 items-center justify-center p-6 text-center">
       <div>
         <h1 className="text-xl font-semibold text-foreground">{title ?? '开始一段新的决策对话'}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">会话消息将在下一步接入发送与实时运行能力。</p>
+        <p className="mt-2 text-sm text-muted-foreground">描述你正在推进的决策，开始记录它的讨论过程。</p>
       </div>
     </div>
   );

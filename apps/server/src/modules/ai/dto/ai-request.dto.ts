@@ -5,10 +5,12 @@
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type {
+  CreateAiThreadMessageRequest,
   CreateAiThreadRequest,
   AiMessageSubmissionMode,
   AiThreadListFilter,
   RenameAiThreadRequest,
+  RetryAiRunRequest,
   SetAiThreadArchivedRequest,
   SetAiThreadPinnedRequest,
 } from '@workspace/contracts/ai';
@@ -63,7 +65,7 @@ export class CreateAiThreadDto implements CreateAiThreadRequest {
 }
 
 /** 校验在既有 Thread 中发送用户消息的请求。 */
-export class CreateAiThreadMessageDto {
+export class CreateAiThreadMessageDto implements CreateAiThreadMessageRequest {
   /** 本次发送的非空用户消息。 */
   @ApiProperty({ example: '换个方向，先只看最近一次决议。' })
   @Transform(({ value }: { value: unknown }) =>
@@ -186,7 +188,7 @@ export class ListAiRunEventsQueryDto {
 }
 
 /** 校验从已结束 Run 创建重试 Run 的请求。 */
-export class RetryAiRunDto {
+export class RetryAiRunDto implements RetryAiRunRequest {
   /** 旧 Run、用户和重试请求范围内的幂等键。 */
   @ApiProperty()
   @IsString()

@@ -3,6 +3,7 @@
 import type { AiMessageHistoryItem, AiMessageRun } from '@workspace/contracts/ai';
 
 import type { AiWorkspaceMessage } from '../types/ai-message';
+import type { AiWorkspaceQueuedMessage } from '../types/ai-workspace';
 import type { AiEventReducerState } from './ai-event-reducer';
 
 /** 服务端来源失权消息在浏览器侧使用的中性占位文案。 */
@@ -34,7 +35,9 @@ export function toAiWorkspaceMessages(
   history: AiMessageHistoryItem[],
   liveRun: AiEventReducerState | null,
 ): AiWorkspaceMessage[] {
-  const messages = history.map(toWorkspaceMessage);
+  const messages = history
+    .filter((message) => message.dispatchState !== 'QUEUED')
+    .map(toWorkspaceMessage);
 
   if (!liveRun || !liveRun.status) {
     return messages;
@@ -66,6 +69,46 @@ export function toAiWorkspaceMessages(
   return nextMessages;
 }
 
+/** 将历史与刚提交的本地确认结果合并为输入框上方的排队列表。 */
+export function toAiWorkspaceQueuedMessages(
+  history: AiMessageHistoryItem[],
+  localQueuedMessages: AiWorkspaceQueuedMessage[],
+  steeringRunId: string | null,
+): AiWorkspaceQueuedMessage[] {
+  const queuedMessages = new Map<string, AiWorkspaceQueuedMessage>();
+  const localSteer = localQueuedMessages.find((message) => message.submissionMode === 'STEER');
+
+  history
+    .filter(
+      (message) =>
+        message.role === 'USER' &&
+        message.dispatchState === 'QUEUED' &&
+        (localSteer === undefined ||
+          message.queueSequence === null ||
+          message.queueSequence >= localSteer.queueSequence),
+    )
+    .forEach((message) => {
+      if (message.queueSequence === null || message.submissionMode === null) return;
+
+      queuedMessages.set(message.id, {
+        id: message.id,
+        content: message.content,
+        queueSequence: message.queueSequence,
+        submissionMode: message.submissionMode,
+        isSteering: steeringRunId !== null,
+      });
+    });
+
+  localQueuedMessages.forEach((message) => {
+    queuedMessages.set(message.id, {
+      ...message,
+      isSteering: steeringRunId !== null,
+    });
+  });
+
+  return [...queuedMessages.values()].sort((left, right) => left.queueSequence - right.queueSequence);
+}
+
 /** 将一条服务端历史消息转换为现有气泡可消费的角色和正文。 */
 function toWorkspaceMessage(message: AiMessageHistoryItem): AiWorkspaceMessage {
   const isRevoked = message.contentVisibility === 'SOURCE_REVOKED';
@@ -76,6 +119,7 @@ function toWorkspaceMessage(message: AiMessageHistoryItem): AiWorkspaceMessage {
     content: isRevoked ? REVOKED_MESSAGE_PLACEHOLDER : message.content,
     contentVisibility: message.contentVisibility,
     run: message.run,
+    dispatchState: message.dispatchState,
     isStreaming: false,
   };
 }
@@ -97,6 +141,7 @@ function toLiveAssistantMessage(liveRun: AiEventReducerState): AiWorkspaceMessag
     content: liveRun.assistantText,
     contentVisibility: 'VISIBLE',
     run,
+    dispatchState: null,
     isStreaming: isLiveRun(liveRun),
   };
 }

@@ -9,7 +9,7 @@ import test from 'node:test';
 import type { AiMessageHistoryItem } from '@workspace/contracts/ai';
 
 import { createAiEventReducerState, reduceAiEvent } from './ai-event-reducer.ts';
-import { toAiWorkspaceMessages } from './ai-workspace-message.ts';
+import { toAiWorkspaceMessages, toAiWorkspaceQueuedMessages } from './ai-workspace-message.ts';
 
 /** 创建一条测试用的持久化消息。 */
 function createMessage(overrides: Partial<AiMessageHistoryItem> = {}): AiMessageHistoryItem {
@@ -118,4 +118,56 @@ test('来源失权消息只保留中性占位并清空工具摘要', () => {
   assert.equal(messages[0]?.content, '这条回答当前无法显示。');
   assert.equal(messages[0]?.contentVisibility, 'SOURCE_REVOKED');
   assert.deepEqual(messages[0]?.run?.toolCalls, []);
+});
+
+test('排队用户输入从对话消息中移到输入框上方，并合并本地提交确认', () => {
+  const queued = createMessage({
+    id: 'message-queued',
+    dispatchState: 'QUEUED',
+    queueSequence: 2,
+    content: '排队的问题',
+  });
+  const local = toAiWorkspaceQueuedMessages(
+    [queued],
+    [
+      {
+        id: 'message-local',
+        content: '刚提交的问题',
+        queueSequence: 3,
+        submissionMode: 'NORMAL',
+        isSteering: false,
+      },
+    ],
+    null,
+  );
+
+  assert.deepEqual(local.map((message) => [message.id, message.queueSequence]), [
+    ['message-queued', 2],
+    ['message-local', 3],
+  ]);
+  assert.deepEqual(toAiWorkspaceMessages([queued], null), []);
+});
+
+test('本地调整方向确认会暂时隐藏历史中的旧排队项，等待下一次历史刷新', () => {
+  const queued = createMessage({
+    id: 'message-queued-old',
+    queueSequence: 2,
+    content: '旧排队问题',
+    dispatchState: 'QUEUED',
+  });
+  const latest = toAiWorkspaceQueuedMessages(
+    [queued],
+    [
+      {
+        id: 'message-steer',
+        content: '新的调整方向',
+        queueSequence: 3,
+        submissionMode: 'STEER',
+        isSteering: true,
+      },
+    ],
+    'run-1',
+  );
+
+  assert.deepEqual(latest.map((message) => message.id), ['message-steer']);
 });

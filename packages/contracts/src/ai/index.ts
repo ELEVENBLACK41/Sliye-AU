@@ -12,3 +12,4 @@ export * from './ai-run.types.ts';
 export * from './ai-tool.types.ts';
 export * from './ai-event.types.ts';
 export * from './ai-runtime.types.ts';
+export * from './ai-command.types.ts';

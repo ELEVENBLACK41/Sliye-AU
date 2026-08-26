@@ -5,7 +5,7 @@
  * 回答是否完成；工具调用仍使用服务端返回的受控摘要，不携带工具原始输出。
  */
 
-import type { AiMessageRun } from '@workspace/contracts/ai';
+import type { AiMessageDispatchState, AiMessageRun } from '@workspace/contracts/ai';
 
 /** 现有消息气泡可以直接消费的用户或助手角色。 */
 export type AiWorkspaceMessageRole = 'user' | 'assistant';
@@ -22,6 +22,8 @@ export type AiWorkspaceMessage = {
   contentVisibility: 'VISIBLE' | 'SOURCE_REVOKED';
   /** 助手消息的 Run 展示快照；用户消息为 null。 */
   run: AiMessageRun | null;
+  /** 用户消息的真实投递状态；助手消息固定为 null。 */
+  dispatchState: AiMessageDispatchState | null;
   /** 当前正文是否来自仍在接收领域事件的 Run。 */
   isStreaming: boolean;
 };
