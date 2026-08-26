@@ -14,8 +14,22 @@ export function AiWorkspace() {
   const sidebarData = {
     pinnedThreads: workspace.pinnedThreads,
     recentThreads: workspace.recentThreads,
+    archivedThreads: workspace.archivedThreads,
     listState: workspace.listState,
     listError: workspace.listError,
+    archivedListState: workspace.archivedListState,
+    archivedListError: workspace.archivedListError,
+    metadataError: workspace.metadataError,
+    metadataPendingThreadId: workspace.metadataPendingThreadId,
+  };
+
+  const sidebarActions = {
+    onThreadSelect: workspace.selectThread,
+    onNewThread: workspace.startNewThread,
+    onShowArchived: workspace.loadArchivedThreads,
+    onTogglePinned: workspace.setThreadPinned,
+    onRenameThread: workspace.renameThread,
+    onToggleArchived: workspace.setThreadArchived,
   };
 
   return (
@@ -25,14 +39,12 @@ export function AiWorkspace() {
     >
       <AiWorkspaceSidebar
         data={sidebarData}
-        onThreadSelect={workspace.selectThread}
-        onNewThread={workspace.startNewThread}
+        {...sidebarActions}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <AiWorkspaceMobileHeader
           data={sidebarData}
-          onThreadSelect={workspace.selectThread}
-          onNewThread={workspace.startNewThread}
+          {...sidebarActions}
         />
         <AiWorkspaceContent workspace={workspace} />
       </div>

@@ -35,7 +35,7 @@ export type AiWorkspaceQueuedMessage = {
 };
 
 /** 侧栏展示的会话预览，当前选中态仅由 URL 的 Thread 标识决定。 */
-export type AiWorkspaceThreadPreview = Pick<AiThreadListItem, 'id' | 'title' | 'activeRunId' | 'archivedAt'> & {
+export type AiWorkspaceThreadPreview = Pick<AiThreadListItem, 'id' | 'title' | 'activeRunId' | 'pinnedAt' | 'archivedAt'> & {
   /** 该会话是否与当前 URL 中的 Thread 标识匹配。 */
   isActive: boolean;
 };
