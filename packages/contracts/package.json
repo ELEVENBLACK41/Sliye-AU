@@ -3,21 +3,66 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    ".": "./src/index.ts",
-    "./access": "./src/access/index.ts",
-    "./auth": "./src/auth/index.ts",
-    "./common": "./src/common/index.ts",
-    "./ai": "./src/ai/index.ts",
-    "./decisions": "./src/decisions/index.ts",
-    "./projects": "./src/projects/index.ts",
-    "./meetings": "./src/meetings/index.ts",
-    "./notifications": "./src/notifications/index.ts",
-    "./relationship-graph": "./src/relationship-graph/index.ts",
-    "./dashboard": "./src/dashboard/index.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "require": "./dist/index.js",
+      "default": "./src/index.ts"
+    },
+    "./access": {
+      "types": "./src/access/index.ts",
+      "require": "./dist/access/index.js",
+      "default": "./src/access/index.ts"
+    },
+    "./auth": {
+      "types": "./src/auth/index.ts",
+      "require": "./dist/auth/index.js",
+      "default": "./src/auth/index.ts"
+    },
+    "./common": {
+      "types": "./src/common/index.ts",
+      "require": "./dist/common/index.js",
+      "default": "./src/common/index.ts"
+    },
+    "./ai": {
+      "types": "./src/ai/index.ts",
+      "require": "./dist/ai/index.js",
+      "default": "./src/ai/index.ts"
+    },
+    "./decisions": {
+      "types": "./src/decisions/index.ts",
+      "require": "./dist/decisions/index.js",
+      "default": "./src/decisions/index.ts"
+    },
+    "./projects": {
+      "types": "./src/projects/index.ts",
+      "require": "./dist/projects/index.js",
+      "default": "./src/projects/index.ts"
+    },
+    "./meetings": {
+      "types": "./src/meetings/index.ts",
+      "require": "./dist/meetings/index.js",
+      "default": "./src/meetings/index.ts"
+    },
+    "./notifications": {
+      "types": "./src/notifications/index.ts",
+      "require": "./dist/notifications/index.js",
+      "default": "./src/notifications/index.ts"
+    },
+    "./relationship-graph": {
+      "types": "./src/relationship-graph/index.ts",
+      "require": "./dist/relationship-graph/index.js",
+      "default": "./src/relationship-graph/index.ts"
+    },
+    "./dashboard": {
+      "types": "./src/dashboard/index.ts",
+      "require": "./dist/dashboard/index.js",
+      "default": "./src/dashboard/index.ts"
+    }
   },
   "scripts": {
     "check-types": "tsc --noEmit",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "build:runtime": "tsc --project tsconfig.runtime.json"
   },
   "devDependencies": {
     "typescript": "^5"

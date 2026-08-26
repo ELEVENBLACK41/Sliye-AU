@@ -1,6 +1,6 @@
 # NextNest AI 模块：Decision Agent 与 RAG 可测试实施路线图
 
-> 状态：实施基线 v1.1  
+> 状态：实施基线 v1.2
 > 日期：2026-08-17  
 > 最近修订：2026-08-25  
 > 适用项目：NextNest（Next.js 16 + React 19 + NestJS 11 + Prisma 7 + PostgreSQL）  
@@ -370,7 +370,7 @@ AI Gateway 的统一模型入口、Codex 的模型/运行配置与业务循环�
 | 2.2 持久化与事务地基 | 建立 PostgreSQL 权威状态，并保证创建和事件追加的基本原子性 | Prisma AI 模型与 migration；Thread + 首条消息 + Run 原子创建；幂等键、`activeRunId`、事件序号约束 | 模型执行、流式 UI、会话历史工作区 | migration 可应用和回滚；数据库并发测试证明重复请求不重复创建，同一 Thread 不产生两个非终态 Run，事件序号唯一 |
 | 2.3 租约、取消与故障收敛 | 防止重复执行和迟到结果污染，建立进程异常后的确定性终态 | Run 原子领取、租约签发/续租、写入 fencing、停止与重试状态语义、过期租约对账 | 真实业务工具、历史双栏 UI、跨进程续跑 | 单 Run 只能领取一次；取消/完成竞争只有一个终态；失效租约写入被拒绝；对账释放 `activeRunId` |
 | 2.4 真实单 Thread 运行闭环 | 用一条受权限保护的最小只读工具链验证状态模型确实能承载 Agent Runtime | 穿插第 3 阶段的 `findDecisionCandidates` → `getDecisionContext`；BFF 执行器注册表；持久化事件；首次流、补拉、停止和重试链路；基础上下文预算 | 扩展 proposal/vote/resolution 工具、讨论/会议检索、历史侧栏、高级压缩 | 用户按自然语言名称定位唯一授权 Decision 后可完成工具链并保存真实 Run 终态；重名时安全消歧；重连不重复启动执行器；越权请求被 NestJS 拒绝 |
-| 2.5 会话历史与权限接口 | 交付可供工作区消费的 Thread 管理和历史读取 API | Thread 列表/详情/消息分页；重命名、归档、恢复；Run/消息来源依赖登记与失权处理；对应 BFF 路由 | 会话搜索、文件夹、置顶、共享和物理删除 | 新建、分页、更新、归档、恢复和直接 URL 权限测试通过；失权来源对应的消息、工具结果、引用和事件均不可旁路读取 |
+| 2.5 会话历史与权限接口 | 交付可供工作区消费的 Thread 管理和历史读取 API | Thread 列表/详情/消息分页；置顶、重命名、归档、恢复；Run/消息来源依赖登记与失权处理；对应 BFF 路由 | 会话搜索、文件夹、共享和物理删除；真实引用生成 | 新建、分页、更新、置顶、归档、恢复和直接 URL 权限测试通过；失权来源对应的消息、工具结果和事件均不可旁路读取；引用数据在第 5 阶段建立后纳入同一门禁 |
 | 2.6 现有工作区真实数据接入与阶段验收 | 把持久化能力按现有 AI 工作台风格落实为可恢复使用的产品入口 | 真实 Thread/Run 接入、路由恢复、Thread 切换、停止/重试、loading/empty/error/success、视觉与功能完整性检查 | 重做 AI 页面；第 10 阶段的生产级长任务加固和 Evidence Receipt 重试 | 刷新和深链接可恢复 Thread；多个 Thread 不串线；数据接入不删除现有区域或造成视觉回退；桌面和移动端无双重滚动或截断 |
 
 执行纪律：
@@ -391,7 +391,7 @@ AI Gateway 的统一模型入口、Codex 的模型/运行配置与业务循环�
 - `AiStep`：一次模型步骤，保存序号、停止原因、Token 摘要。
 - `AiEvent`：面向流式恢复的追加事件，在单个 Run 内使用单调序号。
 - `AiToolCall`：工具名、输入摘要、状态、审批、结果引用、耗时和错误。
-- `AiCitation`：生成内容与业务来源之间的稳定映射。
+- `AiCitation`：第 5 阶段建立的生成内容与业务来源稳定映射；第 2 阶段只保留引用 UI 空状态与来源依赖基础，不提前创建伪引用。
 - `AiApproval`：可以在第 4 阶段再启用，但状态字段应提前考虑迁移兼容。
 
 ### 状态机建议
@@ -420,7 +420,7 @@ queued  -> cancelled
 7. 提供 Thread 创建、游标分页列表、详情和更新接口；列表按 Thread 所有者过滤并默认按 `updatedAt` 倒序排列，历史内容按各 Run 的来源依赖重新鉴权。
 8. Thread 更新第一版只开放重命名、归档和恢复归档；不提供物理删除，避免破坏运行审计和引用追溯。
 9. Web 实现第一版会话历史工作区：桌面端左侧历史、右侧聊天，移动端使用抽屉承载历史列表；当前 `threadId` 保存在路由中，同一授权用户刷新页面或通过站内深链接重新打开时仍能恢复同一会话。
-10. 切换 Thread 时恢复已持久化消息、Run 最终状态、工具调用和引用；进行中的 Run 继续使用 `afterSequence` 补拉事件，而不是重新发送用户消息。
+10. 切换 Thread 时恢复已持久化消息、Run 最终状态和工具调用；第 5 阶段建立真实 `AiCitation` 后再恢复引用。进行中的 Run 继续使用 `afterSequence` 补拉事件，而不是重新发送用户消息。
 11. 使用 `AiThread.activeRunId` 的事务性比较更新保证同一 Thread 最多一个非终态 Run；Run 进入终态时清空绑定，进程异常时由启动对账修复。
 12. 为每次执行签发带过期时间的 `executionLeaseId` 并由执行器定期续租；事件、助手消息、工具结果和终态写入必须同时匹配 Run 当前状态与执行租约，取消或租约失效后的迟到结果不得落库。NestJS 定时对账过期租约并将遗留 Run 收敛为 `failed`，同时释放 `activeRunId`。
 
@@ -447,7 +447,7 @@ queued  -> cancelled
 2. 切换会话：通过路由中的 `threadId` 加载 Thread 详情和消息，切换前后的输入、运行状态不能串线。
 3. 会话标题：默认从第一条用户问题生成受控长度的标题，不额外消耗一次模型调用；用户可以手动重命名。
 4. 归档与恢复：归档会话从默认列表隐藏，但保留消息、Run、引用和审计数据；第一版不做硬删除和自定义保留期。
-5. 历史加载：Thread 列表和单个 Thread 的消息分别使用游标分页或“加载更多”，不一次返回用户全部会话或某个 Thread 的全部消息；第一版不做全文搜索、文件夹、置顶和批量管理。
+5. 历史加载：Thread 列表和单个 Thread 的消息分别使用游标分页或“加载更多”，不一次返回用户全部会话或某个 Thread 的全部消息；固定会话与最近会话为互斥列表，固定数量由服务端上限控制；第一版不做全文搜索、文件夹和批量管理。
 6. 业务目标表达：不提供项目、决策或会议上下文选择器。业务页面的“询问 AI”入口只能生成一条用户可见、可编辑的自然语言消息，不能给 Thread 注入隐藏业务状态。
 
 #### 第一版上下文策略
@@ -461,20 +461,20 @@ queued  -> cancelled
 - 第一版要求承载 Web Agent Runtime 的 Node 进程常驻且单实例。`POST /threads` 或 `POST /messages` 先经 NestJS 事务创建状态，再由当前 BFF 请求中的 Agent Runtime 原子领取 `queued` Run、签发 `executionLeaseId` 并启动模型循环；首个流事件返回 `threadId`、`messageId` 和 `runId`。
 - 进程内只用 `runId -> executor/AbortController` 注册表保存正在执行的临时句柄，所有事件和结果仍先持久化到 PostgreSQL，再推送给当前订阅者。执行器定期向 NestJS 续租；该注册表不承担重启恢复，租约过期后由 NestJS 对账失败。若 Web 改为短生命周期 Serverless，必须提前引入可靠执行队列，不能继续承诺断线后同进程执行。
 - `GET /stream` 只订阅或补拉已经存在的 Run，绝不创建消息、改变 `queued` 状态或再次启动模型。执行器通过 `queued -> running` 的原子领取和执行租约保证同一 Run 只启动一次。
-- 同一 Thread 同时最多一个非终态 Run。已有 `queued/running/waiting_approval/cancellation_requested` Run 时提交新消息返回 `AI_THREAD_RUN_ACTIVE`，前端保持输入内容并引导等待或停止，不创建隐式分支。
+- 同一 Thread 同时最多一个非终态 Run。已有活跃 Run 时，普通消息以持久化 `QUEUED` 状态排队并返回队列位置；用户显式选择“调整方向”时持久化最新高优先级输入、请求取消当前 Run，并替代尚未领取的旧输入。两者都不把文本硬插入已开始的模型请求。
 - 显式停止先把 Run 改为 `cancellation_requested`，再触发当前进程的 Agent Loop `AbortController`。只有执行器确认停止并写入唯一终态后才变为 `cancelled`；在此之前 UI 展示“正在停止”。若供应商或工具暂不支持完整 Abort，执行租约与状态 fencing 必须拒绝迟到事件、工具结果、助手消息和 `completed` 写入，第 10 阶段再解决上游仍可能继续消耗的成本问题。
-- 重试只允许针对 `failed/cancelled` Run，并同样受 Thread 单 Run 门禁约束；重试请求必须带幂等键。首次请求创建新 Run 后由当前 BFF Agent Runtime 按相同协议原子领取、启动并返回流；网络重放只能取得并订阅同一个新 Run，不能重新领取或再次启动。
+- 重试只允许针对 `failed/cancelled` Run，并同样受 Thread 单 Run 门禁约束；重试请求必须带幂等键。BFF 在返回新 Run 的 JSON 结果后安排 Agent Runtime 原子领取，浏览器再订阅既有 SSE；网络重放只能取得并订阅同一个新 Run，不能重新领取或再次启动。
 
 #### 最小接口与权限边界
 
-- `POST /api/ai/threads`：只接收首条用户消息和幂等键，在同一事务中创建 Thread、消息与 Run。随后由当前 BFF Agent Runtime 原子领取并启动 Run，响应直接返回流，第一版不提供持久化空 Thread 的接口。
+- `POST /api/ai/threads`：只接收首条用户消息和幂等键，在同一事务中创建 Thread、消息与 Run；BFF 在返回 JSON 创建结果后安排服务端 Runtime 原子领取并启动 Run。浏览器再通过既有 SSE 补拉接口订阅，不把创建响应伪装成模型流；第一版不提供持久化空 Thread 的接口。
 - `GET /api/ai/threads`：按游标和归档状态查询当前用户拥有的 Thread。
 - `GET /api/ai/threads/:threadId`：获取 Thread 元数据和最近 Run 摘要，不在详情响应中无限内嵌历史消息。
 - `GET /api/ai/threads/:threadId/messages`：按游标分页获取已持久化消息及其工具调用、引用展示数据。
-- `POST /api/ai/threads/:threadId/messages`：提交后续用户消息，并在事务中创建对应 Run；随后原子领取、启动并返回流。相同用户、Thread 和幂等键只能创建一条用户消息和一个 Run；Thread 已有非终态 Run 时拒绝创建。
-- `GET /api/ai/threads/:threadId/stream?runId=...&afterSequence=...`：以 SSE/AI SDK Data Stream 语义订阅或恢复指定 Run 的流事件，不负责启动 Run；`AiEvent.sequence` 在单个 Run 内单调递增，数据库唯一约束为 `(runId, sequence)`，已完成 Run 以数据库最终状态为准。
+- `POST /api/ai/threads/:threadId/messages`：提交后续用户消息，使用普通发送或“调整方向”模式；普通输入可持久化排队，定向输入会有序取消当前 Run 后优先续跑。相同用户、Thread 和幂等键只能创建同一条用户消息；BFF 仅在响应包含新 Run 标识时安排执行器，浏览器始终单独订阅既有 SSE。
+- `GET /api/ai/threads/:threadId/stream?runId=...&afterSequence=...`：以标准 SSE 的领域事件订阅或恢复指定 Run，不负责启动 Run；它不是 AI SDK UI Message Stream Protocol，因此 2.6 不得让 `useChat` 默认 Transport 直接消费。`AiEvent.sequence` 在单个 Run 内单调递增，数据库唯一约束为 `(runId, sequence)`，已完成 Run 以数据库最终状态为准。
 - `POST /api/ai/runs/:runId/stop`：把仍在执行的 Run 推进到 `cancellation_requested` 并通知当前执行器；执行器确认后写入 `cancelled`，第 10 阶段再验证 `AbortSignal` 对供应商及可取消工具的完整传播。
-- `POST /api/ai/runs/:runId/retry`：接收幂等键，从失败或取消的旧 Run 创建带 `retryOfRunId` 的新 Run，不修改旧 Run；随后由当前 BFF Agent Runtime 原子领取、启动并返回流。幂等重放只订阅已创建的新 Run，不再次启动；本阶段不承诺复用 Evidence Receipt。
+- `POST /api/ai/runs/:runId/retry`：接收幂等键，从失败或取消的旧 Run 创建带 `retryOfRunId` 的新 Run，不修改旧 Run；BFF 返回 JSON 后安排 Runtime 原子领取，浏览器单独订阅既有 SSE。幂等重放只订阅已创建的新 Run，不再次启动；本阶段不承诺复用 Evidence Receipt。
 - `PATCH /api/ai/threads/:threadId`：只允许修改标题、归档状态等白名单字段。
 - 所有列表、详情、更新、消息和事件接口都必须在 NestJS 重新鉴权；仅在前端隐藏历史项不构成权限保护。
 - 创建 Thread 的幂等键至少按“当前用户 + 创建请求键”隔离，并把首条消息纳入冲突校验；后续消息的幂等键作用域为“当前用户 + `threadId`”，重试的幂等键作用域为“当前用户 + 旧 `runId`”。相同键但正文不同必须返回稳定冲突错误，不得跨用户、跨 Thread 或跨旧 Run 去重。
@@ -520,7 +520,7 @@ queued  -> cancelled
 
 - 所有合法/非法状态迁移表驱动测试。
 - 两个相同幂等键并发请求只能创建一个 Run。
-- 同一 Thread 使用两个不同幂等键并发提交时最多创建一个非终态 Run，另一个得到 `AI_THREAD_RUN_ACTIVE`；重试接口的网络重放也只能创建一个新 Run。
+- 同一 Thread 使用两个不同幂等键并发提交时最多创建一个非终态 Run；普通输入按队列顺序持久化，调整方向按已确认的替代规则收敛；重试接口的网络重放也只能创建一个新 Run。
 - 事件序号唯一且单调；断线后按序补拉不重不漏。
 - 重连 `GET /stream` 不会再次启动执行器；同一个 Run 只能成功领取一个 `executionLeaseId`。
 - 取消与模型完成竞争时只产生一个终态；进入 `cancellation_requested` 或执行租约失效后的迟到事件、助手消息、工具结果和完成状态全部拒绝写入。
@@ -677,8 +677,11 @@ Codex 的工具审批与执行分离、Claude Code 的权限/沙箱边界。Next
    - 最终决议与投票汇总。
    - 证据不足项。
    - 每条主要主张对应 citation IDs。
-5. UI 点击引用能跳到原消息/提案/事件/决议；没有权限或来源已删除时显示明确状态。
-6. 草稿只能复制/编辑/另行提交，不能直接覆盖正式决议。
+5. 落地 `AiCitation`：每条记录绑定本次 `runId`、对应的助手消息/草稿主张标识、`EvidenceItem` 的来源类型、来源 ID 与来源版本，以及前端安全定位信息。写入前必须确认该来源属于本 Run 已获准读取的来源集合；不重复复制完整敏感原文。
+   - `AiSourceDependency` 继续表达“本 Run 实际读取或引用过什么”，用于审计与整段历史的失权投影；`AiCitation` 只表达“这条主张具体依据哪条证据”，用于引用卡和跳转。两者不能互相替代。
+   - 来源当前失权、被删除或版本不再可用时，普通用户不能读取引用标题、片段、定位信息或借此旁路打开原内容；UI 只显示中性不可用状态。
+6. UI 点击引用能跳到原消息/提案/事件/决议；没有权限或来源已删除时显示明确状态。
+7. 草稿只能复制/编辑/另行提交，不能直接覆盖正式决议。
 
 ### 新增技术
 
@@ -689,6 +692,7 @@ Codex 的工具审批与执行分离、Claude Code 的权限/沙箱边界。Next
 
 - 精确事实必须和数据库一致。
 - 每条主要结论至少一个 citation；引用来源支持该结论。
+- 任何 `AiCitation` 都只能关联本 Run 的允许来源，并能在当前权限下安全定位；不能由模型自造来源 ID。
 - 删除/修改来源后的引用状态正确。
 - 没有足够信息的决策返回“证据不足”，而非补写合理故事。
 - 引用点击的权限与定位端到端测试。

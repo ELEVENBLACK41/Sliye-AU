@@ -1,9 +1,9 @@
 /**
- * 本文件提供 AI 实验室入口；当前仅渲染静态页面，后续接入 AI Thread 和业务上下文数据。
+ * 本文件提供新 AI 会话工作区入口；现有会话由动态 Thread 路由恢复。
  */
-import { AiWorkspaceStatic } from '@/features/ai/components/ai-workspace-static';
+import { AiWorkspace } from '@/features/ai/components/ai-workspace';
 
-/** 渲染 AI 实验室的首屏静态工作台。 */
+/** 渲染没有指定 Thread 的新会话工作区。 */
 export default function AiPage() {
-  return <AiWorkspaceStatic />;
+  return <AiWorkspace />;
 }

@@ -1,0 +1,19 @@
+/**
+ * 本文件把共享契约编译为可由 Node.js CommonJS 运行时加载的 JavaScript。
+ *
+ * 浏览器构建仍可按 package exports 读取 TypeScript 源码；NestJS 则读取本配置生成的
+ * `dist`，避免 Node 直接以 require 加载工作区内的 ESM TypeScript 源文件。
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "rewriteRelativeImportExtensions": true
+  }
+}

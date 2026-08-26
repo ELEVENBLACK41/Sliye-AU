@@ -32,8 +32,12 @@ import {
 } from '@/components/ai-elements/prompt-input';
 import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/ai-elements/sources';
 
-/** 渲染复用既有 `/api/chat` 流式测试机器人的 AI 对话主画布。 */
-export function AiChatSurface({ userName }: { userName: string }) {
+/**
+ * 渲染 AI 对话主画布。
+ *
+ * 2.6-A 会以只读模式保留既有布局；持久化消息与领域 SSE 在 2.6-B 接入。
+ */
+export function AiChatSurface({ readOnly = false }: { readOnly?: boolean }) {
   const [input, setInput] = useState('');
   const [enableWebSearch, setEnableWebSearch] = useState(false);
   const { messages, sendMessage, status, stop, error } = useChat();
@@ -42,7 +46,7 @@ export function AiChatSurface({ userName }: { userName: string }) {
   /** 提交当前输入内容，并交给既有 AI SDK 流式聊天链路处理。 */
   function handleMessageSubmit(message: PromptInputMessage): void {
     const text = message.text.trim();
-    if (!text || isRunning) return;
+    if (!text || isRunning || readOnly) return;
 
     void sendMessage({ text }, { body: { enableWebSearch } });
     setInput('');
@@ -62,6 +66,7 @@ export function AiChatSurface({ userName }: { userName: string }) {
             onWebSearchChange={setEnableWebSearch}
             onStop={stop}
             onSubmit={handleMessageSubmit}
+            readOnly={readOnly}
           />
           <AiChatError error={error} />
         </div>
@@ -73,7 +78,7 @@ export function AiChatSurface({ userName }: { userName: string }) {
     <div className="flex min-h-[calc(100dvh-12rem)] flex-1 flex-col justify-center px-4 py-8 lg:min-h-0 lg:px-8">
       <div className="mx-auto w-full max-w-3xl -translate-y-8 sm:-translate-y-12">
         <h1 className="mb-7 text-center text-2xl font-semibold tracking-tight text-foreground sm:mb-8 sm:text-3xl">
-          {userName}，今天想推进哪一项决策？
+          今天想推进哪一项决策？
         </h1>
         <AiComposer
           input={input}
@@ -84,6 +89,7 @@ export function AiChatSurface({ userName }: { userName: string }) {
           onWebSearchChange={setEnableWebSearch}
           onStop={stop}
           onSubmit={handleMessageSubmit}
+          readOnly={readOnly}
         />
         <AiChatError error={error} />
       </div>
@@ -313,6 +319,7 @@ function AiComposer({
   onWebSearchChange,
   onStop,
   onSubmit,
+  readOnly,
 }: {
   input: string;
   status: ChatStatus;
@@ -322,6 +329,8 @@ function AiComposer({
   onWebSearchChange: (enabled: boolean) => void;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage) => void;
+  /** 只读模式不允许继续走临时 `/api/chat` Mock 链路。 */
+  readOnly: boolean;
 }) {
   return (
     <PromptInput
@@ -334,7 +343,7 @@ function AiComposer({
         placeholder="描述你正在推进的决策，或粘贴一段讨论内容…"
         className="min-h-12 resize-none border-0 px-3 py-2 shadow-none focus-visible:ring-0"
         value={input}
-        disabled={isRunning}
+        disabled={isRunning || readOnly}
         onChange={(event) => onInputChange(event.currentTarget.value)}
       />
       <PromptInputFooter className="justify-between">
@@ -344,7 +353,7 @@ function AiComposer({
           <Switch
             aria-label="开启联网检索"
             checked={enableWebSearch}
-            disabled={isRunning}
+            disabled={isRunning || readOnly}
             onCheckedChange={onWebSearchChange}
             size="sm"
           />
@@ -354,7 +363,7 @@ function AiComposer({
           onStop={onStop}
           className="mb-0.5 rounded-full"
           aria-label={isRunning ? '停止生成' : '发送消息'}
-          disabled={!input.trim() && !isRunning}
+          disabled={readOnly || (!input.trim() && !isRunning)}
         />
       </PromptInputFooter>
     </PromptInput>
