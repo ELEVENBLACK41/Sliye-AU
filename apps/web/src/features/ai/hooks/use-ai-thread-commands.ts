@@ -1,6 +1,6 @@
 /**
  * 本文件维护 AI Thread 的发送、排队、调整方向、停止和重试命令。
- * 命令只提交用户意图，最终消息与 Run 状态仍以服务端历史和 SSE 为准。
+ * 命令只提交用户意图，最终消息与 Run 状态仍以服务端历史、POST SSE 和 GET SSE 为准。
  */
 'use client';
 
@@ -8,15 +8,29 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRe
 import { useRouter } from 'next/navigation';
 
 import type {
+  AiMessageHistoryItem,
   AiMessageSubmissionMode,
   AiThreadMessageSubmissionResult,
 } from '@workspace/contracts/ai';
 
-import { createAiThread, createAiThreadMessage, retryAiRun, stopAiRun } from '../services/ai-thread-client.service';
-import type { AiWorkspaceCommandState, AiWorkspaceQueuedMessage, AiWorkspaceThreadState } from '../types/ai-workspace';
+import { createAiThread, retryAiRun, stopAiRun } from '../services/ai-thread-client.service';
 import {
+  startAiThreadMessagePostStream,
+  type AiThreadPostStreamHandle,
+} from '../services/ai-thread-post-stream.service';
+import type {
+  AiWorkspaceCommandState,
+  AiWorkspaceQueuedMessage,
+  AiWorkspaceStreamState,
+  AiWorkspaceThreadState,
+} from '../types/ai-workspace';
+import {
+  applyAiLiveDelta,
+  applyAiRunSnapshot,
+  createAiEventReducerState,
   isAiRunActive,
   isAiRunTerminal,
+  reduceAiEvent,
   type AiEventReducerState,
 } from '../utils/ai-event-reducer';
 
@@ -42,6 +56,12 @@ type AiThreadCommandOptions = {
   setLocalQueuedMessages: Dispatch<SetStateAction<AiWorkspaceQueuedMessage[]>>;
   /** 更新调整方向期间的旧 Run 标识。 */
   setSteeringRunId: Dispatch<SetStateAction<string | null>>;
+  /** 当前 POST 直出流拥有的 Run 标识，用于屏蔽重复 GET SSE。 */
+  setPostStreamRunId: Dispatch<SetStateAction<string | null>>;
+  /** 更新工作区当前领域流状态。 */
+  setStreamState: Dispatch<SetStateAction<AiWorkspaceStreamState>>;
+  /** 更新工作区当前领域流错误。 */
+  setStreamError: Dispatch<SetStateAction<string | null>>;
 };
 
 /** 从未知异常中提取可安全展示的错误文案。 */
@@ -61,11 +81,25 @@ export function useAiThreadCommands({
   refreshThreadLists,
   setLocalQueuedMessages,
   setSteeringRunId,
+  setPostStreamRunId,
+  setStreamState,
+  setStreamError,
 }: AiThreadCommandOptions) {
   const router = useRouter();
   const [commandState, setCommandState] = useState<AiWorkspaceCommandState>('IDLE');
   const commandStateRef = useRef<AiWorkspaceCommandState>('IDLE');
   const [commandError, setCommandError] = useState<string | null>(null);
+  const postStreamRefs = useRef(new Set<AiThreadPostStreamHandle>());
+
+  /** Thread 路由切换或 Hook 卸载时停止浏览器读取，不影响服务端 Runtime。 */
+  useEffect(() => {
+    const activePostStreamRefs = postStreamRefs.current;
+
+    return () => {
+      activePostStreamRefs.forEach((postStream) => postStream.abort());
+      activePostStreamRefs.clear();
+    };
+  }, [threadId]);
 
   /** 同步更新命令状态引用和 React 状态，挡住同一事件循环内的重复点击。 */
   const setCommandLifecycleState = useCallback((nextState: AiWorkspaceCommandState) => {
@@ -117,6 +151,73 @@ export function useAiThreadCommands({
     [setLocalQueuedMessages],
   );
 
+  /** 把 POST submission 结果立即投影到消息历史和当前 Run，避免额外 GET 发现新 Run。 */
+  const applyPostStreamSubmission = useCallback(
+    (content: string, result: AiThreadMessageSubmissionResult) => {
+      rememberQueuedSubmission(content, result);
+      const createdAt = new Date().toISOString();
+      const submittedMessage: AiMessageHistoryItem = {
+        id: result.messageId,
+        threadId: result.threadId,
+        runId: null,
+        authorUserId: null,
+        role: 'USER',
+        dispatchState: result.dispatchState,
+        queueSequence: result.queueSequence,
+        submissionMode: result.submissionMode,
+        content,
+        createdAt,
+        run: null,
+        contentVisibility: 'VISIBLE',
+      };
+
+      setThreadState((current) => {
+        const messages = current.messages.some((message) => message.id === result.messageId)
+          ? current.messages
+          : [...current.messages, submittedMessage];
+
+        if (!result.runId) {
+          return { ...current, messages };
+        }
+
+        return {
+          ...current,
+          messages,
+          thread: current.thread ? { ...current.thread, activeRunId: result.runId } : current.thread,
+          activeRun: {
+            runId: result.runId,
+            status: 'RUNNING',
+            createdAt,
+          },
+        };
+      });
+
+      if (!result.runId) {
+        return;
+      }
+
+      const runId = result.runId;
+      setPostStreamRunId(runId);
+      setStreamState('CONNECTED');
+      setStreamError(null);
+      updateRunEventState((current) => {
+        if (current?.runId === runId) {
+          return current;
+        }
+
+        return createAiEventReducerState(runId, { status: 'RUNNING' });
+      });
+    },
+    [
+      rememberQueuedSubmission,
+      setPostStreamRunId,
+      setStreamError,
+      setStreamState,
+      setThreadState,
+      updateRunEventState,
+    ],
+  );
+
   /** 将停止或调整方向的服务端状态先投影到当前 Run，再等待事件或刷新确认。 */
   const applyRunControlResult = useCallback(
     (result: { runId: string; status: AiEventReducerState['status']; nextRunId: string | null }) => {
@@ -166,18 +267,144 @@ export function useAiThreadCommands({
           return true;
         }
 
-        const result = await createAiThreadMessage(requestVersionThreadId, {
-          message: content,
-          idempotencyKey,
-          submissionMode,
-        });
+        let submittedResult: AiThreadMessageSubmissionResult | null = null;
+        let terminalStatusReceived = false;
+        const postStream = startAiThreadMessagePostStream(
+          requestVersionThreadId,
+          {
+            message: content,
+            idempotencyKey,
+            submissionMode,
+          },
+          {
+            onSubmission: (submission) => {
+              submittedResult = submission;
+              if (requestVersion !== requestVersionRef.current || requestVersionThreadId !== threadId) return;
+              applyPostStreamSubmission(content, submission);
+            },
+            onLiveDelta: (liveDelta) => {
+              if (requestVersion !== requestVersionRef.current || requestVersionThreadId !== threadId) return;
+              updateRunEventState((current) => {
+                const previous = current ?? createAiEventReducerState(liveDelta.runId, { status: 'RUNNING' });
+                return applyAiLiveDelta(previous, liveDelta);
+              });
+            },
+            onEvent: (event) => {
+              const runId = submittedResult?.runId;
+              if (
+                requestVersion !== requestVersionRef.current ||
+                requestVersionThreadId !== threadId ||
+                !runId
+              ) {
+                return;
+              }
+
+              updateRunEventState((current) => {
+                const previous = current ?? createAiEventReducerState(runId, { status: 'RUNNING' });
+                return reduceAiEvent(previous, event);
+              });
+            },
+            onStatus: (status) => {
+              if (
+                requestVersion !== requestVersionRef.current ||
+                requestVersionThreadId !== threadId ||
+                status.threadId !== requestVersionThreadId ||
+                status.runId !== submittedResult?.runId
+              ) {
+                return;
+              }
+
+              updateRunEventState((current) => {
+                const previous = current ?? createAiEventReducerState(status.runId, { status: 'RUNNING' });
+                return applyAiRunSnapshot(previous, status);
+              });
+
+              if (!isAiRunTerminal(status.status)) return;
+
+              terminalStatusReceived = true;
+              setPostStreamRunId(null);
+              setStreamState('IDLE');
+              setThreadState((current) => {
+                if (current.activeRun?.runId !== status.runId) return current;
+                return {
+                  ...current,
+                  thread: current.thread ? { ...current.thread, activeRunId: null } : current.thread,
+                  activeRun: null,
+                };
+              });
+              void refreshCurrentThread();
+            },
+          },
+        );
+        postStreamRefs.current.add(postStream);
+
+        /** 将 POST 流结束后的游标写回 reducer，并切换现有 GET 恢复流。 */
+        const handoffToRecovery = (afterSequence: number, message?: string) => {
+          if (requestVersion !== requestVersionRef.current || requestVersionThreadId !== threadId) return;
+
+          updateRunEventState((current) => {
+            if (!current || current.runId !== submittedResult?.runId) return current;
+            return {
+              ...current,
+              lastSequence: Math.max(current.lastSequence, afterSequence),
+            };
+          });
+          setStreamError(message ?? null);
+          setPostStreamRunId(null);
+          setStreamState('RECONNECTING');
+        };
+
+        /** 在 POST 流完成后处理正常 handoff、流错误和恢复分支。 */
+        void postStream.completion
+          .then((completion) => {
+            if (requestVersion !== requestVersionRef.current || requestVersionThreadId !== threadId) return;
+            if (!submittedResult?.runId) return;
+
+            if (completion.streamError) {
+              handoffToRecovery(
+                completion.handoff?.afterSequence ?? runEventStateRef.current?.lastSequence ?? 0,
+                completion.streamError.message,
+              );
+              return;
+            }
+
+            if (!completion.handoff) {
+              handoffToRecovery(runEventStateRef.current?.lastSequence ?? 0);
+              return;
+            }
+
+            if (completion.handoff.reason === 'POST_STREAM_COMPLETED' && terminalStatusReceived) {
+              setStreamState('IDLE');
+              return;
+            }
+
+            handoffToRecovery(completion.handoff.afterSequence);
+          })
+          .catch((error: unknown) => {
+            if (
+              requestVersion !== requestVersionRef.current ||
+              requestVersionThreadId !== threadId ||
+              !submittedResult?.runId
+            ) {
+              return;
+            }
+
+            handoffToRecovery(
+              runEventStateRef.current?.lastSequence ?? 0,
+              toErrorMessage(error, '实时回答连接暂时不可用'),
+            );
+          })
+          .finally(() => {
+            postStreamRefs.current.delete(postStream);
+          });
+
+        const result = await postStream.submission;
         if (requestVersion !== requestVersionRef.current || requestVersionThreadId !== threadId) return false;
 
-        rememberQueuedSubmission(content, result);
+        submittedResult = result;
         if (submissionMode === 'STEER' && result.runId === null) {
           setSteeringRunId(getActiveRunId());
         }
-        if (result.runId) void refreshCurrentThread();
         return true;
       } catch (error: unknown) {
         if (requestVersion !== requestVersionRef.current || requestVersionThreadId !== threadId) return false;
@@ -190,14 +417,20 @@ export function useAiThreadCommands({
     [
       createIdempotencyKey,
       getActiveRunId,
+      applyPostStreamSubmission,
       refreshCurrentThread,
       refreshThreadLists,
-      rememberQueuedSubmission,
       requestVersionRef,
       router,
       setCommandLifecycleState,
+      setPostStreamRunId,
+      setStreamError,
+      setStreamState,
       setSteeringRunId,
+      setThreadState,
       threadId,
+      runEventStateRef,
+      updateRunEventState,
     ],
   );
 

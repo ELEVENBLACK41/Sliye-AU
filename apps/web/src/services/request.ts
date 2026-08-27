@@ -75,6 +75,25 @@ export async function request<T = unknown, TBody = unknown>(
   options?: JsonRequestInit<TBody>,
   fallbackErrorMessage = '请求失败，请稍后再试',
 ): Promise<T> {
+  const response = await requestResponse(url, options);
+
+  const responseBody = await parseJsonBody(response);
+
+  if (!response.ok) {
+    throw createClientError(response.status, responseBody, fallbackErrorMessage);
+  }
+
+  return responseBody as T;
+}
+
+/**
+ * 请求 BFF 并保留原始 Response，供 SSE 等需要持续读取响应体的调用方使用。
+ * 认证刷新与普通 JSON 请求共用同一条 single-flight 链路，但不会提前消费响应正文。
+ */
+export async function requestResponse<TBody = unknown>(
+  url: string,
+  options?: JsonRequestInit<TBody>,
+): Promise<Response> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? '';
   const requestUrl = `${baseUrl}${url}`;
   const headers = new Headers(options?.headers);
@@ -96,13 +115,7 @@ export async function request<T = unknown, TBody = unknown>(
     }
   }
 
-  const responseBody = await parseJsonBody(response);
-
-  if (!response.ok) {
-    throw createClientError(response.status, responseBody, fallbackErrorMessage);
-  }
-
-  return responseBody as T;
+  return response;
 }
 
 /** 解包统一响应，只把 `success: true` 的业务数据返回给页面层。 */

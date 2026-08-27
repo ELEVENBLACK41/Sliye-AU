@@ -1,6 +1,6 @@
 # NextNest AI 第二阶段 2.7 补充计划：GPT 式 POST 直出流与持久化恢复双通道改造
 
-> 文档状态：v0.9，2.7-A 已按 UI-first 修订、B～D 已完成，E～I 待后续执行
+> 文档状态：v0.11，2.7-A 已按 UI-first 修订、B～D 已完成，E 代码已完成待浏览器验收，F～H 待后续执行，I 的灰度/正式回滚部分后置
 > 创建日期：2026-08-26  
 > 归属阶段：AI 第二阶段补充增量 2.7  
 > 上位基线：`AI第二阶段实施计划-2026-08-25.md`  
@@ -105,6 +105,7 @@ AI SDK textStream
 - 不把真实会话整体迁回旧 `/api/chat` Mock；
 - 不直接改用 `useChat()` 默认 Transport；当前领域事件、排队、调整方向、来源失权和 Run 状态不是 AI SDK UI Message Stream Protocol 的直接等价物；
 - 不在本轮引入 Redis、BullMQ、Kafka、NATS 或新的外部基础设施；当前第二阶段仍以常驻、单实例 Node Runtime 为边界；
+- 不为当前个人项目引入灰度发布、服务端 feature flag 或正式回滚流程；现阶段使用请求头分流和旧 JSON 兼容路径即可，后续有真实线上用户和部署复杂度时再单独评估；
 - 不修改 Prisma 数据模型或历史 migration，除非实施时发现无法通过既有 JSON 事件字段表达必要的稳定标识，并需另行向老大确认；
 - 不顺带解决侧栏列表、RSC 导航和所有页面请求数量问题；只处理发送、实时展示和恢复链路中与本改造直接相关的重复请求；
 - 不通过前端定时拆字制造“打字机动画”来掩盖服务端延迟。
@@ -277,7 +278,7 @@ AI SDK textStream
 
 主要工作：
 
-- `POST /api/ai/threads/:threadId/messages` 根据 Accept 或受控 feature flag 返回 SSE 格式的流式响应；
+- `POST /api/ai/threads/:threadId/messages` 当前根据 `Accept: text/event-stream` 返回 SSE 格式的流式响应，未来如出现真实部署需求再评估是否增加受控 feature flag；
 - 先完成 NestJS 幂等提交，再返回 `submission`；
 - 有新 Run 时把 live sink 连接到当前 POST 响应，优先消费 `live-delta`；进入队列时返回提交结果后关闭；
 - Route Handler 注册可等待的 Runtime Promise，保证客户端断开后执行仍由当前单实例 Node 进程托管；
@@ -292,6 +293,8 @@ AI SDK textStream
 实现记录：`POST /api/ai/threads/:threadId/messages` 现在在调用方声明 `Accept: text/event-stream` 时，先复用既有 NestJS 幂等提交并发送 `submission`，再把当前 Run 的 `live-delta`、持久化 `ai-event`、终态 `run-status` 和 `stream-handoff` 通过同一条 SSE 响应返回；不带该 Accept 时保留原 JSON + `after()` 兼容路径。新增 POST 响应桥和流生命周期测试，客户端断开只关闭当前 sink，已注册的 Runtime Promise 仍由 `after()` 等待；直出流只消费当前 Run，后继排队 Run 交回无订阅者后台链，避免一条 POST 串入下一条回答。未修改 NestJS、Prisma、GET SSE、新会话路由或 UI。
 
 ### 2.7-E：浏览器 POST Stream Transport
+
+状态：🧪 代码完成，待真实已有 Thread 浏览器验收。
 
 目标：让现有工作区在已有 Thread 中消费 POST 直出流。
 
@@ -308,6 +311,8 @@ AI SDK textStream
 验证：parser/reducer 单测、已有 Thread 发送人工验收、长 Markdown/代码块流式渲染检查。
 
 完成标志：已有 Thread 主路径不再出现独立 GET stream，除非发生刷新、断线或主动 handoff。
+
+实现记录：新增浏览器侧 POST SSE Transport，复用现有 BFF 请求认证刷新链路和 2.7-A 编解码器；提交 Promise 在 `submission` 到达后完成，继续在后台消费同一条 POST 流。`live-delta` 通过新增的 reducer 入口立即更新现有消息适配，持久化文本事件使用 `liveDeltaId` 去重；正常终态不额外建立 GET SSE，流错误、异常结束和恢复 handoff 会释放 POST 主流门禁并复用既有 `runId + afterSequence` GET SSE。已有 Thread 的 POST 期间通过本地投影立即显示用户消息和活跃 Run，不再依赖刷新详情/消息来发现新 Run；未修改新会话首发、聊天 UI 结构、灰度开关或数据库。
 
 ### 2.7-F：新会话首发与路由保持
 
@@ -357,22 +362,23 @@ AI SDK textStream
 
 完成标志：所有自动化与人工门禁通过，且实测结果优于改造前基线。
 
-### 2.7-I：灰度启用、清理与文档同步
+### 2.7-I：部署开关、灰度与清理（后置）
 
-目标：提供可回滚上线方式，在验证完成前不删除稳定旧链路。
+状态：⏸️ 后置，不阻塞当前个人项目开发。
+
+目标：未来出现真实线上用户、多实例部署或需要降低发布风险时，再补齐部署开关、灰度观察和正式回滚；当前不把它作为 2.7 的交付门槛。
 
 主要工作：
 
-- 增加服务端环境开关，例如 `AI_DIRECT_STREAM_ENABLED`，默认关闭或仅开发环境开启；
-- 同步 `.env.example` 和部署说明，明确修改后需要重启 Web Runtime；
-- 灰度期间保留 JSON 命令 + GET SSE 旧路径；
-- 观察稳定后再删除被新 Transport 完全替代的前端重复刷新代码；
+- 当前不增加 `AI_DIRECT_STREAM_ENABLED` 或同类环境变量；通过是否发送 `Accept: text/event-stream` 选择直出路径；
+- 保留 JSON 命令 + GET SSE 旧路径作为低成本兼容和手动回退方式，不把它包装成灰度系统；
 - 不删除 GET SSE 恢复接口；
-- 更新仓库二阶段实施计划和本 Obsidian 文档的最终实施记录。
+- 未来确有部署需求时，再同步 `.env.example`、部署说明、观测指标和回滚门禁；
+- 当前仅更新仓库二阶段实施计划和本 Obsidian 文档的实施状态。
 
-验证：开关关闭时旧路径无回归；开关开启时直出主路径生效；切换开关不需要数据库回滚。
+验证：当前不执行灰度开关验证；仅验证 Accept 分流、JSON 兼容路径和 GET SSE 恢复链路不受影响。未来补开关时再验证切换无需数据库回滚。
 
-完成标志：默认路径、回滚路径、文档和部署配置一致。
+完成标志：当前阶段明确不引入灰度/正式回滚系统，且直出与兼容路径边界已记录；未来需要时再独立启动本步骤。
 
 ---
 
@@ -392,7 +398,7 @@ AI SDK textStream
 | Nest controller/DTO | `apps/server/src/modules/ai/controllers/*`、`dto/*` | 返回事务提交后的事件回执 |
 | Nest services | `ai-event.service.ts`、工具调用和 Run 控制相关 service | 保持事务与 fencing，暴露本次提交事件 |
 | 测试 | contracts/Web Node/Server Jest/PostgreSQL/browser | 协议、顺序、断线、幂等、权限、队列和性能门禁 |
-| 配置文档 | `.env.example`、AI 二阶段计划 | feature flag、部署和回滚说明 |
+| 配置文档 | AI 二阶段计划 | 当前记录 Accept 分流与 JSON 兼容路径；feature flag、部署和正式回滚后置 |
 
 预计不需要 Prisma migration；如果实施过程中出现数据库结构需求，必须停止当前步骤并单独向老大确认。
 
@@ -471,18 +477,17 @@ AI SDK textStream
 
 ### 10.7 旧路径与新路径状态漂移
 
-应对：live delta 与持久化 `AiEvent` 使用同一 `liveDeltaId` 关联；前端先渲染 live delta，收到确认事件后只确认不重复追加，恢复流继续按 `runId + sequence` 补拉。feature flag 灰度期间执行双路径一致性测试。
+应对：live delta 与持久化 `AiEvent` 使用同一 `liveDeltaId` 关联；前端先渲染 live delta，收到确认事件后只确认不重复追加，恢复流继续按 `runId + sequence` 补拉。当前通过 `Accept` 请求头选择直出，未引入 feature flag；未来需要灰度时再补双路径一致性测试。
 
 ---
 
-## 11. 回滚策略
+## 11. 兼容与后置回滚策略
 
-- 使用 `AI_DIRECT_STREAM_ENABLED` 控制浏览器是否启用 POST 直出流；
-- 关闭开关后继续走当前 JSON 命令 + GET SSE，不需要数据库回滚；
+- 当前不设置服务端灰度开关；客户端停止发送 `Accept: text/event-stream` 即继续走 JSON 命令 + GET SSE，不需要数据库回滚；
 - 改造期间不删除现有恢复接口、事件表或 reducer；
 - 每个步骤保持可独立回退，不跨步骤批量删除旧实现；
-- 如发现消息缺失、重复、权限旁路、Run 被重复启动或浏览器断开导致执行取消，立即关闭开关并停止后续步骤；
-- 只有完整验收后才清理被证明无用的重复刷新与前端旧 Transport 代码。
+- 如发现消息缺失、重复、权限旁路、Run 被重复启动或浏览器断开导致执行取消，暂停继续启用直出请求并回到 JSON + GET SSE 路径；
+- 只有完整验收后才清理被证明无用的重复刷新与前端旧 Transport 代码；正式灰度和自动回滚以后续部署专项为准。
 
 ---
 
@@ -492,8 +497,8 @@ AI SDK textStream
 - [x] D2.7-02：同意保留现有领域事件协议，不直接迁移到 `useChat()` 默认协议；
 - [x] D2.7-03：同意采用 UI-first：模型 delta 先通过 POST 直出，`AiEvent` 异步持久化并作为恢复确认来源；
 - [x] D2.7-04：同意第二阶段继续保持单实例 Node Runtime，不在本轮引入 Redis 或消息队列；
-- [x] D2.7-05：同意增加 feature flag，并在完整验收前保留旧 JSON + GET SSE 路径；
+- [x] D2.7-05：确认当前个人项目不增加 feature flag 和正式灰度/回滚流程；保留旧 JSON + GET SSE 作为低成本兼容和手动回退路径，未来有线上部署需求时再单独评估；
 - [x] D2.7-06：同意按 2.7-A～I 每轮只实施一个最小步骤，每步完成后停下等待检查；
 - [x] D2.7-07：同意使用 `liveDeltaId + liveSequence` 关联即时增量与持久化事件，恢复按持久化 `sequence` 补拉并去重。
 
-2.7-D 已完成，下一轮从 **2.7-E：浏览器 POST Stream Transport** 开始；不自动进入后续步骤。
+2.7-E 代码已完成，待在真实已有 Thread 上完成发送、长 Markdown/代码块、流异常 handoff 和最终历史一致性的浏览器验收；验收通过后再进入 **2.7-F：新会话首发与路由保持**，不自动进入后续步骤。

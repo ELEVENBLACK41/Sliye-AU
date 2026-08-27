@@ -3,6 +3,7 @@
  *
  * 2.6-B 在同一入口补充已持久化 Run 的领域事件归约和 SSE 生命周期；
  * 2.6-C/D 的命令与元数据操作分别由同目录专用 Hook 维护。
+ * 2.7-E 在已有 Thread 上补充 POST SSE 主流，并在 handoff 后复用 GET SSE 恢复。
  * 按计划这里仍是单一 Thread 状态入口：路由版本、历史消息和 SSE reducer
  * 共享同一个门禁，专用 Hook 通过该入口读写当前 Thread。
  */
@@ -85,6 +86,7 @@ export function useAiThreadWorkspace() {
   const runEventStateRef = useRef<AiEventReducerState | null>(null);
   const [streamState, setStreamState] = useState<AiWorkspaceStreamState>('IDLE');
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [postStreamRunId, setPostStreamRunId] = useState<string | null>(null);
   const [localQueuedMessages, setLocalQueuedMessages] = useState<AiWorkspaceQueuedMessage[]>([]);
   const [steeringRunId, setSteeringRunId] = useState<string | null>(null);
 
@@ -188,6 +190,9 @@ export function useAiThreadWorkspace() {
     refreshCurrentThread,
     refreshThreadLists,
     setLocalQueuedMessages,
+    setPostStreamRunId,
+    setStreamError,
+    setStreamState,
     setSteeringRunId,
   });
 
@@ -239,6 +244,7 @@ export function useAiThreadWorkspace() {
       setRunEventState(null);
       setStreamState('IDLE');
       setStreamError(null);
+      setPostStreamRunId(null);
       setLocalQueuedMessages([]);
       setSteeringRunId(null);
     });
@@ -299,7 +305,7 @@ export function useAiThreadWorkspace() {
   useEffect(() => {
     const activeRun = threadState.activeRun;
     const loadedThreadId = threadState.thread?.id;
-    if (!threadId || !activeRun || loadedThreadId !== threadId) {
+    if (!threadId || !activeRun || loadedThreadId !== threadId || postStreamRunId === activeRun.runId) {
       return;
     }
 
@@ -414,7 +420,7 @@ export function useAiThreadWorkspace() {
       subscription?.close();
       subscription = null;
     };
-  }, [refreshCurrentThread, threadId, threadState.activeRun, threadState.thread?.id, updateRunEventState]);
+  }, [postStreamRunId, refreshCurrentThread, threadId, threadState.activeRun, threadState.thread?.id, updateRunEventState]);
 
   return {
     threadId,

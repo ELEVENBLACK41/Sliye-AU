@@ -8,6 +8,7 @@
 import {
   AI_RUN_STATUSES,
   type AiEvent,
+  type AiPostStreamLiveDeltaData,
   type AiRunCancellationReason,
   type AiRunFailureReason,
   type AiRunStatus,
@@ -53,6 +54,8 @@ export type AiEventReducerState = {
   assistantMessageId: string | null;
   /** 按事件顺序拼接出的助手正文。 */
   assistantText: string;
+  /** 已经即时展示或由持久化事件确认过的 live delta 标识。 */
+  appliedLiveDeltaIds: ReadonlySet<string>;
   /** 当前 Run 的工具调用展示快照。 */
   toolCalls: readonly AiEventToolCall[];
   /** 等待前序事件到达的乱序事件。 */
@@ -77,6 +80,7 @@ export function createAiEventReducerState(
     failureCode: null,
     assistantMessageId: null,
     assistantText: '',
+    appliedLiveDeltaIds: new Set(),
     toolCalls: [],
     pendingEvents: new Map(),
     diagnostics: [],
@@ -140,6 +144,39 @@ export function applyAiRunSnapshot(
     cancellationReason: snapshot.cancellationReason,
     failureReason: snapshot.failureReason,
     failureCode: snapshot.failureCode,
+  };
+}
+
+/**
+ * 立即归约 POST 直出流的模型增量。
+ *
+ * live delta 不推进持久化事件序号；它只更新同一份助手正文状态，并记录稳定标识，
+ * 让后续 AiEvent 确认只完成去重而不会再次追加正文。
+ */
+export function applyAiLiveDelta(
+  state: AiEventReducerState,
+  liveDelta: AiPostStreamLiveDeltaData,
+): AiEventReducerState {
+  if (
+    liveDelta.runId !== state.runId ||
+    liveDelta.delta.length === 0 ||
+    state.appliedLiveDeltaIds.has(liveDelta.liveDeltaId)
+  ) {
+    return state;
+  }
+
+  if (state.assistantMessageId && state.assistantMessageId !== liveDelta.messageId) {
+    return appendDiagnostic(state, '同一 Run 出现多个助手消息，已忽略后续实时文本');
+  }
+
+  const appliedLiveDeltaIds = new Set(state.appliedLiveDeltaIds);
+  appliedLiveDeltaIds.add(liveDelta.liveDeltaId);
+
+  return {
+    ...state,
+    assistantMessageId: state.assistantMessageId ?? liveDelta.messageId,
+    assistantText: state.assistantText + liveDelta.delta,
+    appliedLiveDeltaIds,
   };
 }
 
@@ -224,11 +261,25 @@ function applyAssistantTextDeltaEvent(state: AiEventReducerState, data: unknown)
     return appendDiagnostic(state, '同一 Run 出现多个助手消息，已忽略后续文本');
   }
 
+  const liveDeltaIds = toLiveDeltaIds(data.liveDeltaIds);
+  const appliedLiveDeltaIds = new Set(state.appliedLiveDeltaIds);
+  liveDeltaIds.forEach((liveDeltaId) => appliedLiveDeltaIds.add(liveDeltaId));
+
+  if (liveDeltaIds.length > 0 && liveDeltaIds.every((liveDeltaId) => state.appliedLiveDeltaIds.has(liveDeltaId))) {
+    return { ...state, appliedLiveDeltaIds };
+  }
+
   return {
     ...state,
     assistantMessageId: state.assistantMessageId ?? data.messageId,
     assistantText: state.assistantText + data.delta,
+    appliedLiveDeltaIds,
   };
+}
+
+/** 从持久化文本事件中读取可用于去重的 live delta 标识。 */
+function toLiveDeltaIds(value: unknown): string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : [];
 }
 
 /** 应用工具调用开始事件，重复的工具标识不会覆盖已经结束的结果。 */
