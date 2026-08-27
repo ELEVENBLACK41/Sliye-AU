@@ -6,11 +6,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type {
-  AiEvent,
-  AiPostStreamRunStatusData,
-  AiPostStreamSubmissionData,
-} from '@workspace/contracts/ai';
+import type { AiEvent, AiPostStreamRunStatusData, AiPostStreamSubmissionData } from '@workspace/contracts/ai';
 
 import { createAiPostStreamDecoder } from '../utils/ai-post-stream-codec.ts';
 import { createAiPostStreamResponse } from './ai-post-stream-response.server.ts';
@@ -47,11 +43,12 @@ function createEvent(): AiEvent {
   };
 }
 
-/** 创建一个已完成 Run 的状态快照。 */
-function createCompletedStatus(): AiPostStreamRunStatusData {
+/** 创建一个已完成 Run 的状态快照，可选携带事务领取的后继 Run。 */
+function createCompletedStatus(nextRunId: string | null = null): AiPostStreamRunStatusData {
   return {
     runId: 'run-1',
     threadId: 'thread-1',
+    nextRunId,
     status: 'COMPLETED',
     cancellationReason: null,
     failureReason: null,
@@ -99,7 +96,7 @@ test('已有 Thread 的 POST 流按 submission、live delta、确认事件、终
         delta: '你好',
       });
       liveSink.publishEvent(createEvent());
-      liveSink.publishStatus(createCompletedStatus());
+      liveSink.publishStatus(createCompletedStatus('run-2'));
     },
     registerRuntime: (callback) => {
       registeredRuntime = callback();
@@ -115,6 +112,7 @@ test('已有 Thread 的 POST 流按 submission、live delta、确认事件、终
     frames.map((frame) => (frame as { event: string }).event),
     ['submission', 'live-delta', 'ai-event', 'run-status', 'stream-handoff'],
   );
+  assert.equal((frames[3] as { data: AiPostStreamRunStatusData }).data.nextRunId, 'run-2');
   assert.deepEqual((frames[4] as { data: unknown }).data, {
     runId: 'run-1',
     threadId: 'thread-1',
@@ -199,7 +197,10 @@ test('Runtime Promise 异常在响应头已发送后转换为 stream-error', asy
 
   const frames = await readFrames(response);
 
-  assert.deepEqual(frames.map((frame) => (frame as { event: string }).event), ['submission', 'stream-error']);
+  assert.deepEqual(
+    frames.map((frame) => (frame as { event: string }).event),
+    ['submission', 'stream-error'],
+  );
   assert.deepEqual((frames[1] as { data: unknown }).data, {
     code: 'COMMON.INTERNAL_ERROR',
     message: 'AI 实时回答暂时不可用，请稍后重试',

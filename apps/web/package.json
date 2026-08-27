@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:ai:model": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/features/ai/runtime/*.test.mts",
-    "test:ai:protocol": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/features/ai/utils/ai-post-stream-codec.test.mts",
+    "test:ai:protocol": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/features/ai/utils/ai-post-stream-codec.test.mts src/features/ai/utils/ai-post-stream-routing.test.mts",
     "test:ai:gateway:smoke": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local scripts/ai-gateway-smoke.mts"
   },
   "dependencies": {

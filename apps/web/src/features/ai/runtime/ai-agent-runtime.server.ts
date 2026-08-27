@@ -354,6 +354,7 @@ function publishAiRuntimeLiveStopResult(
   const status: AiPostStreamRunStatusData = {
     runId: result.runId,
     threadId,
+    nextRunId: result.nextRunId,
     status: result.status,
     cancellationReason,
     failureReason,

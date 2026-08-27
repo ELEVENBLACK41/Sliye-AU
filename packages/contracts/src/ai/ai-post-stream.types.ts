@@ -87,6 +87,8 @@ export type AiPostStreamRunStatusData = {
   runId: string;
   /** 当前 Run 所属 Thread 标识。 */
   threadId: string;
+  /** 当前 Run 收敛后由服务端事务领取的后继 Run；没有排队消息时为空。 */
+  nextRunId?: string | null;
   /** 服务端确认的 Run 状态。 */
   status: AiRunStatus;
   /** 取消路径的稳定原因；非取消路径为 `null`。 */

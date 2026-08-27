@@ -72,6 +72,8 @@ export type AiPostStreamCoordinatorEvent =
       kind: 'STREAM_ERROR';
       /** 已知的 Thread 标识；提交前失败时为空。 */
       threadId: string | null;
+      /** 已知的 Run 标识；提交前失败时为空。 */
+      runId: string | null;
       /** 错误负载。 */
       data: AiPostStreamErrorData;
     }
@@ -98,6 +100,8 @@ export type AiPostStreamCoordinatorEvent =
       message: string;
       /** 已收到的提交数据；提交前失败时为空。 */
       submission: AiPostStreamSubmissionData | null;
+      /** 已知的 Run 标识；提交前失败时为空。 */
+      runId: string | null;
       /** 原始错误，调用方决定展示或恢复策略。 */
       error: unknown;
     };
@@ -183,7 +187,13 @@ export function AiPostStreamProvider({ children }: { children: ReactNode }) {
         },
         onStatus: (status) => emit(record, { kind: 'RUN_STATUS', data: status }),
         onHandoff: (handoff) => emit(record, { kind: 'HANDOFF', data: handoff }),
-        onStreamError: (error) => emit(record, { kind: 'STREAM_ERROR', threadId: record.threadId, data: error }),
+        onStreamError: (error) =>
+          emit(record, {
+            kind: 'STREAM_ERROR',
+            threadId: record.threadId,
+            runId: record.submission?.runId ?? null,
+            data: error,
+          }),
       };
 
       const handle =
@@ -212,6 +222,7 @@ export function AiPostStreamProvider({ children }: { children: ReactNode }) {
             threadId: record.threadId,
             message: record.message,
             submission: record.submission,
+            runId: record.submission?.runId ?? null,
             error,
           });
         })
@@ -245,9 +256,7 @@ export function AiPostStreamProvider({ children }: { children: ReactNode }) {
         });
       });
       entry.ready = true;
-      entry.pendingEvents
-        .filter((event) => !replayedEvents.has(event))
-        .forEach((event) => entry.listener(event));
+      entry.pendingEvents.filter((event) => !replayedEvents.has(event)).forEach((event) => entry.listener(event));
       entry.pendingEvents.length = 0;
     });
 

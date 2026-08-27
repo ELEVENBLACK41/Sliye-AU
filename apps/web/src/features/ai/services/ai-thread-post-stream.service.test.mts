@@ -6,16 +6,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type {
-  AiPostStreamFrame,
-  AiPostStreamErrorData,
-  AiPostStreamSubmissionData,
-} from '@workspace/contracts/ai';
+import type { AiPostStreamFrame, AiPostStreamErrorData, AiPostStreamSubmissionData } from '@workspace/contracts/ai';
 
-import {
-  startAiThreadCreationPostStream,
-  startAiThreadMessagePostStream,
-} from './ai-thread-post-stream.service.ts';
+import { startAiThreadCreationPostStream, startAiThreadMessagePostStream } from './ai-thread-post-stream.service.ts';
 import { encodeAiPostStreamFrame } from '../utils/ai-post-stream-codec.ts';
 
 /** 创建一个立即执行 Run 的固定提交回执。 */
@@ -59,6 +52,7 @@ function createStatusFrame(): AiPostStreamFrame {
     data: {
       runId: 'run-1',
       threadId: 'thread-1',
+      nextRunId: 'run-2',
       status: 'COMPLETED',
       cancellationReason: null,
       failureReason: null,
@@ -82,6 +76,7 @@ test('Transport 发送 JSON POST 并按顺序分发直出帧', async () => {
   let requestInit: RequestInit | undefined;
   const liveDeltas: string[] = [];
   const statuses: string[] = [];
+  const nextRunIds: Array<string | null | undefined> = [];
   const events: unknown[] = [];
 
   globalThis.fetch = async (input, init) => {
@@ -121,7 +116,10 @@ test('Transport 发送 JSON POST 并按顺序分发直出帧', async () => {
       {
         onLiveDelta: (liveDelta) => liveDeltas.push(liveDelta.delta),
         onEvent: (event) => events.push(event),
-        onStatus: (status) => statuses.push(status.status),
+        onStatus: (status) => {
+          statuses.push(status.status);
+          nextRunIds.push(status.nextRunId);
+        },
       },
     );
     const submission = await handle.submission;
@@ -135,6 +133,7 @@ test('Transport 发送 JSON POST 并按顺序分发直出帧', async () => {
     assert.deepEqual(liveDeltas, ['你好']);
     assert.equal(events.length, 1);
     assert.deepEqual(statuses, ['COMPLETED']);
+    assert.deepEqual(nextRunIds, ['run-2']);
     assert.equal(completion.handoff?.afterSequence, 1);
     assert.equal(completion.streamError, null);
   } finally {
@@ -158,14 +157,18 @@ test('Transport 将响应头后的 stream-error 交给调用方，不伪造 Run 
     ]);
 
   try {
-    const handle = startAiThreadMessagePostStream('thread-1', {
-      message: '你好',
-      idempotencyKey: 'request-2',
-    }, {
-      onStreamError: (error) => {
-        receivedError = error;
+    const handle = startAiThreadMessagePostStream(
+      'thread-1',
+      {
+        message: '你好',
+        idempotencyKey: 'request-2',
       },
-    });
+      {
+        onStreamError: (error) => {
+          receivedError = error;
+        },
+      },
+    );
     const completion = await handle.completion;
 
     assert.deepEqual(receivedError, streamError);

@@ -16,18 +16,11 @@ import type {
   CreateAiThreadRequest,
   CreateAiThreadMessageRequest,
 } from '@workspace/contracts/ai';
-import {
-  AI_MESSAGE_DISPATCH_STATES,
-  AI_MESSAGE_SUBMISSION_MODES,
-  AI_RUN_STATUSES,
-} from '@workspace/contracts/ai';
+import { AI_MESSAGE_DISPATCH_STATES, AI_MESSAGE_SUBMISSION_MODES, AI_RUN_STATUSES } from '@workspace/contracts/ai';
 import type { ApiErrorResponse } from '@workspace/contracts/common';
 
 import { ApiClientError, requestResponse } from '../../../services/request.ts';
-import {
-  AiPostStreamProtocolError,
-  createAiPostStreamDecoder,
-} from '../utils/ai-post-stream-codec.ts';
+import { AiPostStreamProtocolError, createAiPostStreamDecoder } from '../utils/ai-post-stream-codec.ts';
 
 /** POST SSE Transport 的事件回调。 */
 export type AiThreadPostStreamHandlers = {
@@ -97,17 +90,14 @@ function startAiPostStream(
 
   /** 消费 POST SSE 响应并汇总恢复提示。 */
   async function consumeStream(): Promise<AiThreadPostStreamCompletion> {
-    const response = await requestResponse(
-      url,
-      {
-        method: 'POST',
-        headers: {
-          Accept: 'text/event-stream',
-        },
-        body,
-        signal: abortController.signal,
+    const response = await requestResponse(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'text/event-stream',
       },
-    );
+      body,
+      signal: abortController.signal,
+    });
 
     if (!response.ok) {
       throw await createPostStreamResponseError(response, 'AI 消息发送失败，请稍后重试');
@@ -322,6 +312,7 @@ function isAiPostStreamRunStatusData(value: unknown): value is AiPostStreamRunSt
   return (
     typeof value.runId === 'string' &&
     typeof value.threadId === 'string' &&
+    (value.nextRunId === undefined || value.nextRunId === null || typeof value.nextRunId === 'string') &&
     isOneOf(value.status, AI_RUN_STATUSES) &&
     isNullableString(value.cancellationReason) &&
     isNullableString(value.failureReason) &&
