@@ -8,6 +8,7 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
+import type { AiRuntimeToolInvocationResult } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
@@ -38,25 +39,7 @@ export type AiToolInvocationRequest = {
 };
 
 /** 一次工具调用编排后的结果；失败同样是可审计的正常返回，不向上抛出。 */
-export type AiToolInvocationResult =
-  | {
-      /** 工具成功返回窄输出。 */
-      status: 'SUCCEEDED';
-      /** 已持久化的工具调用标识。 */
-      toolCallId: string;
-      /** 允许进入模型上下文的窄输出。 */
-      output: unknown;
-    }
-  | {
-      /** 工具未注册、被串联规则拒绝、超时或执行失败。 */
-      status: 'FAILED';
-      /** 已持久化的工具调用标识。 */
-      toolCallId: string;
-      /** 可供调用方稳定分支判断的业务错误码。 */
-      failureCode: ApiErrorCode;
-      /** 可以安全交回模型、指导其下一步行为的中文说明。 */
-      failureReason: string;
-    };
+export type AiToolInvocationResult = AiRuntimeToolInvocationResult;
 
 @Injectable()
 export class AiToolInvocationService {
@@ -97,6 +80,7 @@ export class AiToolInvocationService {
         status: 'SUCCEEDED',
         toolCallId: started.toolCallId,
         output: started.output,
+        events: [],
       };
     }
     if (started.state === 'REPLAY_FAILED') {
@@ -105,6 +89,7 @@ export class AiToolInvocationService {
         toolCallId: started.toolCallId,
         failureCode: started.failureCode,
         failureReason: started.failureReason,
+        events: [],
       };
     }
     if (started.state === 'REPLAY_UNAVAILABLE') {
@@ -114,6 +99,7 @@ export class AiToolInvocationService {
         failureCode: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
         failureReason:
           '上一次调用的结果过大未完整保留，请重新发起一次该工具调用。',
+        events: [],
       };
     }
     if (started.state === 'IN_PROGRESS') {
@@ -122,6 +108,7 @@ export class AiToolInvocationService {
         toolCallId: started.toolCallId,
         failureCode: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
         failureReason: '相同工具调用仍在处理中，请勿重复执行',
+        events: [],
       };
     }
     const { toolCallId } = started;
@@ -138,7 +125,7 @@ export class AiToolInvocationService {
         executionContext,
         request.input,
       );
-      await this.settle(executionContext, {
+      const settledEvent = await this.settle(executionContext, {
         toolCallId,
         status: 'SUCCEEDED',
         outputSummary: toAiToolOutputSummary(result.output),
@@ -148,10 +135,15 @@ export class AiToolInvocationService {
         durationMs: Date.now() - startedAt,
       });
 
-      return { status: 'SUCCEEDED', toolCallId, output: result.output };
+      return {
+        status: 'SUCCEEDED',
+        toolCallId,
+        output: result.output,
+        events: [started.event, ...(settledEvent ? [settledEvent] : [])],
+      };
     } catch (error) {
       const failure = this.toFailure(error);
-      await this.settle(executionContext, {
+      const settledEvent = await this.settle(executionContext, {
         toolCallId,
         status: 'FAILED',
         outputSummary: null,
@@ -161,7 +153,12 @@ export class AiToolInvocationService {
         durationMs: Date.now() - startedAt,
       });
 
-      return { status: 'FAILED', toolCallId, ...failure };
+      return {
+        status: 'FAILED',
+        toolCallId,
+        ...failure,
+        events: [started.event, ...(settledEvent ? [settledEvent] : [])],
+      };
     }
   }
 
@@ -283,8 +280,8 @@ export class AiToolInvocationService {
       sources: readonly AiToolSourceRef[];
       durationMs: number;
     },
-  ): Promise<void> {
-    await this.toolCallService.settleToolCall({
+  ): Promise<import('@workspace/contracts/ai').AiEvent | null> {
+    return this.toolCallService.settleToolCall({
       runId: executionContext.runId,
       executionLeaseId: executionContext.executionLeaseId,
       ...input,

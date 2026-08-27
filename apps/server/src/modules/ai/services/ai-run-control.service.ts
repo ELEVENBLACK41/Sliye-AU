@@ -4,6 +4,7 @@
  */
 
 import { HttpStatus, Injectable } from '@nestjs/common';
+import type { AiEvent, AiRuntimeRunStopResult } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
@@ -62,7 +63,9 @@ export class AiRunControlService {
   ) {}
 
   /** 仅允许当前有效执行器将 RUNNING Run 收敛为完成或失败终态。 */
-  async completeRun(input: CompleteAiRunInput): Promise<AiRunStopResult> {
+  async completeRun(
+    input: CompleteAiRunInput,
+  ): Promise<AiRuntimeRunStopResult> {
     return this.prisma.$transaction(async (transaction) => {
       const run = await this.findOwnedRun(
         transaction,
@@ -144,11 +147,13 @@ export class AiRunControlService {
         throw this.createRunNotFoundException();
       }
 
-      return this.requestCancellationInLockedThread(
+      const result = await this.requestCancellationInLockedThread(
         transaction,
         run,
         input.cancellationReason,
       );
+
+      return this.toPublicRunStopResult(result);
     });
   }
 
@@ -156,7 +161,7 @@ export class AiRunControlService {
   async confirmCancellation(
     ownerUserId: number,
     runId: string,
-  ): Promise<AiRunStopResult> {
+  ): Promise<AiRuntimeRunStopResult> {
     return this.prisma.$transaction(async (transaction) => {
       const run = await this.findOwnedRun(transaction, runId, ownerUserId);
       const thread = await this.queueService.lockThread(
@@ -168,7 +173,7 @@ export class AiRunControlService {
         throw this.createRunNotFoundException();
       }
       if (run.status === AiRunStatus.CANCELLED) {
-        return { runId: run.id, status: 'CANCELLED', nextRunId: null };
+        return this.toRuntimeRunStopResult(run.id, 'CANCELLED', null, []);
       }
       if (run.status !== AiRunStatus.CANCELLATION_REQUESTED) {
         throw this.createRunInvalidTransitionException();
@@ -222,11 +227,13 @@ export class AiRunControlService {
       return null;
     }
 
-    return this.requestCancellationInLockedThread(
+    const result = await this.requestCancellationInLockedThread(
       transaction,
       run,
       input.cancellationReason,
     );
+
+    return this.toPublicRunStopResult(result);
   }
 
   /**
@@ -384,22 +391,23 @@ export class AiRunControlService {
       cancellationReason: string | null;
     },
     cancellationReason: 'USER_REQUESTED' | 'USER_REDIRECTED',
-  ): Promise<AiRunStopResult> {
+  ): Promise<AiRuntimeRunStopResult> {
     if (run.status === AiRunStatus.CANCELLED) {
-      return { runId: run.id, status: 'CANCELLED', nextRunId: null };
+      return this.toRuntimeRunStopResult(run.id, 'CANCELLED', null, []);
     }
     if (
       run.status === AiRunStatus.COMPLETED ||
       run.status === AiRunStatus.FAILED
     ) {
-      return { runId: run.id, status: run.status, nextRunId: null };
+      return this.toRuntimeRunStopResult(run.id, run.status, null, []);
     }
     if (run.status === AiRunStatus.CANCELLATION_REQUESTED) {
-      return {
-        runId: run.id,
-        status: 'CANCELLATION_REQUESTED',
-        nextRunId: null,
-      };
+      return this.toRuntimeRunStopResult(
+        run.id,
+        'CANCELLATION_REQUESTED',
+        null,
+        [],
+      );
     }
     if (run.status === AiRunStatus.QUEUED) {
       assertAiRunStatusTransition(AiRunStatus.QUEUED, AiRunStatus.CANCELLED);
@@ -440,19 +448,20 @@ export class AiRunControlService {
     if (requested.count !== 1) {
       throw this.createRunInvalidTransitionException();
     }
-    await this.eventService.appendRunStatusChangedInTransaction(transaction, {
-      runId: run.id,
-      fromStatus: run.status,
-      toStatus: AiRunStatus.CANCELLATION_REQUESTED,
-      cancellationReason,
-      failureReason: null,
-    });
+    const event = await this.eventService.appendRunStatusChangedInTransaction(
+      transaction,
+      {
+        runId: run.id,
+        fromStatus: run.status,
+        toStatus: AiRunStatus.CANCELLATION_REQUESTED,
+        cancellationReason,
+        failureReason: null,
+      },
+    );
 
-    return {
-      runId: run.id,
-      status: 'CANCELLATION_REQUESTED',
-      nextRunId: null,
-    };
+    return this.toRuntimeRunStopResult(run.id, 'CANCELLATION_REQUESTED', null, [
+      event,
+    ]);
   }
 
   /** 清除当前 Thread 活跃指针、领取唯一队首并记录已发生的终态变化。 */
@@ -469,8 +478,8 @@ export class AiRunControlService {
       cancellationReason: string | null;
       failureReason: string | null;
     },
-  ): Promise<AiRunStopResult> {
-    await this.toolCallService.failRunningToolCallsInTransaction(
+  ): Promise<AiRuntimeRunStopResult> {
+    const events = await this.toolCallService.failRunningToolCallsInTransaction(
       transaction,
       input.runId,
       new Date(),
@@ -483,18 +492,47 @@ export class AiRunControlService {
       transaction,
       input.threadId,
     );
-    await this.eventService.appendRunStatusChangedInTransaction(transaction, {
-      runId: input.runId,
-      fromStatus: input.fromStatus,
-      toStatus: input.toStatus,
-      cancellationReason: input.cancellationReason,
-      failureReason: input.failureReason,
-    });
+    const statusEvent =
+      await this.eventService.appendRunStatusChangedInTransaction(transaction, {
+        runId: input.runId,
+        fromStatus: input.fromStatus,
+        toStatus: input.toStatus,
+        cancellationReason: input.cancellationReason,
+        failureReason: input.failureReason,
+      });
 
+    return this.toRuntimeRunStopResult(
+      input.runId,
+      input.toStatus,
+      nextRun?.runId ?? null,
+      [...events, statusEvent],
+    );
+  }
+
+  /** 去掉只允许内部 Runtime 消费的事件回执，保持浏览器停止接口的最小响应。 */
+  private toPublicRunStopResult(
+    result: AiRuntimeRunStopResult,
+  ): AiRunStopResult {
     return {
-      runId: input.runId,
-      status: input.toStatus,
-      nextRunId: nextRun?.runId ?? null,
+      runId: result.runId,
+      status: result.status as AiRunStopResult['status'],
+      nextRunId: result.nextRunId,
+    };
+  }
+
+  /** 统一构造事务提交后的 Runtime 回执，并计算本批次最后确认序号。 */
+  private toRuntimeRunStopResult(
+    runId: string,
+    status: AiRuntimeRunStopResult['status'],
+    nextRunId: string | null,
+    events: AiEvent[],
+  ): AiRuntimeRunStopResult {
+    return {
+      runId,
+      status,
+      nextRunId,
+      events,
+      lastSequence: events.at(-1)?.sequence ?? null,
     };
   }
 

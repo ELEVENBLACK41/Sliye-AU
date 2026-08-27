@@ -6,6 +6,7 @@
 import 'server-only';
 
 import type {
+  AiEvent,
   AiRuntimeReconciliationResult,
   AiRuntimeRunStopResult,
   AiRuntimeSession,
@@ -84,8 +85,8 @@ export async function appendAiAssistantTextDelta(input: {
   executionLeaseId: string;
   messageId: string;
   delta: string;
-}): Promise<void> {
-  await callRuntime<{ sequence: number }>(`/${input.runId}/events/assistant-text`, {
+}): Promise<AiEvent> {
+  return callRuntime<AiEvent>(`/${input.runId}/events/assistant-text`, {
     executionLeaseId: input.executionLeaseId,
     messageId: input.messageId,
     delta: input.delta,

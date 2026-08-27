@@ -3,6 +3,13 @@
  */
 
 import { HttpStatus, Injectable } from '@nestjs/common';
+import type {
+  AiAssistantTextDeltaEvent,
+  AiEvent,
+  AiRunStatusChangedEvent,
+  AiToolCallSettledEvent,
+  AiToolCallStartedEvent,
+} from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
@@ -51,7 +58,7 @@ export class AiEventService {
   async appendExecutionEventInTransaction(
     transaction: Prisma.TransactionClient,
     input: AppendAiExecutionEventInput,
-  ) {
+  ): Promise<AiEvent> {
     await this.executionLeaseService.assertActiveExecutionLeaseInTransaction(
       transaction,
       input,
@@ -64,7 +71,7 @@ export class AiEventService {
   async appendRunStatusChangedInTransaction(
     transaction: Prisma.TransactionClient,
     input: AppendAiRunStatusChangedEventInput,
-  ) {
+  ): Promise<AiEvent> {
     return this.appendEventInTransaction(transaction, {
       runId: input.runId,
       type: 'RUN_STATUS_CHANGED',
@@ -88,7 +95,7 @@ export class AiEventService {
       failureReason: string;
       durationMs: number;
     },
-  ) {
+  ): Promise<AiEvent> {
     return this.appendEventInTransaction(transaction, {
       runId: input.runId,
       type: 'TOOL_CALL_SETTLED',
@@ -108,10 +115,10 @@ export class AiEventService {
   private async appendEventInTransaction(
     transaction: Prisma.TransactionClient,
     input: AppendAiEventInput,
-  ) {
+  ): Promise<AiEvent> {
     const sequence = await this.allocateSequence(transaction, input.runId);
 
-    return transaction.aiEvent.create({
+    const event = await transaction.aiEvent.create({
       data: {
         runId: input.runId,
         sequence,
@@ -119,6 +126,8 @@ export class AiEventService {
         data: input.data,
       },
     });
+
+    return this.toContractEvent(event);
   }
 
   /**
@@ -127,7 +136,7 @@ export class AiEventService {
    */
   async appendAssistantTextDelta(
     input: AiExecutionLeaseInput & { messageId: string; delta: string },
-  ) {
+  ): Promise<AiEvent> {
     return this.prisma.$transaction((transaction) =>
       this.appendExecutionEventInTransaction(transaction, {
         runId: input.runId,
@@ -136,6 +145,50 @@ export class AiEventService {
         data: { messageId: input.messageId, delta: input.delta },
       }),
     );
+  }
+
+  /** 把 Prisma 事务刚提交的事件转换为跨应用共享的完整领域事件。 */
+  private toContractEvent(event: {
+    id: string;
+    runId: string;
+    sequence: number;
+    type: AiEventType;
+    data: Prisma.JsonValue;
+    createdAt: Date;
+  }): AiEvent {
+    const base = {
+      id: event.id,
+      runId: event.runId,
+      sequence: event.sequence,
+      createdAt: event.createdAt.toISOString(),
+    };
+
+    switch (event.type) {
+      case AiEventType.RUN_STATUS_CHANGED:
+        return {
+          ...base,
+          type: 'RUN_STATUS_CHANGED',
+          data: event.data as AiRunStatusChangedEvent['data'],
+        };
+      case AiEventType.ASSISTANT_TEXT_DELTA:
+        return {
+          ...base,
+          type: 'ASSISTANT_TEXT_DELTA',
+          data: event.data as AiAssistantTextDeltaEvent['data'],
+        };
+      case AiEventType.TOOL_CALL_STARTED:
+        return {
+          ...base,
+          type: 'TOOL_CALL_STARTED',
+          data: event.data as AiToolCallStartedEvent['data'],
+        };
+      case AiEventType.TOOL_CALL_SETTLED:
+        return {
+          ...base,
+          type: 'TOOL_CALL_SETTLED',
+          data: event.data as AiToolCallSettledEvent['data'],
+        };
+    }
   }
 
   /** 按服务端 sequence 补拉指定 Run 在断线点之后的事件，永不使用前端数组下标。 */

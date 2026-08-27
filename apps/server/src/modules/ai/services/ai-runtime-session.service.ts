@@ -9,14 +9,17 @@
  */
 
 import { HttpStatus, Injectable } from '@nestjs/common';
-import type { AiRuntimeSession } from '@workspace/contracts/ai';
+import type {
+  AiEvent,
+  AiRuntimeRunStopResult,
+  AiRuntimeSession,
+} from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import { PrismaService } from '../../../database/prisma.service';
 import { AiRunStatus } from '../../../generated/prisma';
 import type { Prisma } from '../../../generated/prisma';
 import type {
-  AiRunStopResult,
   CompleteAiRunInput,
   RecordAiStepInput,
 } from '../types/ai-persistence.types';
@@ -108,10 +111,8 @@ export class AiRuntimeSessionService {
     executionLeaseId: string;
     messageId: string;
     delta: string;
-  }): Promise<{ sequence: number }> {
-    const event = await this.eventService.appendAssistantTextDelta(input);
-
-    return { sequence: event.sequence };
+  }): Promise<AiEvent> {
+    return this.eventService.appendAssistantTextDelta(input);
   }
 
   /** 记录一次模型步骤的受控元数据与 Token 摘要。 */
@@ -143,7 +144,7 @@ export class AiRuntimeSessionService {
       usage?: Prisma.InputJsonValue | null;
       resolvedModelId?: string | null;
     },
-  ): Promise<AiRunStopResult> {
+  ): Promise<AiRuntimeRunStopResult> {
     const ownerUserId = await this.findRunOwnerUserId(input.runId);
     const usage = input.usage ?? undefined;
     const resolvedModelId = input.resolvedModelId ?? undefined;
@@ -166,7 +167,7 @@ export class AiRuntimeSessionService {
   }
 
   /** 执行器已停止写入后确认取消，把取消请求唯一收敛为 CANCELLED。 */
-  async confirmCancellation(runId: string): Promise<AiRunStopResult> {
+  async confirmCancellation(runId: string): Promise<AiRuntimeRunStopResult> {
     const ownerUserId = await this.findRunOwnerUserId(runId);
 
     return this.runControlService.confirmCancellation(ownerUserId, runId);

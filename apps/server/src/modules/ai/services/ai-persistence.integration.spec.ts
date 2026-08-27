@@ -418,6 +418,26 @@ describePersistence('AI 持久化事务地基', () => {
       ),
     );
 
+    const persistedEvents = await prisma.aiEvent.findMany({
+      where: { runId: created.runId },
+      orderBy: { sequence: 'asc' },
+    });
+    expect(events.map((event) => event.id).sort()).toEqual(
+      persistedEvents.map((event) => event.id).sort(),
+    );
+    for (const event of events) {
+      const persisted = persistedEvents.find((item) => item.id === event.id);
+      expect(persisted).toBeDefined();
+      expect(event).toEqual({
+        id: persisted!.id,
+        runId: persisted!.runId,
+        sequence: persisted!.sequence,
+        type: persisted!.type,
+        data: persisted!.data,
+        createdAt: persisted!.createdAt.toISOString(),
+      });
+    }
+
     expect(
       events.map((event) => event.sequence).sort((left, right) => left - right),
     ).toEqual(Array.from({ length: 24 }, (_, index) => index + 1));
@@ -832,7 +852,11 @@ describePersistence('AI 持久化事务地基', () => {
       toolName: 'findDecisionCandidates',
       input: { query: '不应出现在历史接口中的输入' },
     });
-    await toolCallService.settleToolCall({
+    expect(toolCall.state).toBe('CREATED');
+    if (toolCall.state !== 'CREATED') {
+      throw new Error('工具开始回执测试未创建新的工具调用');
+    }
+    const settledEvent = await toolCallService.settleToolCall({
       runId: initial.runId,
       executionLeaseId: lease!.executionLeaseId,
       toolCallId: toolCall.toolCallId,
@@ -843,6 +867,21 @@ describePersistence('AI 持久化事务地基', () => {
       sources: [],
       durationMs: 12,
     });
+    expect(settledEvent).not.toBeNull();
+    const persistedToolEvents = await prisma.aiEvent.findMany({
+      where: { runId: initial.runId },
+      orderBy: { sequence: 'asc' },
+    });
+    expect([toolCall.event, settledEvent]).toEqual(
+      persistedToolEvents.map((event) => ({
+        id: event.id,
+        runId: event.runId,
+        sequence: event.sequence,
+        type: event.type,
+        data: event.data,
+        createdAt: event.createdAt.toISOString(),
+      })),
+    );
 
     const page = await messageQueryService.listMessages(
       buildAuthorization(ownerUserId),
@@ -1719,6 +1758,45 @@ describePersistence('AI 持久化事务地基', () => {
       select: { status: true },
     });
     expect(['CANCELLED', 'COMPLETED']).toContain(settled?.status);
+  });
+
+  it('Run 终态事务返回本次新提交的状态事件回执，并与数据库记录一致', async () => {
+    const ownerUserId = await createTestUser();
+    const initial = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证终态事件回执。',
+      idempotencyKey: 'terminal-event-receipt-001',
+      modelRole: 'standard',
+    });
+    const lease = await runService.claimQueuedRun(initial.runId);
+    expect(lease).not.toBeNull();
+
+    const result = await runControlService.completeRun({
+      ownerUserId,
+      runId: initial.runId,
+      executionLeaseId: lease!.executionLeaseId,
+      status: 'COMPLETED',
+      failureReason: null,
+      failureCode: null,
+      assistantMessageContent: '已完成终态回执测试。',
+    });
+    const persistedEvents = await prisma.aiEvent.findMany({
+      where: { runId: initial.runId },
+      orderBy: { sequence: 'asc' },
+    });
+
+    expect(result.events).toHaveLength(1);
+    expect(result.lastSequence).toBe(result.events[0].sequence);
+    expect(result.events).toEqual(
+      persistedEvents.map((event) => ({
+        id: event.id,
+        runId: event.runId,
+        sequence: event.sequence,
+        type: event.type,
+        data: event.data,
+        createdAt: event.createdAt.toISOString(),
+      })),
+    );
   });
 
   it('调整方向与完成竞争不会生成并发 Run，旧 Run 终态后才领取新方向', async () => {

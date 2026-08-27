@@ -6,6 +6,7 @@
 
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
+import type { AiEvent } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
@@ -28,6 +29,8 @@ export type StartedAiToolCall =
       state: 'CREATED';
       /** 工具调用记录主键。 */
       toolCallId: string;
+      /** 与工具调用创建同一事务提交的开始事件。 */
+      event: AiEvent;
     }
   | {
       /** 相同模型调用已经成功，直接重放持久化摘要。 */
@@ -96,18 +99,21 @@ export class AiToolCallService {
           },
           select: { id: true },
         });
-        await this.eventService.appendExecutionEventInTransaction(transaction, {
-          runId: input.runId,
-          executionLeaseId: input.executionLeaseId,
-          type: 'TOOL_CALL_STARTED',
-          data: {
-            toolCallId: toolCall.id,
-            toolName: input.toolName,
-            input: input.input,
+        const event = await this.eventService.appendExecutionEventInTransaction(
+          transaction,
+          {
+            runId: input.runId,
+            executionLeaseId: input.executionLeaseId,
+            type: 'TOOL_CALL_STARTED',
+            data: {
+              toolCallId: toolCall.id,
+              toolName: input.toolName,
+              input: input.input,
+            },
           },
-        });
+        );
 
-        return { state: 'CREATED', toolCallId: toolCall.id };
+        return { state: 'CREATED', toolCallId: toolCall.id, event };
       });
     } catch (error) {
       if (!this.isUniqueConstraintViolation(error)) {
@@ -119,8 +125,8 @@ export class AiToolCallService {
   }
 
   /** 在校验执行租约后结束一次工具调用：写入结果摘要、登记来源并追加结束事件。 */
-  async settleToolCall(input: SettleAiToolCallInput): Promise<void> {
-    await this.prisma.$transaction(async (transaction) => {
+  async settleToolCall(input: SettleAiToolCallInput): Promise<AiEvent | null> {
+    return this.prisma.$transaction(async (transaction) => {
       await this.executionLeaseService.assertActiveExecutionLeaseInTransaction(
         transaction,
         { runId: input.runId, executionLeaseId: input.executionLeaseId },
@@ -144,7 +150,7 @@ export class AiToolCallService {
         },
       });
       if (settled.count !== 1) {
-        return;
+        return null;
       }
 
       const toolCall = await transaction.aiToolCall.findUnique({
@@ -159,7 +165,7 @@ export class AiToolCallService {
           sources: input.sources,
         },
       );
-      await this.eventService.appendExecutionEventInTransaction(transaction, {
+      return this.eventService.appendExecutionEventInTransaction(transaction, {
         runId: input.runId,
         executionLeaseId: input.executionLeaseId,
         type: 'TOOL_CALL_SETTLED',
@@ -181,11 +187,12 @@ export class AiToolCallService {
     transaction: Prisma.TransactionClient,
     runId: string,
     finishedAt: Date,
-  ): Promise<void> {
+  ): Promise<AiEvent[]> {
     const runningCalls = await transaction.aiToolCall.findMany({
       where: { runId, status: AiToolCallStatus.RUNNING },
       select: { id: true, toolName: true, startedAt: true },
     });
+    const events: AiEvent[] = [];
 
     for (const toolCall of runningCalls) {
       const durationMs = Math.max(
@@ -203,19 +210,23 @@ export class AiToolCallService {
         },
       });
       if (failed.count === 1) {
-        await this.eventService.appendToolCallSettledByControlInTransaction(
-          transaction,
-          {
-            runId,
-            toolCallId: toolCall.id,
-            toolName: toolCall.toolName,
-            failureCode: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
-            failureReason: 'AI 运行已结束，工具调用未能完成',
-            durationMs,
-          },
-        );
+        const event =
+          await this.eventService.appendToolCallSettledByControlInTransaction(
+            transaction,
+            {
+              runId,
+              toolCallId: toolCall.id,
+              toolName: toolCall.toolName,
+              failureCode: API_ERROR_CODES.AI_EXECUTION_LEASE_INVALID,
+              failureReason: 'AI 运行已结束，工具调用未能完成',
+              durationMs,
+            },
+          );
+        events.push(event);
       }
     }
+
+    return events;
   }
 
   /**

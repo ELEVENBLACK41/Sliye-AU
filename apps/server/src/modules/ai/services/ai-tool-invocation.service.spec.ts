@@ -4,6 +4,7 @@
  * 不连接数据库、不调用模型，注册表使用真实实现以覆盖描述校验。
  */
 
+import type { AiEvent } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 import type { AiToolDescriptor } from '../types/ai-tool-registry.types';
@@ -20,6 +21,20 @@ const EXECUTION_CONTEXT: AiToolExecutionContext = {
   ownerUserId: 42,
   executionLeaseId: 'lease-001',
   executionLeaseExpiresAt: new Date(Date.now() + 30_000),
+};
+
+/** 工具开始事件回执的固定测试样例。 */
+const STARTED_EVENT: AiEvent = {
+  id: 'event-tool-started',
+  runId: EXECUTION_CONTEXT.runId,
+  sequence: 1,
+  createdAt: '2026-08-27T00:00:00.000Z',
+  type: 'TOOL_CALL_STARTED',
+  data: {
+    toolCallId: 'tool-call-1',
+    toolName: 'getDecisionContext',
+    input: { decisionId: 17 },
+  },
 };
 
 /** 发现工具描述：不需要前置发现。 */
@@ -104,9 +119,10 @@ describe('AiToolInvocationService', () => {
       options.startResult ?? {
         state: 'CREATED',
         toolCallId: 'tool-call-1',
+        event: STARTED_EVENT,
       },
     );
-    const settleToolCall = jest.fn().mockResolvedValue(undefined);
+    const settleToolCall = jest.fn().mockResolvedValue(null);
     const listSucceededDiscoveryCalls = jest
       .fn()
       .mockResolvedValue(options.discoveries ?? []);
@@ -243,6 +259,7 @@ describe('AiToolInvocationService', () => {
       status: 'SUCCEEDED',
       toolCallId: 'tool-call-1',
       output: { decisionId: 17 },
+      events: [STARTED_EVENT],
     });
     expect(execute).toHaveBeenCalledWith(EXECUTION_CONTEXT, { decisionId: 17 });
     expect(settleToolCall).toHaveBeenCalledWith(
@@ -299,6 +316,7 @@ describe('AiToolInvocationService', () => {
       status: 'SUCCEEDED',
       toolCallId: 'tool-call-replay',
       output: { decisionId: 17 },
+      events: [],
     });
     expect(execute).not.toHaveBeenCalled();
     expect(settleToolCall).not.toHaveBeenCalled();

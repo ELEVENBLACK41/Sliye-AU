@@ -111,6 +111,8 @@ export type AiRuntimeToolInvocationResult =
       toolCallId: string;
       /** 允许返回模型的窄输出。 */
       output: unknown;
+      /** 本次事务新提交的工具开始/结束事件；幂等重放时为空数组。 */
+      events: AiEvent[];
     }
   | {
       /** 工具被拒绝或执行失败。 */
@@ -121,6 +123,8 @@ export type AiRuntimeToolInvocationResult =
       failureCode: ApiErrorCode;
       /** 可以安全交回模型的失败说明。 */
       failureReason: string;
+      /** 本次事务新提交的工具开始/结束事件；幂等重放时为空数组。 */
+      events: AiEvent[];
     };
 
 /** Run 进入终态后的内部响应。 */
@@ -128,9 +132,13 @@ export type AiRuntimeRunStopResult = {
   /** 已收敛的 Run 标识。 */
   runId: string;
   /** 收敛后的终态。 */
-  status: string;
+  status: AiRunStatus;
   /** 同一 Thread 中已领取的下一条 Run；没有则为空。 */
   nextRunId: string | null;
+  /** 本次终态事务新提交的工具收敛与 Run 状态事件。 */
+  events: AiEvent[];
+  /** 本次回执中最后一个事件的序号；没有新事件时为空。 */
+  lastSequence: number | null;
 };
 
 /** 一次过期租约与孤儿排队 Run 对账的内部响应。 */
