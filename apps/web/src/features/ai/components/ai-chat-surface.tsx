@@ -31,12 +31,14 @@ import {
   PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input';
 import type { AiWorkspaceMessage } from '../types/ai-message';
-import type {
-  AiWorkspaceCommandState,
-  AiWorkspaceQueuedMessage,
-  AiWorkspaceStreamState,
-} from '../types/ai-workspace';
+import type { AiWorkspaceCommandState, AiWorkspaceQueuedMessage, AiWorkspaceStreamState } from '../types/ai-workspace';
 import { isAiRunActive } from '../utils/ai-event-reducer';
+
+/** 流式回答按字符淡入，保持模型小片段到达时的连续视觉反馈。 */
+const STREAMING_MESSAGE_ANIMATION = {
+  // animation: 'fadeIn',
+  // sep: 'char',
+} as const;
 
 /**
  * 渲染 AI 对话主画布。
@@ -240,7 +242,11 @@ function AiConversationMessage({
         ) : (
           <>
             {toolParts.length > 0 ? <AiToolCallGroup parts={toolParts} /> : null}
-            {message.content ? <MessageResponse isAnimating={isStreaming}>{message.content}</MessageResponse> : null}
+            {message.content ? (
+              <MessageResponse animated={STREAMING_MESSAGE_ANIMATION} isAnimating={isStreaming}>
+                {message.content}
+              </MessageResponse>
+            ) : null}
             {hasAssistantText ? <AiCitationList /> : null}
           </>
         )}
