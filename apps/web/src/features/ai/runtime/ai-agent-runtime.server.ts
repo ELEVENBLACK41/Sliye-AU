@@ -8,8 +8,10 @@
 import 'server-only';
 
 import { isStepCount, streamText, type ModelMessage } from 'ai';
+import { randomUUID } from 'node:crypto';
 import type {
   AiEvent,
+  AiPostStreamLiveDeltaData,
   AiPostStreamRunStatusData,
   AiRuntimeRunStopResult,
   AiRuntimeSession,
@@ -33,18 +35,16 @@ import {
 } from './ai-runtime-client.server.ts';
 import { runAiRunChain } from './ai-run-chain.ts';
 import type { AiRuntimeLiveSink } from './ai-runtime-live-sink.server.ts';
+import {
+  createAiRuntimeTextPersistenceQueue,
+  type AiRuntimeTextPersistenceQueue,
+} from './ai-runtime-text-persistence-queue.server.ts';
 
 /** 单轮运行允许的最大模型步骤数，避免工具循环无限进行。 */
 const MAX_AGENT_STEPS = 6;
 
 /** 续租间隔；必须明显小于服务端 30 秒租约时长。 */
 const LEASE_RENEW_INTERVAL_MS = 10_000;
-
-/** 文本增量累计到该长度就立即落库一次。 */
-const TEXT_FLUSH_CHARACTERS = 40;
-
-/** 距离上次落库超过该时间就强制落库一次，保证前端可以尽快看到进度。 */
-const TEXT_FLUSH_INTERVAL_MS = 100;
 
 /** 一条待写入的模型步骤记录。 */
 type PendingAgentStep = {
@@ -88,27 +88,17 @@ async function executeClaimedSession(session: AiRuntimeSession, liveSink?: AiRun
 
   let assistantMessageId: string | null = null;
   let assistantText = '';
-  let pendingDelta = '';
-  let lastFlushedAt = Date.now();
-
-  /** 把缓冲中的文本增量落库，并在首次落库前创建助手消息占位。 */
-  const flushDelta = async (): Promise<void> => {
-    if (pendingDelta.length === 0) {
-      return;
-    }
-
-    assistantMessageId ??= await ensureAiAssistantMessage(execution.runId, execution.executionLeaseId);
-    const delta = pendingDelta;
-    pendingDelta = '';
-    lastFlushedAt = Date.now();
-    const event = await appendAiAssistantTextDelta({
-      runId: execution.runId,
-      executionLeaseId: execution.executionLeaseId,
-      messageId: assistantMessageId,
-      delta,
-    });
-    publishAiRuntimeLiveEvent(liveSink, event);
-  };
+  let liveSequence = 0;
+  const persistenceQueue = createAiRuntimeTextPersistenceQueue({
+    executionLeaseId: execution.executionLeaseId,
+    persist: (batch) => appendAiAssistantTextDelta(batch),
+    onPersisted: (event) => publishAiRuntimeLiveEvent(liveSink, event),
+    onFatalError: (error) => {
+      if (!abortController.signal.aborted) {
+        abortController.abort(error);
+      }
+    },
+  });
 
   try {
     const resolvedModel = resolveAiLanguageModel(execution.modelRole, {
@@ -158,15 +148,26 @@ async function executeClaimedSession(session: AiRuntimeSession, liveSink?: AiRun
     });
 
     for await (const delta of result.textStream) {
-      assistantText += delta;
-      pendingDelta += delta;
-
-      if (pendingDelta.length >= TEXT_FLUSH_CHARACTERS || Date.now() - lastFlushedAt >= TEXT_FLUSH_INTERVAL_MS) {
-        await flushDelta();
+      if (delta.length === 0) {
+        continue;
       }
+
+      assistantMessageId ??= await ensureAiAssistantMessage(execution.runId, execution.executionLeaseId);
+      assistantText += delta;
+      liveSequence += 1;
+      const liveDelta: AiPostStreamLiveDeltaData = {
+        threadId: execution.threadId,
+        runId: execution.runId,
+        messageId: assistantMessageId,
+        liveDeltaId: randomUUID(),
+        liveSequence,
+        delta,
+      };
+      publishAiRuntimeLiveDelta(liveSink, liveDelta);
+      persistenceQueue.enqueue(liveDelta);
     }
 
-    await flushDelta();
+    await persistenceQueue.drain();
     const usage = await result.usage;
     // 冲刷会清空步骤队列，因此先取出最后一次实际使用的模型标识。
     const resolvedModelId = pendingSteps.at(-1)?.resolvedModelId;
@@ -188,7 +189,15 @@ async function executeClaimedSession(session: AiRuntimeSession, liveSink?: AiRun
 
     return settled.nextRunId;
   } catch (error) {
-    return await settleFailedRun(session, error, assistantText, pendingSteps, leaseState.invalidated, liveSink);
+    return await settleFailedRun(
+      session,
+      error,
+      assistantText,
+      pendingSteps,
+      leaseState.invalidated,
+      liveSink,
+      persistenceQueue,
+    );
   } finally {
     clearInterval(leaseTimer);
   }
@@ -205,6 +214,7 @@ async function settleFailedRun(
   pendingSteps: PendingAgentStep[],
   leaseInvalidated: boolean,
   liveSink?: AiRuntimeLiveSink,
+  persistenceQueue?: AiRuntimeTextPersistenceQueue,
 ): Promise<string | null> {
   const { execution } = session;
 
@@ -216,6 +226,16 @@ async function settleFailedRun(
   logAiModelStreamError(execution.runId, execution.modelRole, error);
 
   try {
+    if (persistenceQueue) {
+      try {
+        await persistenceQueue.drain();
+      } catch (persistenceError: unknown) {
+        console.error('[ai-agent-runtime] 文本持久化队列冲刷失败', {
+          runId: execution.runId,
+          error: persistenceError,
+        });
+      }
+    }
     await flushSteps(execution.runId, execution.executionLeaseId, pendingSteps);
     const settled = await completeAiRuntimeRun({
       runId: execution.runId,
@@ -263,6 +283,26 @@ async function safeConfirmCancellation(
 /** 发布一条已提交事件；订阅者异常不能反向影响模型循环。 */
 function publishAiRuntimeLiveEvent(liveSink: AiRuntimeLiveSink | undefined, event: AiEvent): void {
   publishAiRuntimeLiveEvents(liveSink, [event]);
+}
+
+/** 发布模型刚产生的即时文本增量；该调用不等待数据库持久化。 */
+function publishAiRuntimeLiveDelta(
+  liveSink: AiRuntimeLiveSink | undefined,
+  liveDelta: AiPostStreamLiveDeltaData,
+): void {
+  if (!liveSink) {
+    return;
+  }
+
+  try {
+    liveSink.publishLiveDelta(liveDelta);
+  } catch (error: unknown) {
+    console.error('[ai-agent-runtime] live sink 发布即时增量失败', {
+      runId: liveDelta.runId,
+      liveSequence: liveDelta.liveSequence,
+      error,
+    });
+  }
 }
 
 /** 按持久化顺序发布已提交事件；没有 sink 时保持原有后台执行行为。 */

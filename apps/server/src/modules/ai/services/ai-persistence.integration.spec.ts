@@ -447,6 +447,46 @@ describePersistence('AI 持久化事务地基', () => {
     );
   });
 
+  it('UI-first 文本事件回执保留 live 增量关联信息，并与数据库记录一致', async () => {
+    const ownerUserId = await createTestUser();
+    const created = await threadService.createThreadWithInitialRun({
+      ownerUserId,
+      message: '验证 UI-first 文本回执。',
+      idempotencyKey: 'ui-first-text-receipt-001',
+      modelRole: 'standard',
+    });
+    const lease = await runService.claimQueuedRun(created.runId);
+    expect(lease).not.toBeNull();
+
+    const event = await eventService.appendAssistantTextDelta({
+      runId: created.runId,
+      executionLeaseId: lease!.executionLeaseId,
+      messageId: created.messageId,
+      delta: '模型实际增量',
+      liveDeltaIds: ['live-delta-1', 'live-delta-2'],
+      liveSequenceStart: 1,
+      liveSequenceEnd: 2,
+    });
+    const persisted = await prisma.aiEvent.findUnique({
+      where: { id: event.id },
+    });
+
+    expect(persisted).not.toBeNull();
+    expect(event).toEqual({
+      id: persisted!.id,
+      runId: persisted!.runId,
+      sequence: persisted!.sequence,
+      type: persisted!.type,
+      data: persisted!.data,
+      createdAt: persisted!.createdAt.toISOString(),
+    });
+    expect(event.data).toMatchObject({
+      liveDeltaIds: ['live-delta-1', 'live-delta-2'],
+      liveSequenceStart: 1,
+      liveSequenceEnd: 2,
+    });
+  });
+
   it('同一排队 Run 并发领取时只向一个执行器签发租约', async () => {
     const ownerUserId = await createTestUser();
     const created = await threadService.createThreadWithInitialRun({

@@ -57,10 +57,12 @@ export type AiAssistantTextDeltaEvent = AiEventBase & {
     messageId: string;
     /** 按事件序号追加到助手消息后的非空文本片段。 */
     delta: string;
-    /** UI-first 直出流使用的稳定增量标识；旧持久化事件可以省略。 */
-    liveDeltaId?: string;
-    /** UI-first 直出流在单个 Run 内的增量序号；旧持久化事件可以省略。 */
-    liveSequence?: number;
+    /** UI-first 直出流对应的一个或多个稳定增量标识；旧持久化事件可以省略。 */
+    liveDeltaIds?: string[];
+    /** UI-first 直出流批次中第一个增量的序号；旧持久化事件可以省略。 */
+    liveSequenceStart?: number;
+    /** UI-first 直出流批次中最后一个增量的序号；旧持久化事件可以省略。 */
+    liveSequenceEnd?: number;
   };
 };
 

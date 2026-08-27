@@ -85,11 +85,17 @@ export async function appendAiAssistantTextDelta(input: {
   executionLeaseId: string;
   messageId: string;
   delta: string;
+  liveDeltaIds?: readonly string[];
+  liveSequenceStart?: number;
+  liveSequenceEnd?: number;
 }): Promise<AiEvent> {
   return callRuntime<AiEvent>(`/${input.runId}/events/assistant-text`, {
     executionLeaseId: input.executionLeaseId,
     messageId: input.messageId,
     delta: input.delta,
+    liveDeltaIds: input.liveDeltaIds,
+    liveSequenceStart: input.liveSequenceStart,
+    liveSequenceEnd: input.liveSequenceEnd,
   });
 }
 

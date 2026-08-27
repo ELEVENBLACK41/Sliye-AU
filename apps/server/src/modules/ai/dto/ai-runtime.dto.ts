@@ -29,6 +29,9 @@ const MAX_LEASE_ID_LENGTH = 128;
 /** 单条文本增量允许的最大长度，避免一次写入超大事件负载。 */
 const MAX_TEXT_DELTA_LENGTH = 8_000;
 
+/** 单个持久化事件最多关联的即时模型增量数量。 */
+const MAX_LIVE_DELTA_IDS_PER_EVENT = 256;
+
 /** 助手最终正文允许的最大长度。 */
 const MAX_ASSISTANT_CONTENT_LENGTH = 40_000;
 
@@ -59,6 +62,30 @@ export class AppendAiAssistantTextDto extends AiRuntimeLeaseDto {
   @MinLength(1)
   @MaxLength(MAX_TEXT_DELTA_LENGTH)
   delta!: string;
+
+  /** 本次持久化批次包含的即时增量稳定标识。 */
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_LIVE_DELTA_IDS_PER_EVENT)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(200, { each: true })
+  liveDeltaIds?: string[];
+
+  /** 本次持久化批次关联的第一个即时增量序号。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  liveSequenceStart?: number;
+
+  /** 本次持久化批次关联的最后一个即时增量序号。 */
+  @ApiPropertyOptional({ minimum: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  liveSequenceEnd?: number;
 }
 
 /** 记录一次模型步骤的内部请求。 */

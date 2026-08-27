@@ -81,6 +81,9 @@ export class AiRuntimeController {
       executionLeaseId: body.executionLeaseId,
       messageId: body.messageId,
       delta: body.delta,
+      liveDeltaIds: body.liveDeltaIds,
+      liveSequenceStart: body.liveSequenceStart,
+      liveSequenceEnd: body.liveSequenceEnd,
     });
   }
 

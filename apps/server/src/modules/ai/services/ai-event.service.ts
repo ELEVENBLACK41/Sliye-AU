@@ -135,14 +135,32 @@ export class AiEventService {
    * 事件先落库再由订阅方按序号补拉，因此浏览器断开不会丢失已生成的正文。
    */
   async appendAssistantTextDelta(
-    input: AiExecutionLeaseInput & { messageId: string; delta: string },
+    input: AiExecutionLeaseInput & {
+      messageId: string;
+      delta: string;
+      liveDeltaIds?: readonly string[];
+      liveSequenceStart?: number;
+      liveSequenceEnd?: number;
+    },
   ): Promise<AiEvent> {
     return this.prisma.$transaction((transaction) =>
       this.appendExecutionEventInTransaction(transaction, {
         runId: input.runId,
         executionLeaseId: input.executionLeaseId,
         type: 'ASSISTANT_TEXT_DELTA',
-        data: { messageId: input.messageId, delta: input.delta },
+        data: {
+          messageId: input.messageId,
+          delta: input.delta,
+          ...(input.liveDeltaIds === undefined
+            ? {}
+            : { liveDeltaIds: [...input.liveDeltaIds] }),
+          ...(input.liveSequenceStart === undefined
+            ? {}
+            : { liveSequenceStart: input.liveSequenceStart }),
+          ...(input.liveSequenceEnd === undefined
+            ? {}
+            : { liveSequenceEnd: input.liveSequenceEnd }),
+        },
       }),
     );
   }

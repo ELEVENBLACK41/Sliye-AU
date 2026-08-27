@@ -111,6 +111,9 @@ export class AiRuntimeSessionService {
     executionLeaseId: string;
     messageId: string;
     delta: string;
+    liveDeltaIds?: readonly string[];
+    liveSequenceStart?: number;
+    liveSequenceEnd?: number;
   }): Promise<AiEvent> {
     return this.eventService.appendAssistantTextDelta(input);
   }
