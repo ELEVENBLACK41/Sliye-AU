@@ -6,7 +6,7 @@
 import 'server-only';
 
 import { dynamicTool, type ToolSet } from 'ai';
-import type { AiRuntimeToolDescriptor, AiRuntimeToolField } from '@workspace/contracts/ai';
+import type { AiEvent, AiRuntimeToolDescriptor, AiRuntimeToolField } from '@workspace/contracts/ai';
 import { z } from 'zod';
 
 import { invokeAiRuntimeTool } from './ai-runtime-client.server.ts';
@@ -19,6 +19,12 @@ export type AiAgentToolContext = {
   executionLeaseId: string;
 };
 
+/** Agent 工具执行完成后接收本次事务已提交事件的回调配置。 */
+export type AiAgentToolOptions = {
+  /** 工具开始/结束事件已经提交后通知 Runtime；回调不得阻塞模型。 */
+  onCommittedEvents?: (events: AiEvent[]) => void;
+};
+
 /**
  * 按服务端工具描述构造 AI SDK 工具集合。
  * 工具执行结果统一回传给模型：成功时返回窄输出，失败时返回稳定说明，
@@ -27,6 +33,7 @@ export type AiAgentToolContext = {
 export function buildAiAgentTools(
   descriptors: readonly AiRuntimeToolDescriptor[],
   context: AiAgentToolContext,
+  liveOptions: AiAgentToolOptions = {},
 ): ToolSet {
   const tools: ToolSet = {};
 
@@ -34,14 +41,15 @@ export function buildAiAgentTools(
     tools[descriptor.name] = dynamicTool({
       description: `${descriptor.description}\n输入：${descriptor.input.description}\n输出：${descriptor.output.description}`,
       inputSchema: toInputSchema(descriptor.input.fields),
-      execute: async (input, options) => {
+      execute: async (input, toolOptions) => {
         const result = await invokeAiRuntimeTool({
           runId: context.runId,
           executionLeaseId: context.executionLeaseId,
-          providerToolCallId: options.toolCallId,
+          providerToolCallId: toolOptions.toolCallId,
           toolName: descriptor.name,
           toolInput: toToolInput(input),
         });
+        liveOptions.onCommittedEvents?.(result.events);
 
         return result.status === 'SUCCEEDED'
           ? { ok: true, data: result.output }

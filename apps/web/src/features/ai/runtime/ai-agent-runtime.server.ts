@@ -8,7 +8,13 @@
 import 'server-only';
 
 import { isStepCount, streamText, type ModelMessage } from 'ai';
-import type { AiRuntimeSession } from '@workspace/contracts/ai';
+import type {
+  AiEvent,
+  AiPostStreamRunStatusData,
+  AiRuntimeRunStopResult,
+  AiRuntimeSession,
+} from '@workspace/contracts/ai';
+import type { ApiErrorCode } from '@workspace/contracts/common';
 
 import { DECISION_HUB_AGENT_INSTRUCTIONS } from '../agents/decision-hub-agent.ts';
 import { buildAiAgentTools } from './ai-agent-tools.server.ts';
@@ -26,6 +32,7 @@ import {
   renewAiRuntimeLease,
 } from './ai-runtime-client.server.ts';
 import { runAiRunChain } from './ai-run-chain.ts';
+import type { AiRuntimeLiveSink } from './ai-runtime-live-sink.server.ts';
 
 /** 单轮运行允许的最大模型步骤数，避免工具循环无限进行。 */
 const MAX_AGENT_STEPS = 6;
@@ -34,10 +41,10 @@ const MAX_AGENT_STEPS = 6;
 const LEASE_RENEW_INTERVAL_MS = 10_000;
 
 /** 文本增量累计到该长度就立即落库一次。 */
-const TEXT_FLUSH_CHARACTERS = 120;
+const TEXT_FLUSH_CHARACTERS = 40;
 
 /** 距离上次落库超过该时间就强制落库一次，保证前端可以尽快看到进度。 */
-const TEXT_FLUSH_INTERVAL_MS = 400;
+const TEXT_FLUSH_INTERVAL_MS = 100;
 
 /** 一条待写入的模型步骤记录。 */
 type PendingAgentStep = {
@@ -57,21 +64,21 @@ type PendingAgentStep = {
  * 领取是原子的，重复启动不会产生第二个执行器；返回 Promise 让 Next.js `after()`
  * 能托管模型流、续租、终态写入以及同一 Thread 的后续排队 Run。
  */
-export async function startAiAgentRun(runId: string): Promise<void> {
+export async function startAiAgentRun(runId: string, liveSink?: AiRuntimeLiveSink): Promise<void> {
   try {
-    await runAiAgentExecution(runId);
+    await runAiAgentExecution(runId, liveSink);
   } catch (error: unknown) {
     console.error('[ai-agent-runtime] 运行失败', { runId, error });
   }
 }
 
 /** 串行领取并执行当前 Run 及其终态事务释放出的后续排队 Run。 */
-export async function runAiAgentExecution(runId: string): Promise<void> {
-  await runAiRunChain(runId, claimAiRuntimeSession, executeClaimedSession);
+export async function runAiAgentExecution(runId: string, liveSink?: AiRuntimeLiveSink): Promise<void> {
+  await runAiRunChain(runId, claimAiRuntimeSession, (session) => executeClaimedSession(session, liveSink));
 }
 
 /** 执行一次已领取的会话，并返回终态事务领取到的下一个 Run 标识。 */
-async function executeClaimedSession(session: AiRuntimeSession): Promise<string | null> {
+async function executeClaimedSession(session: AiRuntimeSession, liveSink?: AiRuntimeLiveSink): Promise<string | null> {
   const { execution } = session;
   const abortController = new AbortController();
   const pendingSteps: PendingAgentStep[] = [];
@@ -94,12 +101,13 @@ async function executeClaimedSession(session: AiRuntimeSession): Promise<string 
     const delta = pendingDelta;
     pendingDelta = '';
     lastFlushedAt = Date.now();
-    await appendAiAssistantTextDelta({
+    const event = await appendAiAssistantTextDelta({
       runId: execution.runId,
       executionLeaseId: execution.executionLeaseId,
       messageId: assistantMessageId,
       delta,
     });
+    publishAiRuntimeLiveEvent(liveSink, event);
   };
 
   try {
@@ -119,10 +127,16 @@ async function executeClaimedSession(session: AiRuntimeSession): Promise<string 
       maxRetries: configuration.budget.maxRetries,
       providerOptions: resolvedModel.providerOptions,
       stopWhen: isStepCount(MAX_AGENT_STEPS),
-      tools: buildAiAgentTools(session.tools, {
-        runId: execution.runId,
-        executionLeaseId: execution.executionLeaseId,
-      }),
+      tools: buildAiAgentTools(
+        session.tools,
+        {
+          runId: execution.runId,
+          executionLeaseId: execution.executionLeaseId,
+        },
+        {
+          onCommittedEvents: (events) => publishAiRuntimeLiveEvents(liveSink, events),
+        },
+      ),
       onStepEnd: (step) => {
         const finishedAt = new Date();
         pendingSteps.push({
@@ -170,10 +184,11 @@ async function executeClaimedSession(session: AiRuntimeSession): Promise<string 
         totalTokens: usage.totalTokens ?? 0,
       },
     });
+    publishAiRuntimeLiveStopResult(liveSink, execution.threadId, settled);
 
     return settled.nextRunId;
   } catch (error) {
-    return await settleFailedRun(session, error, assistantText, pendingSteps, leaseState.invalidated);
+    return await settleFailedRun(session, error, assistantText, pendingSteps, leaseState.invalidated, liveSink);
   } finally {
     clearInterval(leaseTimer);
   }
@@ -189,11 +204,12 @@ async function settleFailedRun(
   assistantText: string,
   pendingSteps: PendingAgentStep[],
   leaseInvalidated: boolean,
+  liveSink?: AiRuntimeLiveSink,
 ): Promise<string | null> {
   const { execution } = session;
 
   if (leaseInvalidated || isAiExecutionLeaseInvalid(error)) {
-    return safeConfirmCancellation(execution.runId);
+    return safeConfirmCancellation(execution.runId, execution.threadId, liveSink);
   }
 
   const normalized = normalizeAiModelError(error);
@@ -209,11 +225,12 @@ async function settleFailedRun(
       failureCode: normalized.code,
       assistantMessageContent: assistantText.length > 0 ? assistantText : undefined,
     });
+    publishAiRuntimeLiveStopResult(liveSink, execution.threadId, settled, normalized.code);
 
     return settled.nextRunId;
   } catch (settleError: unknown) {
     if (isAiExecutionLeaseInvalid(settleError)) {
-      return safeConfirmCancellation(execution.runId);
+      return safeConfirmCancellation(execution.runId, execution.threadId, liveSink);
     }
 
     console.error('[ai-agent-runtime] 写入失败终态时出错', {
@@ -226,15 +243,82 @@ async function settleFailedRun(
 }
 
 /** 确认取消；确认本身失败时交由服务端过期租约对账收敛，不阻塞当前进程。 */
-async function safeConfirmCancellation(runId: string): Promise<string | null> {
+async function safeConfirmCancellation(
+  runId: string,
+  threadId: string,
+  liveSink?: AiRuntimeLiveSink,
+): Promise<string | null> {
   try {
     const settled = await confirmAiRuntimeCancellation(runId);
+    publishAiRuntimeLiveStopResult(liveSink, threadId, settled);
 
     return settled.nextRunId;
   } catch (error: unknown) {
     console.error('[ai-agent-runtime] 确认取消失败', { runId, error });
 
     return null;
+  }
+}
+
+/** 发布一条已提交事件；订阅者异常不能反向影响模型循环。 */
+function publishAiRuntimeLiveEvent(liveSink: AiRuntimeLiveSink | undefined, event: AiEvent): void {
+  publishAiRuntimeLiveEvents(liveSink, [event]);
+}
+
+/** 按持久化顺序发布已提交事件；没有 sink 时保持原有后台执行行为。 */
+function publishAiRuntimeLiveEvents(liveSink: AiRuntimeLiveSink | undefined, events: AiEvent[]): void {
+  if (!liveSink) {
+    return;
+  }
+
+  for (const event of events) {
+    try {
+      liveSink.publishEvent(event);
+    } catch (error: unknown) {
+      console.error('[ai-agent-runtime] live sink 发布事件失败', {
+        runId: event.runId,
+        sequence: event.sequence,
+        error,
+      });
+    }
+  }
+}
+
+/** 发布终态事务中的事件与状态快照；事件先于快照进入 sink。 */
+function publishAiRuntimeLiveStopResult(
+  liveSink: AiRuntimeLiveSink | undefined,
+  threadId: string,
+  result: AiRuntimeRunStopResult,
+  failureCode: ApiErrorCode | null = null,
+): void {
+  publishAiRuntimeLiveEvents(liveSink, result.events);
+  if (!liveSink) {
+    return;
+  }
+
+  const statusEvent = result.events.findLast(
+    (event) => event.type === 'RUN_STATUS_CHANGED' && event.data.toStatus === result.status,
+  );
+  const cancellationReason = statusEvent?.type === 'RUN_STATUS_CHANGED' ? statusEvent.data.cancellationReason : null;
+  const failureReason = statusEvent?.type === 'RUN_STATUS_CHANGED' ? statusEvent.data.failureReason : null;
+  const status: AiPostStreamRunStatusData = {
+    runId: result.runId,
+    threadId,
+    status: result.status,
+    cancellationReason,
+    failureReason,
+    failureCode,
+    lastSequence: result.lastSequence ?? 0,
+  };
+
+  try {
+    liveSink.publishStatus(status);
+  } catch (error: unknown) {
+    console.error('[ai-agent-runtime] live sink 发布状态失败', {
+      runId: result.runId,
+      status: result.status,
+      error,
+    });
   }
 }
 
