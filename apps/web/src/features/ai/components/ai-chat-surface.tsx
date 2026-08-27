@@ -38,6 +38,9 @@ import { isAiRunActive } from '../utils/ai-event-reducer';
 const STREAMING_MESSAGE_ANIMATION = {
   // animation: 'fadeIn',
   // sep: 'char',
+  duration: 200,         // milliseconds (default: 150)
+  easing: "ease-out",    // CSS timing function (default: "ease")
+  sep: "word",
 } as const;
 
 /**
@@ -243,7 +246,11 @@ function AiConversationMessage({
           <>
             {toolParts.length > 0 ? <AiToolCallGroup parts={toolParts} /> : null}
             {message.content ? (
-              <MessageResponse animated={STREAMING_MESSAGE_ANIMATION} isAnimating={isStreaming}>
+              <MessageResponse 
+              animated={STREAMING_MESSAGE_ANIMATION} 
+              // animated={{ animation: "slideUp" }}
+              isAnimating={isStreaming}
+              >
                 {message.content}
               </MessageResponse>
             ) : null}
