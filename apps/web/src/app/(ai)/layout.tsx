@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 
 import WorkspaceLayout from '../(newroute)/layout';
 import { AiPostStreamProvider } from '@/features/ai/components/ai-post-stream-provider';
+import { AiThreadListProvider } from '@/features/ai/components/ai-thread-list-provider';
 
 /** AI 一级路由布局属性。 */
 type AiLayoutProps = Readonly<{
@@ -16,7 +17,9 @@ type AiLayoutProps = Readonly<{
 export default async function AiLayout({ children }: AiLayoutProps) {
   return (
     <WorkspaceLayout>
-      <AiPostStreamProvider>{children}</AiPostStreamProvider>
+      <AiThreadListProvider>
+        <AiPostStreamProvider>{children}</AiPostStreamProvider>
+      </AiThreadListProvider>
     </WorkspaceLayout>
   );
 }

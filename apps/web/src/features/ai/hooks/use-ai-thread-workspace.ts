@@ -20,10 +20,9 @@ import {
 import { subscribeToAiRunStream, type AiRunStreamStatus } from '../services/ai-thread-stream.service';
 import {
   getAiMessagePage,
-  getAiPinnedThreads,
   getAiThreadDetail,
-  getAiThreadPage,
 } from '../services/ai-thread-client.service';
+import { useAiThreadLists } from '../components/ai-thread-list-provider';
 import type {
   AiWorkspaceLoadState,
   AiWorkspaceQueuedMessage,
@@ -72,11 +71,8 @@ function useRouteThreadId(): string | undefined {
 export function useAiThreadWorkspace() {
   const router = useRouter();
   const threadId = useRouteThreadId();
+  const { pinnedThreads, recentThreads, listState, listError, refreshThreadLists } = useAiThreadLists();
   const requestVersionRef = useRef(0);
-  const [pinnedThreads, setPinnedThreads] = useState<AiThreadListItem[]>([]);
-  const [recentThreads, setRecentThreads] = useState<AiThreadListItem[]>([]);
-  const [listState, setListState] = useState<AiWorkspaceLoadState>('LOADING');
-  const [listError, setListError] = useState<string | null>(null);
   const [threadState, setThreadState] = useState<AiWorkspaceThreadState>(EMPTY_THREAD_STATE);
   const [threadLoadState, setThreadLoadState] = useState<AiWorkspaceLoadState>('IDLE');
   const [threadError, setThreadError] = useState<string | null>(null);
@@ -138,28 +134,6 @@ export function useAiThreadWorkspace() {
     }
   }, [threadId]);
 
-  /** 重新读取固定与最近会话列表，保证新建 Thread 能及时出现在侧栏。 */
-  const refreshThreadLists = useCallback(async (signal?: AbortSignal) => {
-    const controller = new AbortController();
-    const requestSignal = signal ?? controller.signal;
-    setListState('LOADING');
-    setListError(null);
-
-    try {
-      const [pinnedPage, recentPage] = await Promise.all([
-        getAiPinnedThreads(requestSignal),
-        getAiThreadPage({}, requestSignal),
-      ]);
-      setPinnedThreads(pinnedPage.items);
-      setRecentThreads(recentPage.items);
-      setListState('SUCCESS');
-    } catch (error: unknown) {
-      if (requestSignal.aborted) return;
-      setListState('ERROR');
-      setListError(toErrorMessage(error, 'AI 会话列表加载失败，请稍后重试'));
-    }
-  }, []);
-
   const metadata = useAiThreadMetadata({
     threadId,
     setThreadState,
@@ -204,14 +178,6 @@ export function useAiThreadWorkspace() {
     }
   }, [threadId, threadState.hasMoreMessages, threadState.messageCursor]);
 
-  /** 首次加载固定和最近列表；列表失败不影响深链接详情的加载。 */
-  useEffect(() => {
-    const controller = new AbortController();
-    queueMicrotask(() => void refreshThreadLists(controller.signal));
-
-    return () => controller.abort();
-  }, [refreshThreadLists]);
-
   /** 路由切换时并发加载详情与首屏消息，并拒绝旧请求写回当前工作区。 */
   useEffect(() => {
     const requestVersion = requestVersionRef.current + 1;
@@ -247,51 +213,55 @@ export function useAiThreadWorkspace() {
       setMessageLoadState('LOADING');
     });
 
-    void getAiThreadDetail(threadId, controller.signal)
-      .then((detail) => {
-        if (requestVersion !== requestVersionRef.current) return;
-        const currentRunEventState = runEventStateRef.current;
-        const preservesPostStream =
-          currentRunEventState !== null &&
-          (!detail.activeRun || detail.activeRun.runId === currentRunEventState.runId);
-        const nextRunEventState = preservesPostStream
-          ? currentRunEventState
-          : detail.activeRun
-            ? createAiEventReducerState(detail.activeRun.runId, { status: detail.activeRun.status })
-            : null;
-        runEventStateRef.current = nextRunEventState;
-        setRunEventState(nextRunEventState);
-        setThreadState((current) => {
-          const activeRun = preservesPostStream ? current.activeRun : detail.activeRun;
-          const thread = preservesPostStream && currentRunEventState
-            ? { ...detail, activeRunId: currentRunEventState.runId }
-            : detail;
-          return { ...current, thread, activeRun };
-        });
-        setThreadLoadState('SUCCESS');
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted || requestVersion !== requestVersionRef.current) return;
-        setThreadLoadState('ERROR');
-        setThreadError(toErrorMessage(error, 'AI 会话加载失败，请稍后重试'));
-      });
+    queueMicrotask(() => {
+      if (controller.signal.aborted || requestVersion !== requestVersionRef.current) return;
 
-    void getAiMessagePage(threadId, {}, controller.signal)
-      .then((page) => {
-        if (requestVersion !== requestVersionRef.current) return;
-        setThreadState((current) => ({
-          ...current,
-          messages: page.items,
-          messageCursor: page.nextCursor,
-          hasMoreMessages: page.hasMore,
-        }));
-        setMessageLoadState('SUCCESS');
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted || requestVersion !== requestVersionRef.current) return;
-        setMessageLoadState('ERROR');
-        setMessageError(toErrorMessage(error, 'AI 消息历史加载失败，请稍后重试'));
-      });
+      void getAiThreadDetail(threadId, controller.signal)
+        .then((detail) => {
+          if (requestVersion !== requestVersionRef.current) return;
+          const currentRunEventState = runEventStateRef.current;
+          const preservesPostStream =
+            currentRunEventState !== null &&
+            (!detail.activeRun || detail.activeRun.runId === currentRunEventState.runId);
+          const nextRunEventState = preservesPostStream
+            ? currentRunEventState
+            : detail.activeRun
+              ? createAiEventReducerState(detail.activeRun.runId, { status: detail.activeRun.status })
+              : null;
+          runEventStateRef.current = nextRunEventState;
+          setRunEventState(nextRunEventState);
+          setThreadState((current) => {
+            const activeRun = preservesPostStream ? current.activeRun : detail.activeRun;
+            const thread = preservesPostStream && currentRunEventState
+              ? { ...detail, activeRunId: currentRunEventState.runId }
+              : detail;
+            return { ...current, thread, activeRun };
+          });
+          setThreadLoadState('SUCCESS');
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted || requestVersion !== requestVersionRef.current) return;
+          setThreadLoadState('ERROR');
+          setThreadError(toErrorMessage(error, 'AI 会话加载失败，请稍后重试'));
+        });
+
+      void getAiMessagePage(threadId, {}, controller.signal)
+        .then((page) => {
+          if (requestVersion !== requestVersionRef.current) return;
+          setThreadState((current) => ({
+            ...current,
+            messages: page.items,
+            messageCursor: page.nextCursor,
+            hasMoreMessages: page.hasMore,
+          }));
+          setMessageLoadState('SUCCESS');
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted || requestVersion !== requestVersionRef.current) return;
+          setMessageLoadState('ERROR');
+          setMessageError(toErrorMessage(error, 'AI 消息历史加载失败，请稍后重试'));
+        });
+    });
 
     return () => controller.abort();
   }, [threadId]);

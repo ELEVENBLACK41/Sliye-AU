@@ -1,0 +1,87 @@
+/**
+ * 本文件维护 AI 工作区侧栏的固定会话和最近会话列表。
+ *
+ * Provider 挂在 AI 一级路由布局中，使会话列表跨 `/ai` 与 `/ai/:threadId`
+ * 的页面切换复用同一份客户端状态，避免点击历史会话时重复请求侧栏数据。
+ */
+'use client';
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { AiThreadListItem } from '@workspace/contracts/ai';
+
+import { getAiPinnedThreads, getAiThreadPage } from '../services/ai-thread-client.service';
+import type { AiWorkspaceLoadState } from '../types/ai-workspace';
+
+/** AI 侧栏列表 Provider 对外暴露的状态和刷新能力。 */
+type AiThreadListContextValue = {
+  /** 当前用户固定的会话列表。 */
+  pinnedThreads: AiThreadListItem[];
+  /** 当前用户未归档的最近会话列表。 */
+  recentThreads: AiThreadListItem[];
+  /** 固定和最近列表的加载状态。 */
+  listState: AiWorkspaceLoadState;
+  /** 固定和最近列表的加载错误。 */
+  listError: string | null;
+  /** 在创建或修改会话后刷新侧栏列表。 */
+  refreshThreadLists: (signal?: AbortSignal) => Promise<void>;
+};
+
+/** AI 侧栏列表上下文；必须由 `(ai)` 稳定布局中的 Provider 提供。 */
+const AiThreadListContext = createContext<AiThreadListContextValue | null>(null);
+
+/** 渲染跨 AI 页面路由复用的侧栏列表状态。 */
+export function AiThreadListProvider({ children }: { children: ReactNode }) {
+  const [pinnedThreads, setPinnedThreads] = useState<AiThreadListItem[]>([]);
+  const [recentThreads, setRecentThreads] = useState<AiThreadListItem[]>([]);
+  const [listState, setListState] = useState<AiWorkspaceLoadState>('LOADING');
+  const [listError, setListError] = useState<string | null>(null);
+
+  /** 读取固定和最近会话，并允许路由布局卸载时取消请求。 */
+  const refreshThreadLists = useCallback(async (signal?: AbortSignal) => {
+    const controller = new AbortController();
+    const requestSignal = signal ?? controller.signal;
+    setListState('LOADING');
+    setListError(null);
+
+    try {
+      const [pinnedPage, recentPage] = await Promise.all([
+        getAiPinnedThreads(requestSignal),
+        getAiThreadPage({}, requestSignal),
+      ]);
+      if (requestSignal.aborted) return;
+      setPinnedThreads(pinnedPage.items);
+      setRecentThreads(recentPage.items);
+      setListState('SUCCESS');
+    } catch (error: unknown) {
+      if (requestSignal.aborted) return;
+      setListState('ERROR');
+      setListError(error instanceof Error && error.message ? error.message : 'AI 会话列表加载失败，请稍后重试');
+    }
+  }, []);
+
+  /** 只在 AI 一级布局首次挂载时加载侧栏列表，路由切换不会重复触发。 */
+  useEffect(() => {
+    const controller = new AbortController();
+    queueMicrotask(() => void refreshThreadLists(controller.signal));
+
+    return () => controller.abort();
+  }, [refreshThreadLists]);
+
+  const value = useMemo(
+    () => ({ pinnedThreads, recentThreads, listState, listError, refreshThreadLists }),
+    [listError, listState, pinnedThreads, recentThreads, refreshThreadLists],
+  );
+
+  return <AiThreadListContext.Provider value={value}>{children}</AiThreadListContext.Provider>;
+}
+
+/** 读取 AI 工作区跨路由复用的侧栏列表状态。 */
+export function useAiThreadLists(): AiThreadListContextValue {
+  const context = useContext(AiThreadListContext);
+
+  if (!context) {
+    throw new Error('AiThreadListProvider 未挂载，无法读取 AI 会话列表');
+  }
+
+  return context;
+}
