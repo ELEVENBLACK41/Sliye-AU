@@ -204,7 +204,7 @@ const AI_LANGUAGE_ROLE_POLICIES: Record<
     fallbackModelIds: ['openai/gpt-5.4-mini'],
     budget: {
       totalMs: 45_000,
-      stepMs: 20_000,
+      stepMs: 30_000,
       chunkMs: 12_000,
       maxOutputTokens: 2_048,
       maxRetries: 1,

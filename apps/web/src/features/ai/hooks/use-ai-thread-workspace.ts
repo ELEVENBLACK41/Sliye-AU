@@ -179,23 +179,6 @@ export function useAiThreadWorkspace() {
     router.push('/ai');
   }, [router]);
 
-  /** 将发送、停止和重试命令接入当前 Thread 的统一状态入口。 */
-  const commands = useAiThreadCommands({
-    threadId,
-    threadState,
-    setThreadState,
-    runEventStateRef,
-    requestVersionRef,
-    updateRunEventState,
-    refreshCurrentThread,
-    refreshThreadLists,
-    setLocalQueuedMessages,
-    setPostStreamRunId,
-    setStreamError,
-    setStreamState,
-    setSteeringRunId,
-  });
-
   /** 使用当前游标补充更早消息，并保持服务端已定义的时间正序。 */
   const loadMoreMessages = useCallback(async () => {
     if (!threadId || !threadState.hasMoreMessages || !threadState.messageCursor) return;
@@ -267,12 +250,24 @@ export function useAiThreadWorkspace() {
     void getAiThreadDetail(threadId, controller.signal)
       .then((detail) => {
         if (requestVersion !== requestVersionRef.current) return;
-        const nextRunEventState = detail.activeRun
-          ? createAiEventReducerState(detail.activeRun.runId, { status: detail.activeRun.status })
-          : null;
+        const currentRunEventState = runEventStateRef.current;
+        const preservesPostStream =
+          currentRunEventState !== null &&
+          (!detail.activeRun || detail.activeRun.runId === currentRunEventState.runId);
+        const nextRunEventState = preservesPostStream
+          ? currentRunEventState
+          : detail.activeRun
+            ? createAiEventReducerState(detail.activeRun.runId, { status: detail.activeRun.status })
+            : null;
         runEventStateRef.current = nextRunEventState;
         setRunEventState(nextRunEventState);
-        setThreadState((current) => ({ ...current, thread: detail, activeRun: detail.activeRun }));
+        setThreadState((current) => {
+          const activeRun = preservesPostStream ? current.activeRun : detail.activeRun;
+          const thread = preservesPostStream && currentRunEventState
+            ? { ...detail, activeRunId: currentRunEventState.runId }
+            : detail;
+          return { ...current, thread, activeRun };
+        });
         setThreadLoadState('SUCCESS');
       })
       .catch((error: unknown) => {
@@ -300,6 +295,23 @@ export function useAiThreadWorkspace() {
 
     return () => controller.abort();
   }, [threadId]);
+
+  /** 将发送、停止和重试命令接入当前 Thread 的统一状态入口。 */
+  const commands = useAiThreadCommands({
+    threadId,
+    threadState,
+    setThreadState,
+    runEventStateRef,
+    requestVersionRef,
+    updateRunEventState,
+    refreshCurrentThread,
+    refreshThreadLists,
+    setLocalQueuedMessages,
+    setPostStreamRunId,
+    setStreamError,
+    setStreamState,
+    setSteeringRunId,
+  });
 
   /** 为当前详情中的活跃 Run 建立可恢复的标准领域 SSE 订阅。 */
   useEffect(() => {

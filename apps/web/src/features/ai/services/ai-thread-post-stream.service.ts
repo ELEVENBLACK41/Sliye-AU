@@ -13,6 +13,7 @@ import type {
   AiPostStreamRunStatusData,
   AiPostStreamSubmissionData,
   AiThreadMessageSubmissionResult,
+  CreateAiThreadRequest,
   CreateAiThreadMessageRequest,
 } from '@workspace/contracts/ai';
 import {
@@ -68,6 +69,23 @@ export function startAiThreadMessagePostStream(
   body: CreateAiThreadMessageRequest,
   handlers: AiThreadPostStreamHandlers = {},
 ): AiThreadPostStreamHandle {
+  return startAiPostStream(`/api/ai/threads/${encodeURIComponent(threadId)}/messages`, body, handlers);
+}
+
+/** 向新 Thread 提交首条消息并立即开始消费 POST SSE 响应。 */
+export function startAiThreadCreationPostStream(
+  body: CreateAiThreadRequest,
+  handlers: AiThreadPostStreamHandlers = {},
+): AiThreadPostStreamHandle {
+  return startAiPostStream('/api/ai/threads', body, handlers);
+}
+
+/** 请求指定 AI POST SSE 路径并统一消费其领域事件。 */
+function startAiPostStream(
+  url: string,
+  body: CreateAiThreadRequest | CreateAiThreadMessageRequest,
+  handlers: AiThreadPostStreamHandlers,
+): AiThreadPostStreamHandle {
   const abortController = new AbortController();
   let resolveSubmission!: (submission: AiThreadMessageSubmissionResult) => void;
   let rejectSubmission!: (error: unknown) => void;
@@ -80,7 +98,7 @@ export function startAiThreadMessagePostStream(
   /** 消费 POST SSE 响应并汇总恢复提示。 */
   async function consumeStream(): Promise<AiThreadPostStreamCompletion> {
     const response = await requestResponse(
-      `/api/ai/threads/${encodeURIComponent(threadId)}/messages`,
+      url,
       {
         method: 'POST',
         headers: {

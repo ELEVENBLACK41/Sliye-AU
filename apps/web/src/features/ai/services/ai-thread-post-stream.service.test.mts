@@ -12,7 +12,10 @@ import type {
   AiPostStreamSubmissionData,
 } from '@workspace/contracts/ai';
 
-import { startAiThreadMessagePostStream } from './ai-thread-post-stream.service.ts';
+import {
+  startAiThreadCreationPostStream,
+  startAiThreadMessagePostStream,
+} from './ai-thread-post-stream.service.ts';
 import { encodeAiPostStreamFrame } from '../utils/ai-post-stream-codec.ts';
 
 /** 创建一个立即执行 Run 的固定提交回执。 */
@@ -198,6 +201,31 @@ test('Transport 在响应头前收到 HTTP 错误时拒绝提交 Promise', async
       return error instanceof Error && error.message === 'AI 会话不存在或无权访问';
     });
     await assert.rejects(handle.completion);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('新会话 Transport 使用根 Thread 创建路径并保留同一 submission 协议', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = '';
+
+  globalThis.fetch = async (input) => {
+    requestUrl = String(input);
+    return createSseResponse([{ event: 'submission', data: createSubmission() }]);
+  };
+
+  try {
+    const handle = startAiThreadCreationPostStream({
+      message: '创建会话',
+      idempotencyKey: 'request-4',
+    });
+    const submission = await handle.submission;
+    const completion = await handle.completion;
+
+    assert.equal(requestUrl, '/api/ai/threads');
+    assert.equal(submission.threadId, 'thread-1');
+    assert.equal(completion.handoff, null);
   } finally {
     globalThis.fetch = originalFetch;
   }
