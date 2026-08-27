@@ -4,10 +4,16 @@
  * sink 只负责把已经提交的事件和状态快照交给当前订阅者，不参与权限、持久化
  * 或 Run 状态机。每个 sink 使用有界队列，慢订阅者只会被关闭，不会反向阻塞模型执行。
  */
-import type { AiEvent, AiPostStreamRunStatusData } from '@workspace/contracts/ai';
+import type { AiEvent, AiPostStreamLiveDeltaData, AiPostStreamRunStatusData } from '@workspace/contracts/ai';
 
 /** Runtime live sink 可以向订阅者发布的消息。 */
 export type AiRuntimeLiveSinkMessage =
+  | {
+      /** 模型即时增量消息。 */
+      kind: 'LIVE_DELTA';
+      /** 未经数据库批处理、按模型实际到达节奏产生的增量。 */
+      liveDelta: AiPostStreamLiveDeltaData;
+    }
   | {
       /** 已提交的领域事件消息。 */
       kind: 'AI_EVENT';
@@ -41,6 +47,8 @@ export type AiRuntimeLiveSinkOptions = {
 
 /** 由 Runtime 使用的、具备有界缓冲的 live sink。 */
 export type AiRuntimeLiveSink = {
+  /** 发布一条模型即时增量；方法不会等待慢订阅者。 */
+  publishLiveDelta: (liveDelta: AiPostStreamLiveDeltaData) => void;
   /** 发布一条已提交领域事件；方法不会等待慢订阅者。 */
   publishEvent: (event: AiEvent) => void;
   /** 发布一条状态快照；方法不会等待慢订阅者。 */
@@ -115,6 +123,7 @@ export function createAiRuntimeLiveSink(options: AiRuntimeLiveSinkOptions): AiRu
   }
 
   return {
+    publishLiveDelta: (liveDelta) => enqueue({ kind: 'LIVE_DELTA', liveDelta }),
     publishEvent: (event) => enqueue({ kind: 'AI_EVENT', event }),
     publishStatus: (status) => enqueue({ kind: 'RUN_STATUS', status }),
     close,

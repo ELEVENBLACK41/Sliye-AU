@@ -1,6 +1,6 @@
 # NextNest AI 第二阶段 2.7 补充计划：GPT 式 POST 直出流与持久化恢复双通道改造
 
-> 文档状态：v0.4，2.7-A～C 已完成，D～I 待后续逐步执行
+> 文档状态：v0.6，2.7-A 已按 UI-first 修订、B 已完成，C 按新方案调整中，D～I 暂缓
 > 创建日期：2026-08-26  
 > 归属阶段：AI 第二阶段补充增量 2.7  
 > 上位基线：`AI第二阶段实施计划-2026-08-25.md`  
@@ -19,7 +19,7 @@
 当前活跃页面
   POST /api/ai/threads 或 POST /api/ai/threads/:threadId/messages
     -> 创建/提交消息与 Run
-    -> 同一个 POST 响应持续返回已确认的模型增量和 Run 事件
+     -> 同一个 POST 响应立即返回模型实际产生的 live delta 和 Run 事件
     -> 浏览器立即渲染
 
 持久化与恢复
@@ -41,7 +41,7 @@
 ```text
 AI SDK textStream
   -> Runtime 累积文本
-  -> 达到 120 字符或 400ms 后写入 AiEvent
+   -> 达到 120 字符或 400ms 后写入 AiEvent
   -> BFF 每 400ms 查询一次 NestJS 事件接口
   -> GET SSE 推送给浏览器
   -> reducer 合并文本
@@ -90,7 +90,8 @@ AI SDK textStream
 
 - 新会话首发和已有会话发送都由原 POST 请求直接返回实时事件；
 - 主路径不再依赖 400ms 数据库轮询才能显示文本；
-- 当前页面收到已确认增量后立即更新现有消息画布；
+- 当前页面收到模型实际产生的 live delta 后立即更新现有消息画布；
+- live delta 与数据库持久化事件通过稳定 `liveDeltaId + liveSequence` 关联，持久化回执不能导致正文重复渲染；
 - 浏览器断开只关闭当前订阅，不取消或终止正在执行的 Run；
 - 刷新、深链接、其他标签页和直出流中断后，仍可使用现有 `runId + afterSequence` 恢复；
 - PostgreSQL 继续是 Thread、Message、Run、Event、工具、来源和终态的权威状态；
@@ -123,38 +124,40 @@ AI SDK textStream
 | 事件 | 用途 | 是否需要持久化序号 |
 | --- | --- | --- |
 | `submission` | 返回 `threadId`、`messageId`、`runId`、投递状态和队列位置 | 否，来源是幂等提交结果 |
-| `ai-event` | 返回已提交的 `AiEvent`，文本、工具和状态继续复用现有 reducer | 是，必须携带 `runId + sequence` |
+| `live-delta` | 返回模型刚产生的原始文本增量，当前页面立即渲染 | 否，使用 `runId + liveSequence + liveDeltaId` |
+| `ai-event` | 返回已提交的 `AiEvent`；文本事件带对应 `liveDeltaId`，作为持久化确认和恢复来源 | 是，必须携带 `runId + sequence` |
 | `run-status` | 返回当前 Run 快照与最后确认序号 | 使用最后确认 `sequence` |
 | `stream-handoff` | 提示客户端主 POST 流结束并切换到 GET 恢复流 | 携带 `runId + afterSequence` |
 | `stream-error` | 返回已开始流之后无法再使用 JSON 外壳表达的稳定错误 | 尽可能携带业务错误码和 requestId |
 
 ### 4.2 持久化优先级
 
-本计划默认采用“提交后立即推送”的可靠模式：
+本计划调整为“UI-first、异步持久化”的体验优先模式：
 
 ```text
 模型 delta
-  -> 进入较小的文本批次
-  -> NestJS 事务写入 AiEvent 并分配 sequence
-  -> Runtime 获得已提交事件回执
-  -> 立即写入当前 POST 响应
+  -> 生成 liveDeltaId + liveSequence
+  -> 立即写入当前 POST 响应，浏览器按实际 delta 渲染
+  -> 进入当前 Run 的有界持久化队列
+  -> 异步批量写入 AiEvent，并携带同一 liveDeltaId
 ```
 
-该模式相较于“先给浏览器、稍后再写库”多一次内部提交延迟，但有三个重要收益：
+该模式相较于“提交后再推送”减少了模型到页面的内部提交延迟，但需要明确接受并控制异步持久化窗口：
 
-- 用户已经看到的文本一定具备可恢复的持久化事件；
-- 直出流和 GET 恢复流天然使用同一 `runId + sequence` 去重；
-- 进程崩溃、路由切换和多标签页不会出现“屏幕上看过、刷新后消失”的正文。
+- 页面展示不再被数据库写入和轮询周期控制；
+- live delta 与持久化 `AiEvent` 通过稳定标识关联，恢复时可以去重；
+- Run 结束前必须等待持久化队列冲刷完成；冲刷失败不得把 Run 标记为正常完成。
 
-第一版先移除固定 400ms 轮询，不同时引入“未提交瞬时事件”协议。只有在测量证明内部提交仍无法达到目标体验时，再单独评审 UI-first 双写和去重标识，不在本计划中预埋复杂分支。
+`40/100` 不再控制前端展示，只能作为持久化队列的批量参数候选；`live-delta` 不等待数据库提交。进程崩溃前尚未落库的短暂增量属于本方案必须显式处理的风险，不能继续用“已提交事件优先”的描述掩盖。
 
 ### 4.3 Runtime 与浏览器断开解耦
 
 - Runtime 的 `AbortController` 只响应用户停止、租约失效和服务端超时；
 - POST 响应断开只注销当前 live sink，不调用模型 abort；
-- live sink 写入失败不得让 Run 失败，也不得阻塞后续持久化；
-- Runtime 继续执行、续租、写库并收敛终态；
+- live sink 写入失败不得让 Run 失败；持久化队列仍由 Runtime 继续处理；
+- 持久化队列异步运行但必须有界，Run 终态前要完成最后冲刷并报告持久化失败；
 - 浏览器重连时使用最后确认 `sequence` 进入现有 GET SSE；
+- 直出流断开恢复时，以最后持久化 `sequence` 补拉，并用 `liveDeltaId` 过滤已经展示过的 live delta；
 - 慢客户端必须有有界缓冲；超过上限时关闭 live sink 并发送或记录 handoff，不能通过背压拖慢模型和事务。
 
 ### 4.4 新会话路由切换
@@ -201,13 +204,14 @@ AI SDK textStream
 
 ### 2.7-A：冻结直出流协议与基准
 
-状态：✅ 已完成。
+状态：🔁 已完成并按 UI-first 方案修订。
 
 目标：只定义协议、性能基准和失败语义，不改变运行行为。
 
 主要工作：
 
 - 在 `@workspace/contracts/ai` 新增 POST 流事件联合类型、提交元数据和 handoff 结构；
+- 增加 `live-delta` 及其 `liveDeltaId/liveSequence` 关联字段，区分即时展示与持久化确认；
 - 明确哪些错误发生在响应头前、哪些错误只能作为 `stream-error` 事件；
 - 明确 `submission`、`ai-event`、`run-status` 的顺序与重复规则；
 - 增加纯协议编解码测试；
@@ -219,7 +223,7 @@ AI SDK textStream
 
 完成标志：客户端和服务端对每一种帧、终态、断线和重放行为没有未决歧义。
 
-实现记录：新增 `@workspace/contracts/ai` 的五类 POST 直出流帧联合、提交元数据、Run 状态、handoff 和流错误结构；新增支持任意 chunk 边界的纯 SSE 编解码器及 Node 回归测试；在独立基线文档中冻结响应头前后的错误边界、帧顺序/重复规则，并记录当前 Runtime `120` 字符/`400ms` 批处理与 GET SSE `400ms` 轮询的测量口径。本轮未修改 Route Handler、Runtime、NestJS、Prisma 或现有 GET SSE。
+实现记录：原有协议已在 2026-08-27 冻结；根据老大确认的 UI-first 方案，本次修订新增 `live-delta` 帧、持久化文本事件的 `liveDeltaId/liveSequence` 关联字段，并明确 live delta 立即展示、`AiEvent` 异步确认、恢复按持久化序号补拉和稳定标识去重。原改造前基线文档继续作为历史对照，不把 `40/100` 当作前端渲染阈值。
 
 ### 2.7-B：让 NestJS 返回已提交事件回执
 
@@ -242,27 +246,28 @@ AI SDK textStream
 
 实现记录：新增共享 Runtime 回执字段，文本增量接口在事务提交后返回完整 `AiEvent`；工具开始、工具结束和 Run 终态接口返回本次事务新提交的事件数组与最后序号；公共停止接口继续剥离内部事件，避免向浏览器暴露工具审计数据。新增/调整持久化与工具回归断言，逐字段核对回执和 PostgreSQL 记录一致。本轮未修改事件表、序号分配、租约 fencing、Route Handler 或 GET SSE，未进入 2.7-C。
 
-### 2.7-C：抽离 Runtime live sink
+### 2.7-C：抽离 Runtime live sink 与异步持久化队列
 
-状态：✅ 已完成。
+状态：🟡 基础 sink 已完成，UI-first 协议已冻结，异步持久化队列待实现。
 
-目标：让 Runtime 可以选择性地把已提交事件发布给当前订阅者，同时在没有订阅者时保持原行为。
+目标：让 Runtime 把模型实际产生的 live delta 立即发布给当前订阅者，同时异步持久化，不让数据库批次控制前端渲染；在没有订阅者时保持后台执行行为。
 
 主要工作：
 
 - 为 `startAiAgentRun` / `runAiAgentExecution` 增加可选、单职责的 live sink；
-- sink 只接收已提交事件和状态快照，不参与权限和持久化；
+- sink 接收 live delta、已提交事件和状态快照，不参与权限和持久化；
 - sink 关闭、超时或写入失败不影响模型执行和终态收敛；
 - 设置有界缓冲和慢消费者策略；
-- 调小文本提交批次到待测范围，例如 24～40 字符或 80～120ms，并把最终值建立在基准测试上，不直接写死为文档示例值。
+- 新增按 Run 串行的异步持久化队列；前端 live delta 不等待队列冲刷，终态前必须等待最后一批持久化完成；
+- `40/100` 只作为持久化队列的测量候选，不得作为前端 live delta 的聚合阈值。
 
 不做：不接浏览器，不删除当前轮询 SSE。
 
 验证：Mock 模型测试覆盖事件顺序、sink 断开、慢消费者、无 sink 后台执行和最终正文一致性。
 
-完成标志：Runtime 在测试中能够边执行边发布权威事件，且发布通道故障不会改变 Run 结果。
+完成标志：Runtime 在测试中能够按模型实际 delta 边执行边发布；持久化在后台有序完成，直出与恢复不重复，发布通道或持久化失败均按既定语义收敛。
 
-实现记录：新增进程内 `AiRuntimeLiveSink`，以串行异步写出和有界队列承载已提交事件/状态快照；慢消费者超过缓冲上限、订阅主动关闭或写入器失败时只关闭当前 sink，不阻塞模型、租约、数据库事务和终态收敛。`startAiAgentRun` / `runAiAgentExecution` 增加可选 sink，文本回执、工具回执和终态回执按持久化顺序发布，终态再发布状态快照；无 sink 时保留原后台执行路径。Runtime 文本批次调整为初始 `40` 字符或 `100ms`，后续性能门禁仍以实测结果复核。本轮未接入浏览器、不修改 Route Handler、GET SSE 或数据库。
+实现记录：原 C 基础已新增进程内有界 `AiRuntimeLiveSink`，支持订阅关闭、慢消费者和写入失败隔离；本次按 UI-first 方案修订协议，新增 `live-delta` 即时帧、`liveDeltaId/liveSequence` 稳定关联和“持久化 `ai-event` 作为确认/恢复来源”的规则。当前 sink 已具备承载即时帧的消息形状，但 Runtime 尚未切换为即时发布，按 Run 串行异步持久化队列和终态前冲刷留待本增量后续实现。原 `40/100` 仅保留为持久化候选参数，不能控制前端展示。本轮暂不进入 2.7-D。
 
 ### 2.7-D：已有 Thread 的 POST 直出流
 
@@ -272,7 +277,7 @@ AI SDK textStream
 
 - `POST /api/ai/threads/:threadId/messages` 根据 Accept 或受控 feature flag 返回 SSE 格式的流式响应；
 - 先完成 NestJS 幂等提交，再返回 `submission`；
-- 有新 Run 时把 live sink 连接到当前 POST 响应；进入队列时返回提交结果后关闭；
+- 有新 Run 时把 live sink 连接到当前 POST 响应，优先消费 `live-delta`；进入队列时返回提交结果后关闭；
 - Route Handler 注册可等待的 Runtime Promise，保证客户端断开后执行仍由当前单实例 Node 进程托管；
 - 保留原 JSON 响应模式用于回滚和兼容。
 
@@ -446,7 +451,7 @@ AI SDK textStream
 
 ### 10.3 数据库写入仍造成延迟
 
-应对：第一版先删除轮询层并调小提交批次；测量后再决定是否需要 UI-first 双写。不得未经评审直接让未持久化文本成为用户可见权威内容。
+应对：UI-first 下 live delta 可以先于数据库可见，但必须带稳定 `liveDeltaId/liveSequence`；持久化队列按 Run 串行、有界并在终态前冲刷，失败时不得把 Run 标记为正常完成。恢复流只使用已提交 `AiEvent`，并按稳定标识去重。
 
 ### 10.4 慢客户端向 Runtime 反压
 
@@ -462,7 +467,7 @@ AI SDK textStream
 
 ### 10.7 旧路径与新路径状态漂移
 
-应对：两条传输只消费同一份 `AiEvent` 和 Run 快照；现有 reducer 继续按 `runId + sequence` 去重；feature flag 灰度期间执行双路径一致性测试。
+应对：live delta 与持久化 `AiEvent` 使用同一 `liveDeltaId` 关联；前端先渲染 live delta，收到确认事件后只确认不重复追加，恢复流继续按 `runId + sequence` 补拉。feature flag 灰度期间执行双路径一致性测试。
 
 ---
 
@@ -479,11 +484,12 @@ AI SDK textStream
 
 ## 12. 待老大确认的方案决策
 
-- [ ] D2.7-01：同意采用“POST 直出为主、GET SSE 负责恢复”的双通道方案；
-- [ ] D2.7-02：同意保留现有领域事件协议，不直接迁移到 `useChat()` 默认协议；
-- [ ] D2.7-03：同意第一版采用“事件提交成功后立即推送”，优先保证用户可见内容可恢复；
-- [ ] D2.7-04：同意第二阶段继续保持单实例 Node Runtime，不在本轮引入 Redis 或消息队列；
-- [ ] D2.7-05：同意增加 feature flag，并在完整验收前保留旧 JSON + GET SSE 路径；
-- [ ] D2.7-06：同意按 2.7-A～I 每轮只实施一个最小步骤，每步完成后停下等待检查。
+- [x] D2.7-01：同意采用“POST 直出为主、GET SSE 负责恢复”的双通道方案；
+- [x] D2.7-02：同意保留现有领域事件协议，不直接迁移到 `useChat()` 默认协议；
+- [x] D2.7-03：同意采用 UI-first：模型 delta 先通过 POST 直出，`AiEvent` 异步持久化并作为恢复确认来源；
+- [x] D2.7-04：同意第二阶段继续保持单实例 Node Runtime，不在本轮引入 Redis 或消息队列；
+- [x] D2.7-05：同意增加 feature flag，并在完整验收前保留旧 JSON + GET SSE 路径；
+- [x] D2.7-06：同意按 2.7-A～I 每轮只实施一个最小步骤，每步完成后停下等待检查；
+- [x] D2.7-07：同意使用 `liveDeltaId + liveSequence` 关联即时增量与持久化事件，恢复按持久化 `sequence` 补拉并去重。
 
 老大确认以上决策后，从 **2.7-A：冻结直出流协议与基准** 开始执行，不自动进入后续步骤。

@@ -47,6 +47,14 @@ test('live sink 按发布顺序写出事件和状态，并允许主动关闭', a
     onClose: (reason) => closeReasons.push(reason),
   });
 
+  sink.publishLiveDelta({
+    threadId: 'thread-1',
+    runId: 'run-1',
+    messageId: 'assistant-1',
+    liveDeltaId: 'delta-1',
+    liveSequence: 1,
+    delta: '片段-1',
+  });
   sink.publishEvent(createEvent(1));
   sink.publishStatus({
     runId: 'run-1',
@@ -61,14 +69,14 @@ test('live sink 按发布顺序写出事件和状态，并允许主动关闭', a
 
   assert.deepEqual(
     messages.map((message) => message.kind),
-    ['AI_EVENT', 'RUN_STATUS'],
+    ['LIVE_DELTA', 'AI_EVENT', 'RUN_STATUS'],
   );
   sink.close();
   sink.publishEvent(createEvent(2));
   await waitForDrain();
 
   assert.deepEqual(closeReasons, ['CLIENT_DISCONNECTED']);
-  assert.equal(messages.length, 2);
+  assert.equal(messages.length, 3);
 });
 
 test('慢消费者超过有界缓冲后被关闭，Runtime 发布调用不被阻塞', async () => {

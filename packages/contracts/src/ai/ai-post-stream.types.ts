@@ -1,8 +1,8 @@
 /**
  * 本文件定义 AI Thread POST 直出流的共享帧协议。
  *
- * 直出流只承载已经提交或已经持久化确认的结果；Thread、Message、Run 与
- * AiEvent 的领域语义仍由既有契约负责，恢复仍使用 GET SSE。
+ * 直出流区分模型产生的即时 live delta 与已经持久化确认的领域事件；Thread、
+ * Message、Run 与 AiEvent 的领域语义仍由既有契约负责，恢复仍使用 GET SSE。
  */
 
 import type { ApiErrorCode } from '../common/api-response.ts';
@@ -13,6 +13,7 @@ import type { AiRunCancellationReason, AiRunFailureReason, AiRunStatus } from '.
 /** POST 直出流允许出现的命名事件。 */
 export const AI_POST_STREAM_EVENT_NAMES = [
   'submission',
+  'live-delta',
   'ai-event',
   'run-status',
   'stream-handoff',
@@ -48,11 +49,35 @@ export type AiPostStreamSubmissionFrame = {
   data: AiPostStreamSubmissionData;
 };
 
+/** 模型增量即时发送给当前浏览器的 UI-first 负载。 */
+export type AiPostStreamLiveDeltaData = {
+  /** 本次增量所属的 Thread 标识。 */
+  threadId: string;
+  /** 本次增量所属的 Run 标识。 */
+  runId: string;
+  /** 当前增量所属的助手消息标识。 */
+  messageId: string;
+  /** 由 Runtime 为本次增量生成、用于和后续持久化事件关联的稳定标识。 */
+  liveDeltaId: string;
+  /** 单个 Run 内按模型增量产生顺序递增的序号。 */
+  liveSequence: number;
+  /** 模型本次实际产生的非空文本增量，不经过字符数或定时器聚合。 */
+  delta: string;
+};
+
+/** POST 直出流中的即时模型增量帧；它不是数据库恢复的权威事件。 */
+export type AiPostStreamLiveDeltaFrame = {
+  /** SSE 命名事件名称。 */
+  event: 'live-delta';
+  /** 即时模型增量负载。 */
+  data: AiPostStreamLiveDeltaData;
+};
+
 /** POST 直出流中的已提交领域事件帧。 */
 export type AiPostStreamAiEventFrame = {
   /** SSE 命名事件名称。 */
   event: 'ai-event';
-  /** 与 GET 恢复流使用同一份持久化领域事件。 */
+  /** 与 GET 恢复流使用同一份持久化领域事件；文本事件应带对应 `liveDeltaId`。 */
   data: AiEvent;
 };
 
@@ -83,10 +108,7 @@ export type AiPostStreamRunStatusFrame = {
 };
 
 /** 直出流结束后交给 GET 恢复流使用的原因。 */
-export type AiPostStreamHandoffReason =
-  | 'POST_STREAM_COMPLETED'
-  | 'LIVE_SINK_CLOSED'
-  | 'RECOVERY_REQUIRED';
+export type AiPostStreamHandoffReason = 'POST_STREAM_COMPLETED' | 'LIVE_SINK_CLOSED' | 'RECOVERY_REQUIRED';
 
 /** POST 直出流切换到 GET `afterSequence` 恢复流所需的游标结构。 */
 export type AiPostStreamHandoffData = {
@@ -129,6 +151,7 @@ export type AiPostStreamErrorFrame = {
 /** POST 直出流的完整可发送帧联合。 */
 export type AiPostStreamFrame =
   | AiPostStreamSubmissionFrame
+  | AiPostStreamLiveDeltaFrame
   | AiPostStreamAiEventFrame
   | AiPostStreamRunStatusFrame
   | AiPostStreamHandoffFrame

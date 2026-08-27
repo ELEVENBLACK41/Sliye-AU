@@ -13,7 +13,7 @@ import {
   encodeAiPostStreamFrame,
 } from './ai-post-stream-codec.ts';
 
-/** 构造一组覆盖五类协议帧的固定测试数据。 */
+/** 构造一组覆盖六类协议帧的固定测试数据。 */
 function createFrames(): AiPostStreamFrame[] {
   return [
     {
@@ -26,6 +26,17 @@ function createFrames(): AiPostStreamFrame[] {
         queueSequence: 1,
         submissionMode: 'NORMAL',
         replayed: false,
+      },
+    },
+    {
+      event: 'live-delta',
+      data: {
+        threadId: 'thread-1',
+        runId: 'run-1',
+        messageId: 'assistant-1',
+        liveDeltaId: 'delta-1',
+        liveSequence: 1,
+        delta: '第一行\n第二行',
       },
     },
     {
@@ -71,7 +82,7 @@ function createFrames(): AiPostStreamFrame[] {
   ];
 }
 
-test('POST 直出流五类帧可以编码并按任意 chunk 边界解码', () => {
+test('POST 直出流六类帧可以编码并按任意 chunk 边界解码', () => {
   const frames = createFrames();
   const encoded = frames.map(encodeAiPostStreamFrame).join('');
   const decoder = createAiPostStreamDecoder();
@@ -87,7 +98,7 @@ test('POST 直出流五类帧可以编码并按任意 chunk 边界解码', () =>
 
 test('解码器支持 CRLF 与单个 data 字段中的 JSON 换行转义', () => {
   const decoder = createAiPostStreamDecoder();
-  const encoded = encodeAiPostStreamFrame(createFrames()[1]).replace(/\n/g, '\r\n');
+  const encoded = encodeAiPostStreamFrame(createFrames()[2]).replace(/\n/g, '\r\n');
 
   assert.deepEqual(decoder.push(encoded), [
     {
