@@ -72,9 +72,19 @@ export async function startAiAgentRun(runId: string, liveSink?: AiRuntimeLiveSin
   }
 }
 
-/** 串行领取并执行当前 Run 及其终态事务释放出的后续排队 Run。 */
+/** 领取并执行当前 Run；直出流结束后把后继排队 Run 交回无订阅者的后台链。 */
 export async function runAiAgentExecution(runId: string, liveSink?: AiRuntimeLiveSink): Promise<void> {
-  await runAiRunChain(runId, claimAiRuntimeSession, (session) => executeClaimedSession(session, liveSink));
+  await runAiRunChain(runId, claimAiRuntimeSession, async (session) => {
+    const nextRunId = await executeClaimedSession(session, liveSink);
+
+    if (liveSink && nextRunId) {
+      // 一条 POST 直出流只拥有当前 Run，后继 Run 重新走后台链，避免不同回答串流。
+      void startAiAgentRun(nextRunId);
+      return null;
+    }
+
+    return nextRunId;
+  });
 }
 
 /** 执行一次已领取的会话，并返回终态事务领取到的下一个 Run 标识。 */

@@ -1,6 +1,6 @@
 # NextNest AI 第二阶段 2.7 补充计划：GPT 式 POST 直出流与持久化恢复双通道改造
 
-> 文档状态：v0.8，2.7-A 已按 UI-first 修订、B～C 已完成，D～I 待后续执行
+> 文档状态：v0.9，2.7-A 已按 UI-first 修订、B～D 已完成，E～I 待后续执行
 > 创建日期：2026-08-26  
 > 归属阶段：AI 第二阶段补充增量 2.7  
 > 上位基线：`AI第二阶段实施计划-2026-08-25.md`  
@@ -271,6 +271,8 @@ AI SDK textStream
 
 ### 2.7-D：已有 Thread 的 POST 直出流
 
+状态：✅ 已完成。
+
 目标：先在没有路由创建问题的已有 Thread 上贯通最小真实闭环。
 
 主要工作：
@@ -286,6 +288,8 @@ AI SDK textStream
 验证：Route Handler 流测试、重复幂等键测试、断开后 Run 继续完成、响应头前后错误路径测试。
 
 完成标志：已有会话可以通过一个 POST 接收实时文本，且数据库历史和 GET SSE 补拉结果一致。
+
+实现记录：`POST /api/ai/threads/:threadId/messages` 现在在调用方声明 `Accept: text/event-stream` 时，先复用既有 NestJS 幂等提交并发送 `submission`，再把当前 Run 的 `live-delta`、持久化 `ai-event`、终态 `run-status` 和 `stream-handoff` 通过同一条 SSE 响应返回；不带该 Accept 时保留原 JSON + `after()` 兼容路径。新增 POST 响应桥和流生命周期测试，客户端断开只关闭当前 sink，已注册的 Runtime Promise 仍由 `after()` 等待；直出流只消费当前 Run，后继排队 Run 交回无订阅者后台链，避免一条 POST 串入下一条回答。未修改 NestJS、Prisma、GET SSE、新会话路由或 UI。
 
 ### 2.7-E：浏览器 POST Stream Transport
 
@@ -492,4 +496,4 @@ AI SDK textStream
 - [x] D2.7-06：同意按 2.7-A～I 每轮只实施一个最小步骤，每步完成后停下等待检查；
 - [x] D2.7-07：同意使用 `liveDeltaId + liveSequence` 关联即时增量与持久化事件，恢复按持久化 `sequence` 补拉并去重。
 
-老大确认以上决策后，从 **2.7-A：冻结直出流协议与基准** 开始执行，不自动进入后续步骤。
+2.7-D 已完成，下一轮从 **2.7-E：浏览器 POST Stream Transport** 开始；不自动进入后续步骤。

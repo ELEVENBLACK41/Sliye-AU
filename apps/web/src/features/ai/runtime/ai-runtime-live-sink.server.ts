@@ -55,6 +55,8 @@ export type AiRuntimeLiveSink = {
   publishStatus: (status: AiPostStreamRunStatusData) => void;
   /** 主动关闭当前订阅并丢弃尚未写出的排队消息。 */
   close: (reason?: AiRuntimeLiveSinkCloseReason) => void;
+  /** 等待当前 sink 已接受的消息全部完成写出。 */
+  waitForIdle: () => Promise<void>;
 };
 
 /** 创建一个隔离于单次 POST 订阅的有界 live sink。 */
@@ -63,6 +65,11 @@ export function createAiRuntimeLiveSink(options: AiRuntimeLiveSinkOptions): AiRu
   const bufferedMessages: AiRuntimeLiveSinkMessage[] = [];
   let closed = false;
   let draining = false;
+  let drainPromise: Promise<void> | null = null;
+  let resolveClosed!: () => void;
+  const closedPromise = new Promise<void>((resolve) => {
+    resolveClosed = resolve;
+  });
 
   /** 关闭 sink 并通知上层；重复关闭不会重复触发回调。 */
   function close(reason: AiRuntimeLiveSinkCloseReason = 'CLIENT_DISCONNECTED'): void {
@@ -72,6 +79,7 @@ export function createAiRuntimeLiveSink(options: AiRuntimeLiveSinkOptions): AiRu
 
     closed = true;
     bufferedMessages.length = 0;
+    resolveClosed();
 
     try {
       options.onClose?.(reason);
@@ -96,29 +104,42 @@ export function createAiRuntimeLiveSink(options: AiRuntimeLiveSinkOptions): AiRu
   }
 
   /** 串行写出队列；写入失败只关闭当前 sink，不影响 Runtime。 */
-  async function drain(): Promise<void> {
+  function drain(): Promise<void> {
     if (draining || closed) {
-      return;
+      return drainPromise ?? Promise.resolve();
     }
 
     draining = true;
 
-    try {
-      while (!closed && bufferedMessages.length > 0) {
-        const message = bufferedMessages.shift();
-        if (!message) {
-          return;
-        }
+    drainPromise = (async () => {
+      try {
+        while (!closed && bufferedMessages.length > 0) {
+          const message = bufferedMessages.shift();
+          if (!message) {
+            return;
+          }
 
-        try {
-          await options.write(message);
-        } catch {
-          close('WRITER_FAILED');
-          return;
+          try {
+            await options.write(message);
+          } catch {
+            close('WRITER_FAILED');
+            return;
+          }
         }
+      } finally {
+        draining = false;
       }
-    } finally {
-      draining = false;
+    })().finally(() => {
+      drainPromise = null;
+    });
+
+    return drainPromise;
+  }
+
+  /** 等待已经进入 sink 的消息完成写出，供终态关闭前冲刷响应。 */
+  async function waitForIdle(): Promise<void> {
+    while (drainPromise && !closed) {
+      await Promise.race([drainPromise, closedPromise]);
     }
   }
 
@@ -127,5 +148,6 @@ export function createAiRuntimeLiveSink(options: AiRuntimeLiveSinkOptions): AiRu
     publishEvent: (event) => enqueue({ kind: 'AI_EVENT', event }),
     publishStatus: (status) => enqueue({ kind: 'RUN_STATUS', status }),
     close,
+    waitForIdle,
   };
 }
