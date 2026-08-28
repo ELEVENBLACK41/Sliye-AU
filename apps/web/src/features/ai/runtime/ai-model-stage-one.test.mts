@@ -38,6 +38,7 @@ const MOCK_V4_USAGE = {
 test('五种角色应完整登记，standard 默认使用低成本 Nano 并只向 Mini 回退', () => {
   const snapshot = getAiModelRegistrySnapshot({});
   const standard = getAiLanguageModelConfiguration('standard', {});
+  const deepReview = getAiLanguageModelConfiguration('deepReview', {});
 
   assert.deepEqual(Object.keys(snapshot).sort(), ['deepReview', 'embedding', 'reranker', 'router', 'standard']);
   assert.equal(standard.primary.modelId, 'openai/gpt-5.4-nano');
@@ -46,7 +47,20 @@ test('五种角色应完整登记，standard 默认使用低成本 Nano 并只�
     ['openai/gpt-5.4-mini'],
   );
   assert.equal(standard.primary.supportsTools, true);
-  assert.equal(standard.budget.maxOutputTokens, 2_048);
+  assert.deepEqual(standard.budget, {
+    totalMs: 240_000,
+    stepMs: 180_000,
+    chunkMs: 30_000,
+    maxOutputTokens: 8_192,
+    maxRetries: 1,
+  });
+  assert.deepEqual(deepReview.budget, {
+    totalMs: 270_000,
+    stepMs: 240_000,
+    chunkMs: 60_000,
+    maxOutputTokens: 16_384,
+    maxRetries: 1,
+  });
 });
 
 test('环境变量只能切换到已登记且类型匹配的模型', () => {

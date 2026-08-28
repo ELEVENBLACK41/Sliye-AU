@@ -10,6 +10,7 @@ import { toAiWorkspaceMessages } from '../utils/ai-workspace-message';
 
 /** 渲染由 URL 驱动的 AI Thread 工作区，并连接真实 Thread 命令。 */
 export function AiWorkspace() {
+  // hooks/useAiThreadWorkspace 负责在 URL threadId 变化时加载 Thread 数据，并提供对 Thread 的操作方法。
   const workspace = useAiThreadWorkspace();
   const sidebarData = {
     pinnedThreads: workspace.pinnedThreads,
