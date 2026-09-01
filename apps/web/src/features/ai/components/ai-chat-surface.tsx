@@ -254,7 +254,9 @@ function AiConversationMessage({
                 {message.content}
               </MessageResponse>
             ) : null}
-            {hasAssistantText ? <AiCitationList /> : null}
+            {/*引用显示组件*/}
+
+            {hasAssistantText ? <AiCitationList /> : null}  
           </>
         )}
         <AiRunStatusNotice status={message.run?.status ?? null} runId={message.run?.runId ?? null} onRetry={onRetry} />
