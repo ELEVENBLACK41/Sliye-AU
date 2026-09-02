@@ -11,6 +11,8 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type {
   AiEvent,
+  AiRuntimeToolCallStartResult,
+  AiRuntimeToolExecutionResult,
   AiRuntimeRunStopResult,
   AiRuntimeSession,
 } from '@workspace/contracts/ai';
@@ -139,6 +141,59 @@ export class AiRuntimeSessionService {
     );
 
     return this.toolInvocationService.invokeTool(executionContext, request);
+  }
+
+  /** 由官方 onToolExecutionStart 创建或重放工具审计记录，业务查询尚未发生。 */
+  async startToolCall(
+    runId: string,
+    executionLeaseId: string,
+    request: AiToolInvocationRequest,
+  ): Promise<AiRuntimeToolCallStartResult> {
+    const executionContext = await this.loadToolExecutionContext(
+      runId,
+      executionLeaseId,
+    );
+
+    return this.toolInvocationService.startToolInvocation(
+      executionContext,
+      request,
+    );
+  }
+
+  /** 由工具 execute 函数执行已登记调用，实时权限和发现约束仍在 NestJS 复核。 */
+  async executeToolCall(
+    runId: string,
+    executionLeaseId: string,
+    request: AiToolInvocationRequest,
+  ): Promise<AiRuntimeToolExecutionResult> {
+    const executionContext = await this.loadToolExecutionContext(
+      runId,
+      executionLeaseId,
+    );
+
+    return this.toolInvocationService.executeStartedTool(
+      executionContext,
+      request,
+    );
+  }
+
+  /** 由官方 onToolExecutionEnd 按真实耗时收敛工具摘要和来源依赖。 */
+  async settleToolCall(
+    runId: string,
+    executionLeaseId: string,
+    execution: AiRuntimeToolExecutionResult,
+    durationMs: number,
+  ): Promise<void> {
+    const executionContext = await this.loadToolExecutionContext(
+      runId,
+      executionLeaseId,
+    );
+
+    await this.toolInvocationService.settleStartedTool(
+      executionContext,
+      execution,
+      durationMs,
+    );
   }
 
   /** 将 Run 收敛为完成或失败终态，并在同一事务写入助手 UIMessage 与用量。 */

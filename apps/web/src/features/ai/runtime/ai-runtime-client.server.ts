@@ -10,6 +10,8 @@ import type {
   AiRuntimeReconciliationResult,
   AiRuntimeRunStopResult,
   AiRuntimeSession,
+  AiRuntimeToolCallStartResult,
+  AiRuntimeToolExecutionResult,
   AiRuntimeToolInvocationResult,
 } from '@workspace/contracts/ai';
 
@@ -130,6 +132,66 @@ export async function invokeAiRuntimeTool(input: {
     providerToolCallId: input.providerToolCallId,
     toolName: input.toolName,
     input: input.toolInput,
+  });
+}
+
+/** 在 AI SDK 官方 onToolExecutionStart 回调中创建或重放工具审计记录。 */
+export async function startAiRuntimeToolCall(input: {
+  runId: string;
+  executionLeaseId: string;
+  providerToolCallId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+}): Promise<AiRuntimeToolCallStartResult> {
+  return callRuntime<AiRuntimeToolCallStartResult>(
+    `/${input.runId}/tool-calls/start`,
+    {
+      executionLeaseId: input.executionLeaseId,
+      providerToolCallId: input.providerToolCallId,
+      toolName: input.toolName,
+      input: input.toolInput,
+    },
+  );
+}
+
+/** 在 AI SDK 工具 execute 阶段请求 NestJS 执行已登记的受限业务查询。 */
+export async function executeAiRuntimeToolCall(input: {
+  runId: string;
+  executionLeaseId: string;
+  providerToolCallId: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+}): Promise<AiRuntimeToolExecutionResult> {
+  return callRuntime<AiRuntimeToolExecutionResult>(
+    `/${input.runId}/tool-calls/execute`,
+    {
+      executionLeaseId: input.executionLeaseId,
+      providerToolCallId: input.providerToolCallId,
+      toolName: input.toolName,
+      input: input.toolInput,
+    },
+  );
+}
+
+/** 在 AI SDK 官方 onToolExecutionEnd 回调中收敛工具摘要、来源与真实耗时。 */
+export async function settleAiRuntimeToolCall(input: {
+  runId: string;
+  executionLeaseId: string;
+  execution: AiRuntimeToolExecutionResult;
+  durationMs: number;
+}): Promise<void> {
+  const { runId, execution, ...body } = input;
+  await callRuntime<void>(`/${runId}/tool-calls/settle`, {
+    executionLeaseId: body.executionLeaseId,
+    toolCallId: execution.toolCallId,
+    status: execution.status,
+    ...(execution.status === 'SUCCEEDED'
+      ? { output: execution.output, sources: execution.sources }
+      : {
+          failureCode: execution.failureCode,
+          failureReason: execution.failureReason,
+        }),
+    durationMs: body.durationMs,
   });
 }
 

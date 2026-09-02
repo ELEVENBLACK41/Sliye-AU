@@ -10,6 +10,8 @@ import {
   type GenerateTextOnStepEndCallback,
   type InferAgentUIMessage,
   type LanguageModel,
+  type OnToolExecutionEndCallback,
+  type OnToolExecutionStartCallback,
 } from 'ai';
 
 import { DECISION_HUB_AGENT_INSTRUCTIONS } from './decision-hub-agent.ts';
@@ -73,6 +75,16 @@ export type NextNestWorkspaceAgentRuntimeContext = {
 
 /** 官方 Agent lifecycle 回调；消息持久化仍由 UI Message Stream 的 onEnd 负责。 */
 export type NextNestWorkspaceAgentLifecycle = {
+  /** 每个工具 execute 开始前登记稳定审计记录，供后续结果与 UI part 对齐。 */
+  onToolExecutionStart?: OnToolExecutionStartCallback<{
+    findDecisionCandidates: ReturnType<typeof createFindDecisionCandidatesTool>;
+    getDecisionContext: ReturnType<typeof createGetDecisionContextTool>;
+  }>;
+  /** 每个工具 execute 结束后按 AI SDK 的真实耗时收敛审计结果与来源。 */
+  onToolExecutionEnd?: OnToolExecutionEndCallback<{
+    findDecisionCandidates: ReturnType<typeof createFindDecisionCandidatesTool>;
+    getDecisionContext: ReturnType<typeof createGetDecisionContextTool>;
+  }>;
   /** 每个模型步骤完成后接收受控模型、用量、终止原因和工具调用标识。 */
   onStepEnd?: GenerateTextOnStepEndCallback<
     {
@@ -113,6 +125,8 @@ export function createNextNestWorkspaceAgentCore(options: NextNestWorkspaceAgent
     maxRetries: options.modelSettings.maxRetries, // 失败请求的重试次数 默认2
     providerOptions: options.modelSettings.providerOptions,//额外的服务商专用配置
     timeout: options.modelSettings.timeout,
+    onToolExecutionStart: options.lifecycle?.onToolExecutionStart,
+    onToolExecutionEnd: options.lifecycle?.onToolExecutionEnd,
     onStepEnd: options.lifecycle?.onStepEnd,
     onEnd: options.lifecycle?.onEnd,
     runtimeContext: { //用户自定义的共享运行时上下文对象

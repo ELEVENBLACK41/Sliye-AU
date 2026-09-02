@@ -127,6 +127,78 @@ export type AiRuntimeToolInvocationResult =
       events: AiEvent[];
     };
 
+/** 一次工具执行实际读取的最小来源标识；不包含正文、凭据或权限上下文。 */
+export type AiRuntimeToolSource = {
+  /** 来源所属的受控业务类型。 */
+  sourceType: 'DECISION' | 'DECISION_RESOLUTION';
+  /** 来源在自身业务表中的稳定主键。 */
+  sourceId: string;
+  /** 已授权调用时可展示的来源名称快照。 */
+  label: string;
+};
+
+/** 官方工具生命周期开始时创建或重放的受控审计记录。 */
+export type AiRuntimeToolCallStartResult =
+  | {
+      /** 当前调用已新建审计记录，后续允许执行受控业务查询。 */
+      state: 'CREATED';
+      /** 新建工具调用记录的数据库标识。 */
+      toolCallId: string;
+    }
+  | {
+      /** 同一 provider 工具调用已成功，可直接重放受控摘要。 */
+      state: 'REPLAY_SUCCEEDED';
+      /** 既有工具调用记录的数据库标识。 */
+      toolCallId: string;
+      /** 可安全交回模型的既有窄输出摘要。 */
+      output: unknown;
+    }
+  | {
+      /** 同一 provider 工具调用已失败，可直接重放稳定失败。 */
+      state: 'REPLAY_FAILED';
+      /** 既有工具调用记录的数据库标识。 */
+      toolCallId: string;
+      /** 稳定业务错误码。 */
+      failureCode: ApiErrorCode;
+      /** 可安全交回模型的失败说明。 */
+      failureReason: string;
+    }
+  | {
+      /** 既有成功输出已截断，不能把截断标记伪装成真实结果。 */
+      state: 'REPLAY_UNAVAILABLE';
+      /** 既有工具调用记录的数据库标识。 */
+      toolCallId: string;
+    }
+  | {
+      /** 相同调用仍在执行，不允许并发发起第二次业务查询。 */
+      state: 'IN_PROGRESS';
+      /** 既有工具调用记录的数据库标识。 */
+      toolCallId: string;
+    };
+
+/** 工具执行阶段返回给官方 lifecycle 结束回调的受控结果。 */
+export type AiRuntimeToolExecutionResult =
+  | {
+      /** 业务查询成功，来源在 lifecycle 结束时统一登记。 */
+      status: 'SUCCEEDED';
+      /** 已在生命周期开始阶段创建的工具调用记录标识。 */
+      toolCallId: string;
+      /** 可安全交回模型的窄业务输出。 */
+      output: unknown;
+      /** 本次查询实际读取的来源，供历史失权判定使用。 */
+      sources: AiRuntimeToolSource[];
+    }
+  | {
+      /** 业务查询被拒绝或执行失败。 */
+      status: 'FAILED';
+      /** 已在生命周期开始阶段创建的工具调用记录标识。 */
+      toolCallId: string;
+      /** 稳定业务错误码。 */
+      failureCode: ApiErrorCode;
+      /** 可安全交回模型的失败说明。 */
+      failureReason: string;
+    };
+
 /** Run 进入终态后的内部响应。 */
 export type AiRuntimeRunStopResult = {
   /** 已收敛的 Run 标识。 */

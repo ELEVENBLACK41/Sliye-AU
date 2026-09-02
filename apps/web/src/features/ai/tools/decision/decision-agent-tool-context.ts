@@ -3,7 +3,6 @@
  * 上下文不会进入模型消息；真正的用户权限仍由 NestJS 根据 Run 重新计算。
  */
 
-import type { AiRuntimeToolInvocationResult } from '@workspace/contracts/ai';
 import { z } from 'zod';
 
 /** AI SDK 工具执行时需要的当前 Run 和租约上下文。 */
@@ -32,7 +31,22 @@ export type NextNestWorkspaceToolInvocationInput = {
 /** 官方工具适配器使用的 NestJS 工具调用函数类型。 */
 export type NextNestWorkspaceToolInvoker = (
   input: NextNestWorkspaceToolInvocationInput,
-) => Promise<AiRuntimeToolInvocationResult>;
+) => Promise<NextNestWorkspaceToolInvocationResult>;
+
+/** 工具 execute 阶段交回模型所需的最小受控结果；审计细节由 lifecycle 回调处理。 */
+export type NextNestWorkspaceToolInvocationResult =
+  | {
+      /** 业务查询成功。 */
+      status: 'SUCCEEDED';
+      /** 允许交回模型的窄输出。 */
+      output: unknown;
+    }
+  | {
+      /** 业务查询被拒绝或执行失败。 */
+      status: 'FAILED';
+      /** 可以安全交回模型的失败说明。 */
+      failureReason: string;
+    };
 
 /** 交回模型的稳定工具结果外壳；失败时只携带服务端允许披露的说明。 */
 export type NextNestWorkspaceToolResult =
@@ -41,7 +55,7 @@ export type NextNestWorkspaceToolResult =
 
 /** 把 NestJS 工具执行回执转换为 AI SDK 工具的模型可见结果。 */
 export function toNextNestWorkspaceToolResult(
-  result: AiRuntimeToolInvocationResult,
+  result: NextNestWorkspaceToolInvocationResult,
 ): NextNestWorkspaceToolResult {
   if (result.status === 'SUCCEEDED') {
     return { ok: true, data: result.output };

@@ -8,7 +8,11 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { AiRuntimeToolInvocationResult } from '@workspace/contracts/ai';
+import type {
+  AiRuntimeToolCallStartResult,
+  AiRuntimeToolExecutionResult,
+  AiRuntimeToolInvocationResult,
+} from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../common/exceptions/business.exception';
@@ -111,8 +115,102 @@ export class AiToolInvocationService {
         events: [],
       };
     }
-    const { toolCallId } = started;
+    const execution = await this.executeRegisteredTool(
+      executionContext,
+      request,
+      started.toolCallId,
+    );
+    const settledEvent = await this.settleExecution(
+      executionContext,
+      execution,
+      Date.now() - startedAt,
+    );
 
+    return execution.status === 'SUCCEEDED'
+      ? {
+          status: 'SUCCEEDED',
+          toolCallId: execution.toolCallId,
+          output: execution.output,
+          events: [started.event, ...(settledEvent ? [settledEvent] : [])],
+        }
+      : {
+          status: 'FAILED',
+          toolCallId: execution.toolCallId,
+          failureCode: execution.failureCode,
+          failureReason: execution.failureReason,
+          events: [started.event, ...(settledEvent ? [settledEvent] : [])],
+        };
+  }
+
+  /** 在官方工具 lifecycle 开始时创建或重放受控 AiToolCall 审计记录。 */
+  async startToolInvocation(
+    executionContext: AiToolExecutionContext,
+    request: AiToolInvocationRequest,
+  ): Promise<AiRuntimeToolCallStartResult> {
+    const started = await this.toolCallService.startToolCall({
+      runId: executionContext.runId,
+      executionLeaseId: executionContext.executionLeaseId,
+      providerToolCallId: request.providerToolCallId,
+      toolName: request.toolName,
+      input: request.input as Prisma.InputJsonValue,
+    });
+
+    if (started.state === 'CREATED') {
+      return { state: 'CREATED', toolCallId: started.toolCallId };
+    }
+    if (started.state === 'REPLAY_SUCCEEDED') {
+      return {
+        state: 'REPLAY_SUCCEEDED',
+        toolCallId: started.toolCallId,
+        output: started.output,
+      };
+    }
+    if (started.state === 'REPLAY_FAILED') {
+      return {
+        state: 'REPLAY_FAILED',
+        toolCallId: started.toolCallId,
+        failureCode: started.failureCode,
+        failureReason: started.failureReason,
+      };
+    }
+    if (started.state === 'REPLAY_UNAVAILABLE') {
+      return { state: 'REPLAY_UNAVAILABLE', toolCallId: started.toolCallId };
+    }
+
+    return { state: 'IN_PROGRESS', toolCallId: started.toolCallId };
+  }
+
+  /** 在官方工具 execute 阶段执行已登记调用；此处不落终态，交由 lifecycle 结束回调收敛。 */
+  async executeStartedTool(
+    executionContext: AiToolExecutionContext,
+    request: AiToolInvocationRequest,
+  ): Promise<AiRuntimeToolExecutionResult> {
+    const toolCallId = await this.toolCallService.assertRunningToolCall({
+      runId: executionContext.runId,
+      executionLeaseId: executionContext.executionLeaseId,
+      providerToolCallId: request.providerToolCallId,
+      toolName: request.toolName,
+      input: request.input as Prisma.InputJsonValue,
+    });
+
+    return this.executeRegisteredTool(executionContext, request, toolCallId);
+  }
+
+  /** 在官方工具 lifecycle 结束时写入最终摘要、来源依赖与结束事件。 */
+  async settleStartedTool(
+    executionContext: AiToolExecutionContext,
+    execution: AiRuntimeToolExecutionResult,
+    durationMs: number,
+  ): Promise<void> {
+    await this.settleExecution(executionContext, execution, durationMs);
+  }
+
+  /** 执行已持久化工具调用的业务查询，并把业务异常转换为安全结果。 */
+  private async executeRegisteredTool(
+    executionContext: AiToolExecutionContext,
+    request: AiToolInvocationRequest,
+    toolCallId: string,
+  ): Promise<AiRuntimeToolExecutionResult> {
     try {
       const descriptor = this.resolveDescriptor(request.toolName);
       await this.assertDiscoveredTarget(
@@ -125,41 +223,43 @@ export class AiToolInvocationService {
         executionContext,
         request.input,
       );
-      const settledEvent = await this.settle(executionContext, {
-        toolCallId,
-        status: 'SUCCEEDED',
-        outputSummary: toAiToolOutputSummary(result.output),
-        failureCode: null,
-        failureReason: null,
-        sources: result.sources,
-        durationMs: Date.now() - startedAt,
-      });
 
       return {
         status: 'SUCCEEDED',
         toolCallId,
         output: result.output,
-        events: [started.event, ...(settledEvent ? [settledEvent] : [])],
+        sources: [...result.sources],
       };
     } catch (error) {
-      const failure = this.toFailure(error);
-      const settledEvent = await this.settle(executionContext, {
-        toolCallId,
-        status: 'FAILED',
-        outputSummary: null,
-        failureCode: failure.failureCode,
-        failureReason: failure.failureReason,
-        sources: [],
-        durationMs: Date.now() - startedAt,
-      });
-
-      return {
-        status: 'FAILED',
-        toolCallId,
-        ...failure,
-        events: [started.event, ...(settledEvent ? [settledEvent] : [])],
-      };
+      return { status: 'FAILED', toolCallId, ...this.toFailure(error) };
     }
+  }
+
+  /** 将已执行的工具结果转换为受控摘要、来源依赖和工具结束事件。 */
+  private async settleExecution(
+    executionContext: AiToolExecutionContext,
+    execution: AiRuntimeToolExecutionResult,
+    durationMs: number,
+  ): Promise<import('@workspace/contracts/ai').AiEvent | null> {
+    return execution.status === 'SUCCEEDED'
+      ? this.settle(executionContext, {
+          toolCallId: execution.toolCallId,
+          status: 'SUCCEEDED',
+          outputSummary: toAiToolOutputSummary(execution.output),
+          failureCode: null,
+          failureReason: null,
+          sources: execution.sources,
+          durationMs,
+        })
+      : this.settle(executionContext, {
+          toolCallId: execution.toolCallId,
+          status: 'FAILED',
+          outputSummary: null,
+          failureCode: execution.failureCode,
+          failureReason: execution.failureReason,
+          sources: [],
+          durationMs,
+        });
   }
 
   /** 解析已注册工具描述；未注册名称一律拒绝，不降级为自由查询。 */

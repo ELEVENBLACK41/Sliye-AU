@@ -13,6 +13,8 @@ import type {
   AiMessageHistoryItem,
   AiMessagePage,
   AiRuntimeSession,
+  AiRuntimeToolCallStartResult,
+  AiRuntimeToolExecutionResult,
   AiThreadDetail,
   AiThreadMessageSubmissionResult,
 } from '@workspace/contracts/ai';
@@ -30,10 +32,17 @@ import { normalizeAiModelError } from '@/features/ai/runtime/ai-model-error';
 import {
   claimAiRuntimeSession,
   completeAiRuntimeRun,
+  executeAiRuntimeToolCall,
   recordAiRuntimeStep,
+  settleAiRuntimeToolCall,
+  startAiRuntimeToolCall,
 } from '@/features/ai/runtime/ai-runtime-client.server';
 import { requestNest, type NestResponse } from '@/services/bff-request';
 import { estimateAiLanguageModelCostUsd } from './ai-model-registry.ts';
+import type {
+  NextNestWorkspaceToolInvocationResult,
+  NextNestWorkspaceToolInvoker,
+} from '../tools/decision/decision-agent-tool-context.ts';
 
 /** C2 Spike 接收的已通过 Route 基础校验的请求数据。 */
 export type AiAgentSpikeInput = {
@@ -86,16 +95,130 @@ type AiAgentLifecycleState = {
   hasUnknownCost: boolean;
 };
 
+/** 一项 AI SDK 工具调用在开始、执行和结束回调之间暂存的受控状态。 */
+type AiAgentToolLifecycleCall = {
+  start: AiRuntimeToolCallStartResult;
+  execution?: AiRuntimeToolExecutionResult;
+  settled: boolean;
+};
+
+/** 官方工具 lifecycle 向工具 execute 函数提供的受控执行器与回调。 */
+type AiAgentToolLifecycle = {
+  invokeTool: NextNestWorkspaceToolInvoker;
+  callbacks: Pick<
+    NextNestWorkspaceAgentLifecycle,
+    'onToolExecutionStart' | 'onToolExecutionEnd'
+  >;
+};
+
+/** 创建 C5 工具 lifecycle：开始建审计、execute 只查业务、结束按 SDK 耗时收敛来源。 */
+function createAiAgentToolLifecycle(input: {
+  runId: string;
+  executionLeaseId: string;
+}): AiAgentToolLifecycle {
+  const calls = new Map<string, AiAgentToolLifecycleCall>();
+
+  return {
+    invokeTool: async (request) => {
+      const pending = calls.get(request.providerToolCallId);
+      if (!pending) {
+        return {
+          status: 'FAILED',
+          failureReason: '工具审计初始化失败，无法执行查询。',
+        } satisfies NextNestWorkspaceToolInvocationResult;
+      }
+      if (pending.start.state !== 'CREATED') {
+        return toWorkspaceToolInvocationResult(pending.start);
+      }
+      pending.execution ??= await executeAiRuntimeToolCall(request);
+
+      return toWorkspaceToolInvocationResult(pending.execution);
+    },
+    callbacks: {
+      onToolExecutionStart: async ({ toolCall }) => {
+        const start = await startAiRuntimeToolCall({
+          runId: input.runId,
+          executionLeaseId: input.executionLeaseId,
+          providerToolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          toolInput: toolCall.input as Record<string, unknown>,
+        });
+        calls.set(toolCall.toolCallId, { start, settled: false });
+      },
+      onToolExecutionEnd: async ({ toolCall, toolExecutionMs }) => {
+        const pending = calls.get(toolCall.toolCallId);
+        if (!pending || pending.start.state !== 'CREATED' || pending.settled) {
+          return;
+        }
+
+        const execution =
+          pending.execution ??
+          ({
+            status: 'FAILED',
+            toolCallId: pending.start.toolCallId,
+            failureCode: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
+            failureReason: '工具适配器未返回可持久化结果。',
+          } satisfies AiRuntimeToolExecutionResult);
+        try {
+          await settleAiRuntimeToolCall({
+            runId: input.runId,
+            executionLeaseId: input.executionLeaseId,
+            execution,
+            durationMs: Math.max(0, Math.round(toolExecutionMs)),
+          });
+          pending.settled = true;
+        } catch (error) {
+          console.error('[ai-agent-spike] Agent lifecycle 工具审计写入失败', {
+            runId: input.runId,
+            providerToolCallId: toolCall.toolCallId,
+            error,
+          });
+        }
+      },
+    },
+  };
+}
+
+/** 将 lifecycle 开始或执行阶段的结果压缩为工具 execute 可以安全交回模型的结构。 */
+function toWorkspaceToolInvocationResult(
+  result: AiRuntimeToolCallStartResult | AiRuntimeToolExecutionResult,
+): NextNestWorkspaceToolInvocationResult {
+  if ('state' in result) {
+    if (result.state === 'REPLAY_SUCCEEDED') {
+      return { status: 'SUCCEEDED', output: result.output };
+    }
+    if (result.state === 'REPLAY_FAILED') {
+      return { status: 'FAILED', failureReason: result.failureReason };
+    }
+
+    return {
+      status: 'FAILED',
+      failureReason:
+        result.state === 'REPLAY_UNAVAILABLE'
+          ? '上一次调用的结果无法完整重放，请重新发起查询。'
+          : '相同工具调用仍在处理中，请勿重复执行。',
+    };
+  }
+
+  return result.status === 'SUCCEEDED'
+    ? { status: 'SUCCEEDED', output: result.output }
+    : { status: 'FAILED', failureReason: result.failureReason };
+}
+
 /** 创建官方 Agent lifecycle 回调，并把每步记录与最终聚合保持在同一份运行摘要内。 */
 function createAiAgentLifecycle(input: {
   runId: string;
   executionLeaseId: string;
-}): { state: AiAgentLifecycleState; callbacks: NextNestWorkspaceAgentLifecycle } {
+}, toolCallbacks: AiAgentToolLifecycle['callbacks']): {
+  state: AiAgentLifecycleState;
+  callbacks: NextNestWorkspaceAgentLifecycle;
+} {
   const state: AiAgentLifecycleState = { hasUnknownCost: false };
 
   return {
     state,
     callbacks: {
+      ...toolCallbacks,
       onStepEnd: async (step) => {
         const finishedAt = new Date();
         const usage = normalizeAiAgentUsage(step.usage);
@@ -278,10 +401,14 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
     });
   }
 
-  const lifecycle = createAiAgentLifecycle({
+  const toolLifecycle = createAiAgentToolLifecycle({
     runId: session.execution.runId,
     executionLeaseId: session.execution.executionLeaseId,
   });
+  const lifecycle = createAiAgentLifecycle({
+    runId: session.execution.runId,
+    executionLeaseId: session.execution.executionLeaseId,
+  }, toolLifecycle.callbacks);
   let agent: ReturnType<typeof createNextNestWorkspaceAgent>;
 
   try {
@@ -291,6 +418,7 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
       runId: session.execution.runId,
       executionLeaseId: session.execution.executionLeaseId,
       modelRole: session.execution.modelRole,
+      invokeTool: toolLifecycle.invokeTool,
       lifecycle: lifecycle.callbacks,
     });
   } catch (error) {

@@ -124,6 +124,52 @@ export class AiToolCallService {
     }
   }
 
+  /** 确认官方 lifecycle 已为当前工具建立仍可执行的审计记录，避免跳过开始回调直接查询业务数据。 */
+  async assertRunningToolCall(input: StartAiToolCallInput): Promise<string> {
+    return this.prisma.$transaction(async (transaction) => {
+      await this.executionLeaseService.assertActiveExecutionLeaseInTransaction(
+        transaction,
+        { runId: input.runId, executionLeaseId: input.executionLeaseId },
+      );
+      const toolCall = await transaction.aiToolCall.findUnique({
+        where: {
+          runId_providerToolCallId: {
+            runId: input.runId,
+            providerToolCallId: input.providerToolCallId,
+          },
+        },
+        select: { id: true, toolName: true, input: true, status: true },
+      });
+      if (!toolCall) {
+        throw new BusinessException({
+          code: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
+          message: '工具审计记录尚未建立，不能执行查询。',
+          status: HttpStatus.CONFLICT,
+        });
+      }
+      if (
+        toolCall.toolName !== input.toolName ||
+        createAiJsonFingerprint(toolCall.input) !==
+          createAiJsonFingerprint(input.input)
+      ) {
+        throw new BusinessException({
+          code: API_ERROR_CODES.AI_IDEMPOTENCY_CONFLICT,
+          message: '相同工具调用标识对应了不同的工具或输入',
+          status: HttpStatus.CONFLICT,
+        });
+      }
+      if (toolCall.status !== AiToolCallStatus.RUNNING) {
+        throw new BusinessException({
+          code: API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
+          message: '工具调用已结束，不能重复执行。',
+          status: HttpStatus.CONFLICT,
+        });
+      }
+
+      return toolCall.id;
+    });
+  }
+
   /** 在校验执行租约后结束一次工具调用：写入结果摘要、登记来源并追加结束事件。 */
   async settleToolCall(input: SettleAiToolCallInput): Promise<AiEvent | null> {
     return this.prisma.$transaction(async (transaction) => {

@@ -74,6 +74,11 @@ test('官方 Agent 应串联唯一候选与决策上下文，并传递受控工�
     finishReason: string;
     toolCallIds: string[];
   }> = [];
+  const lifecycleToolCalls: Array<{
+    phase: 'STARTED' | 'ENDED';
+    toolCallId: string;
+    toolName: string;
+  }> = [];
   let lifecycleUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined;
   let observedRuntimeContext: NextNestWorkspaceAgentRuntimeContext | undefined;
   const invokeTool: NextNestWorkspaceToolInvoker = async (input) => {
@@ -124,6 +129,20 @@ test('官方 Agent 应串联唯一候选与决策上下文，并传递受控工�
     },
     invokeTool,
     lifecycle: {
+      onToolExecutionStart: ({ toolCall }) => {
+        lifecycleToolCalls.push({
+          phase: 'STARTED',
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+        });
+      },
+      onToolExecutionEnd: ({ toolCall }) => {
+        lifecycleToolCalls.push({
+          phase: 'ENDED',
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+        });
+      },
       onStepEnd: ({ stepNumber, model, finishReason, toolCalls }) => {
         lifecycleSteps.push({
           sequence: stepNumber + 1,
@@ -167,6 +186,28 @@ test('官方 Agent 应串联唯一候选与决策上下文，并传递受控工�
       modelId: 'c1-unique-model',
       finishReason: 'stop',
       toolCallIds: [],
+    },
+  ]);
+  assert.deepEqual(lifecycleToolCalls, [
+    {
+      phase: 'STARTED',
+      toolCallId: 'find-1',
+      toolName: 'findDecisionCandidates',
+    },
+    {
+      phase: 'ENDED',
+      toolCallId: 'find-1',
+      toolName: 'findDecisionCandidates',
+    },
+    {
+      phase: 'STARTED',
+      toolCallId: 'context-1',
+      toolName: 'getDecisionContext',
+    },
+    {
+      phase: 'ENDED',
+      toolCallId: 'context-1',
+      toolName: 'getDecisionContext',
     },
   ]);
   assert.deepEqual(lifecycleUsage, {

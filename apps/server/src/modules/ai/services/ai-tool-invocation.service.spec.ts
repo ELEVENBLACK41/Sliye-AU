@@ -123,12 +123,14 @@ describe('AiToolInvocationService', () => {
       },
     );
     const settleToolCall = jest.fn().mockResolvedValue(null);
+    const assertRunningToolCall = jest.fn().mockResolvedValue('tool-call-1');
     const listSucceededDiscoveryCalls = jest
       .fn()
       .mockResolvedValue(options.discoveries ?? []);
     const toolCallService = {
       startToolCall,
       settleToolCall,
+      assertRunningToolCall,
       listSucceededDiscoveryCalls,
     } as unknown as AiToolCallService;
 
@@ -163,6 +165,7 @@ describe('AiToolInvocationService', () => {
       ]),
       startToolCall,
       settleToolCall,
+      assertRunningToolCall,
       listSucceededDiscoveryCalls,
       execute,
     };
@@ -184,6 +187,51 @@ describe('AiToolInvocationService', () => {
     expect(startToolCall).toHaveBeenCalledTimes(1);
     expect(settleToolCall).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'FAILED', sources: [] }),
+    );
+  });
+
+  it('官方工具 lifecycle 分别创建审计、执行受限查询并按结束回调收敛来源', async () => {
+    const { service, startToolCall, assertRunningToolCall, settleToolCall, execute } =
+      createService({
+        discoveries: [{ toolCallId: 'tool-call-0', candidateIdentifiers: [17] }],
+      });
+    const request = {
+      providerToolCallId: 'call-lifecycle-1',
+      toolName: 'getDecisionContext',
+      input: { decisionId: 17 },
+    };
+
+    await expect(
+      service.startToolInvocation(EXECUTION_CONTEXT, request),
+    ).resolves.toEqual({ state: 'CREATED', toolCallId: 'tool-call-1' });
+    const execution = await service.executeStartedTool(
+      EXECUTION_CONTEXT,
+      request,
+    );
+    expect(execution).toEqual({
+      status: 'SUCCEEDED',
+      toolCallId: 'tool-call-1',
+      output: { decisionId: 17 },
+      sources: [
+        { sourceType: 'DECISION', sourceId: '17', label: '缓存方案评审' },
+      ],
+    });
+    await service.settleStartedTool(EXECUTION_CONTEXT, execution, 25);
+
+    expect(startToolCall).toHaveBeenCalledTimes(1);
+    expect(assertRunningToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({ providerToolCallId: 'call-lifecycle-1' }),
+    );
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(settleToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCallId: 'tool-call-1',
+        status: 'SUCCEEDED',
+        durationMs: 25,
+        sources: [
+          { sourceType: 'DECISION', sourceId: '17', label: '缓存方案评审' },
+        ],
+      }),
     );
   });
 

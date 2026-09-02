@@ -41,6 +41,9 @@ const MAX_ASSISTANT_PARTS = 256;
 /** 单个模型步骤允许关联的最大工具调用数量。 */
 const MAX_TOOL_CALLS_PER_STEP = 20;
 
+/** 一次工具调用允许登记的最大来源数量。 */
+const MAX_TOOL_SOURCES_PER_CALL = 100;
+
 /** 全部内部执行接口共用的租约凭据。 */
 export class AiRuntimeLeaseDto {
   /** 领取 Run 时签发、只有当前执行器持有的租约标识。 */
@@ -173,6 +176,84 @@ export class InvokeAiToolDto extends AiRuntimeLeaseDto {
   @ApiProperty({ type: Object })
   @IsObject()
   input!: Record<string, unknown>;
+}
+
+/** 官方工具 lifecycle 开始回调登记 AiToolCall 时使用的内部请求。 */
+export class StartAiToolCallDto extends InvokeAiToolDto {}
+
+/** 官方工具 execute 阶段读取受限业务数据时使用的内部请求。 */
+export class ExecuteAiToolDto extends InvokeAiToolDto {}
+
+/** 工具执行实际读取的一条受控来源标识。 */
+export class AiToolSourceDto {
+  /** 来源所属的受控业务类型。 */
+  @ApiProperty({ enum: ['DECISION', 'DECISION_RESOLUTION'] })
+  @IsIn(['DECISION', 'DECISION_RESOLUTION'])
+  sourceType!: 'DECISION' | 'DECISION_RESOLUTION';
+
+  /** 来源在自身业务表中的稳定主键。 */
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  sourceId!: string;
+
+  /** 当前获授权调用时可展示的来源名称快照。 */
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  label!: string;
+}
+
+/** 官方工具 lifecycle 结束回调收敛摘要与来源依赖时使用的内部请求。 */
+export class SettleAiToolCallDto extends AiRuntimeLeaseDto {
+  /** 生命周期开始阶段创建的工具调用记录标识。 */
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  toolCallId!: string;
+
+  /** 工具 execute 阶段的最终受控状态。 */
+  @ApiProperty({ enum: ['SUCCEEDED', 'FAILED'] })
+  @IsIn(['SUCCEEDED', 'FAILED'])
+  status!: 'SUCCEEDED' | 'FAILED';
+
+  /** 成功时交回模型的窄业务输出；失败时省略。 */
+  @ApiPropertyOptional({ type: Object })
+  @IsOptional()
+  @IsObject()
+  output?: Record<string, unknown>;
+
+  /** 成功工具实际读取的来源；失败时必须为空数组或省略。 */
+  @ApiPropertyOptional({ type: [AiToolSourceDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_TOOL_SOURCES_PER_CALL)
+  @ValidateNested({ each: true })
+  @Type(() => AiToolSourceDto)
+  sources?: AiToolSourceDto[];
+
+  /** 失败时的稳定业务错误码；成功时省略。 */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  failureCode?: string;
+
+  /** 失败时可安全交回模型的说明；成功时省略。 */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(2_000)
+  failureReason?: string;
+
+  /** AI SDK 官方回调测得的真实工具执行耗时，单位毫秒。 */
+  @ApiProperty({ minimum: 0 })
+  @IsInt()
+  @Min(0)
+  durationMs!: number;
 }
 
 /** 一次 Run 聚合后的模型用量。 */

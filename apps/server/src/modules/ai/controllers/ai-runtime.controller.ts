@@ -14,8 +14,11 @@ import {
   AppendAiAssistantTextDto,
   AiRuntimeLeaseDto,
   CompleteAiRunDto,
+  ExecuteAiToolDto,
   InvokeAiToolDto,
   RecordAiStepDto,
+  SettleAiToolCallDto,
+  StartAiToolCallDto,
 } from '../dto/ai-runtime.dto';
 import { AiRuntimeServiceGuard } from '../guards/ai-runtime-service.guard';
 import { AiRuntimeSessionService } from '../services/ai-runtime-session.service';
@@ -114,6 +117,68 @@ export class AiRuntimeController {
       toolName: body.toolName,
       input: body.input,
     });
+  }
+
+  /** 在 AI SDK 官方工具生命周期开始时创建或重放受控工具审计记录。 */
+  @Post(':runId/tool-calls/start')
+  startToolCall(
+    @Param('runId') runId: string,
+    @Body() body: StartAiToolCallDto,
+  ) {
+    return this.runtimeSessionService.startToolCall(
+      runId,
+      body.executionLeaseId,
+      {
+        providerToolCallId: body.providerToolCallId,
+        toolName: body.toolName,
+        input: body.input,
+      },
+    );
+  }
+
+  /** 在 AI SDK 工具 execute 阶段执行已登记的受限业务查询。 */
+  @Post(':runId/tool-calls/execute')
+  executeToolCall(
+    @Param('runId') runId: string,
+    @Body() body: ExecuteAiToolDto,
+  ) {
+    return this.runtimeSessionService.executeToolCall(
+      runId,
+      body.executionLeaseId,
+      {
+        providerToolCallId: body.providerToolCallId,
+        toolName: body.toolName,
+        input: body.input,
+      },
+    );
+  }
+
+  /** 在 AI SDK 官方工具生命周期结束时收敛摘要、来源依赖与真实耗时。 */
+  @Post(':runId/tool-calls/settle')
+  settleToolCall(
+    @Param('runId') runId: string,
+    @Body() body: SettleAiToolCallDto,
+  ) {
+    return this.runtimeSessionService.settleToolCall(
+      runId,
+      body.executionLeaseId,
+      body.status === 'SUCCEEDED'
+        ? {
+            status: 'SUCCEEDED',
+            toolCallId: body.toolCallId,
+            output: body.output ?? {},
+            sources: body.sources ?? [],
+          }
+        : {
+            status: 'FAILED',
+            toolCallId: body.toolCallId,
+            failureCode:
+              this.toKnownErrorCode(body.failureCode) ??
+              API_ERROR_CODES.AI_TOOL_EXECUTION_FAILED,
+            failureReason: body.failureReason ?? '工具调用执行失败。',
+          },
+      body.durationMs,
+    );
   }
 
   /** 把 Run 收敛为完成或失败终态，并写入助手 UIMessage 与用量。 */
