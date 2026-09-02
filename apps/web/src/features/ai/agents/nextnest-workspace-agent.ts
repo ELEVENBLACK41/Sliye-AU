@@ -3,7 +3,14 @@
  * 服务端模型解析和 NestJS 调用由同目录的 `.server.ts` 装配，便于用 Mock 验证官方 Agent 契约。
  */
 
-import { isStepCount, ToolLoopAgent, type InferAgentUIMessage, type LanguageModel } from 'ai';
+import {
+  isStepCount,
+  ToolLoopAgent,
+  type GenerateTextOnEndCallback,
+  type GenerateTextOnStepEndCallback,
+  type InferAgentUIMessage,
+  type LanguageModel,
+} from 'ai';
 
 import { DECISION_HUB_AGENT_INSTRUCTIONS } from './decision-hub-agent.ts';
 import { createFindDecisionCandidatesTool } from '../tools/decision/find-decision-candidates.tool.ts';
@@ -52,6 +59,8 @@ export type NextNestWorkspaceAgentCoreOptions = {
   modelSettings: NextNestWorkspaceAgentModelSettings;
   /** 已绑定服务端执行边界的工具调用函数。 */
   invokeTool: NextNestWorkspaceToolInvoker;
+  /** 可选的官方 Agent lifecycle 回调，不承载 UIMessage 持久化。 */
+  lifecycle?: NextNestWorkspaceAgentLifecycle;
 };
 
 /** Agent 共享的请求级运行上下文，不会自动进入模型 Prompt。 */
@@ -60,6 +69,26 @@ export type NextNestWorkspaceAgentRuntimeContext = {
   requestId: string;
   /** 当前认证用户的内部主键。 */
   userId: number | string;
+};
+
+/** 官方 Agent lifecycle 回调；消息持久化仍由 UI Message Stream 的 onEnd 负责。 */
+export type NextNestWorkspaceAgentLifecycle = {
+  /** 每个模型步骤完成后接收受控模型、用量、终止原因和工具调用标识。 */
+  onStepEnd?: GenerateTextOnStepEndCallback<
+    {
+      findDecisionCandidates: ReturnType<typeof createFindDecisionCandidatesTool>;
+      getDecisionContext: ReturnType<typeof createGetDecisionContextTool>;
+    },
+    NextNestWorkspaceAgentRuntimeContext
+  >;
+  /** 全部模型步骤完成后接收官方聚合用量和最终步骤结果。 */
+  onEnd?: GenerateTextOnEndCallback<
+    {
+      findDecisionCandidates: ReturnType<typeof createFindDecisionCandidatesTool>;
+      getDecisionContext: ReturnType<typeof createGetDecisionContextTool>;
+    },
+    NextNestWorkspaceAgentRuntimeContext
+  >;
 };
 
 /** 创建带有官方 ToolLoopAgent、两个 Spike 工具和请求上下文的纯 Agent 核心。
@@ -84,6 +113,8 @@ export function createNextNestWorkspaceAgentCore(options: NextNestWorkspaceAgent
     maxRetries: options.modelSettings.maxRetries, // 失败请求的重试次数 默认2
     providerOptions: options.modelSettings.providerOptions,//额外的服务商专用配置
     timeout: options.modelSettings.timeout,
+    onStepEnd: options.lifecycle?.onStepEnd,
+    onEnd: options.lifecycle?.onEnd,
     runtimeContext: { //用户自定义的共享运行时上下文对象
       requestId: options.requestId,
       userId: options.userId,

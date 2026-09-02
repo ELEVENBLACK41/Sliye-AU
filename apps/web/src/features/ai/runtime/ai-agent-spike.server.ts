@@ -22,6 +22,7 @@ import type { ApiErrorCode } from '@workspace/contracts/common';
 import { apiError } from '@/app/api/_utils/response';
 import type {
   NextNestWorkspaceAgent,
+  NextNestWorkspaceAgentLifecycle,
   NextNestWorkspaceAgentUIMessage,
 } from '@/features/ai/agents/nextnest-workspace-agent.server';
 import { createNextNestWorkspaceAgent } from '@/features/ai/agents/nextnest-workspace-agent.server';
@@ -29,8 +30,10 @@ import { normalizeAiModelError } from '@/features/ai/runtime/ai-model-error';
 import {
   claimAiRuntimeSession,
   completeAiRuntimeRun,
+  recordAiRuntimeStep,
 } from '@/features/ai/runtime/ai-runtime-client.server';
 import { requestNest, type NestResponse } from '@/services/bff-request';
+import { estimateAiLanguageModelCostUsd } from './ai-model-registry.ts';
 
 /** C2 Spike 接收的已通过 Route 基础校验的请求数据。 */
 export type AiAgentSpikeInput = {
@@ -67,6 +70,118 @@ type AiAgentSpikeFailure = {
 const AI_TEXT_STREAM_SMOOTHING_TRANSFORM = smoothStream<NextNestWorkspaceAgent['tools']>({
   chunking: new Intl.Segmenter('zh-CN', { granularity: 'word' }),
 });
+
+/** Agent lifecycle 聚合的 Run 用量；未知成本不伪造为零。 */
+type AiAgentLifecycleUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd?: number;
+};
+
+/** 官方 Agent lifecycle 写入和终态回调之间共享的受控运行摘要。 */
+type AiAgentLifecycleState = {
+  resolvedModelId?: string;
+  usage?: AiAgentLifecycleUsage;
+  hasUnknownCost: boolean;
+};
+
+/** 创建官方 Agent lifecycle 回调，并把每步记录与最终聚合保持在同一份运行摘要内。 */
+function createAiAgentLifecycle(input: {
+  runId: string;
+  executionLeaseId: string;
+}): { state: AiAgentLifecycleState; callbacks: NextNestWorkspaceAgentLifecycle } {
+  const state: AiAgentLifecycleState = { hasUnknownCost: false };
+
+  return {
+    state,
+    callbacks: {
+      onStepEnd: async (step) => {
+        const finishedAt = new Date();
+        const usage = normalizeAiAgentUsage(step.usage);
+        const estimatedCostUsd = estimateAiLanguageModelCostUsd(
+          step.model.modelId,
+          usage,
+        );
+        state.resolvedModelId = step.model.modelId;
+        state.usage = addAiAgentUsage(state.usage, {
+          ...usage,
+          ...(estimatedCostUsd === null ? {} : { estimatedCostUsd }),
+        });
+        state.hasUnknownCost ||= estimatedCostUsd === null;
+
+        try {
+          await recordAiRuntimeStep({
+            runId: input.runId,
+            executionLeaseId: input.executionLeaseId,
+            sequence: step.stepNumber + 1,
+            resolvedModelId: step.model.modelId,
+            finishReason: step.finishReason,
+            inputTokens: step.usage.inputTokens,
+            outputTokens: step.usage.outputTokens,
+            totalTokens: step.usage.totalTokens,
+            startedAt: step.response.timestamp.toISOString(),
+            finishedAt: finishedAt.toISOString(),
+            providerToolCallIds: step.toolCalls.map(
+              (toolCall) => toolCall.toolCallId,
+            ),
+          });
+        } catch (error) {
+          console.error('[ai-agent-spike] Agent lifecycle 步骤审计写入失败', {
+            runId: input.runId,
+            sequence: step.stepNumber + 1,
+            error,
+          });
+        }
+      },
+      onEnd: ({ finalStep, usage }) => {
+        state.resolvedModelId = finalStep.model.modelId;
+        state.usage = {
+          ...normalizeAiAgentUsage(usage),
+          ...(state.hasUnknownCost || state.usage?.estimatedCostUsd === undefined
+            ? {}
+            : { estimatedCostUsd: state.usage.estimatedCostUsd }),
+        };
+      },
+    },
+  };
+}
+
+/** 把 AI SDK 可选 Token 用量转换为内部终态接口需要的整数摘要。 */
+function normalizeAiAgentUsage(usage: {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}): Omit<AiAgentLifecycleUsage, 'estimatedCostUsd'> {
+  const inputTokens = usage.inputTokens ?? 0;
+  const outputTokens = usage.outputTokens ?? 0;
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: usage.totalTokens ?? inputTokens + outputTokens,
+  };
+}
+
+/** 累加每个 Agent 步骤的 Token 和已知价格快照。 */
+function addAiAgentUsage(
+  current: AiAgentLifecycleUsage | undefined,
+  next: AiAgentLifecycleUsage,
+): AiAgentLifecycleUsage {
+  return {
+    inputTokens: (current?.inputTokens ?? 0) + next.inputTokens,
+    outputTokens: (current?.outputTokens ?? 0) + next.outputTokens,
+    totalTokens: (current?.totalTokens ?? 0) + next.totalTokens,
+    ...(current?.estimatedCostUsd !== undefined ||
+    next.estimatedCostUsd !== undefined
+      ? {
+          estimatedCostUsd:
+            (current?.estimatedCostUsd ?? 0) +
+            (next.estimatedCostUsd ?? 0),
+        }
+      : {}),
+  };
+}
 
 /** 读取受保护 Thread 历史、领取 Run 并启动官方 Agent UI Message Stream。 */
 export async function startAiAgentSpike(input: AiAgentSpikeInput) {
@@ -163,6 +278,10 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
     });
   }
 
+  const lifecycle = createAiAgentLifecycle({
+    runId: session.execution.runId,
+    executionLeaseId: session.execution.executionLeaseId,
+  });
   let agent: ReturnType<typeof createNextNestWorkspaceAgent>;
 
   try {
@@ -172,6 +291,7 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
       runId: session.execution.runId,
       executionLeaseId: session.execution.executionLeaseId,
       modelRole: session.execution.modelRole,
+      lifecycle: lifecycle.callbacks,
     });
   } catch (error) {
     const normalized = normalizeAiModelError(error);
@@ -212,7 +332,6 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
   }
 
   let streamFailure: AiAgentSpikeFailure | null = null;
-  let resolvedModelId: string | undefined;
 
   try {
     return await createAgentUIStreamResponse({
@@ -220,9 +339,6 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
       uiMessages: validatedMessages,
       experimental_transform: AI_TEXT_STREAM_SMOOTHING_TRANSFORM,
       headers: { 'X-NextNest-AI-Spike': 'c2' },
-      onStepEnd: ({ model }) => {
-        resolvedModelId = model.modelId;
-      },
       onError: (error) => {
         const normalized = normalizeAiModelError(error);
         streamFailure = {
@@ -238,7 +354,8 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
           runId: session.execution.runId,
           executionLeaseId: session.execution.executionLeaseId,
           ...persistedMessage,
-          resolvedModelId,
+          resolvedModelId: lifecycle.state.resolvedModelId,
+          usage: lifecycle.state.usage,
           failure:
             streamFailure ??
             (isAborted
@@ -322,6 +439,7 @@ async function settleAiAgentSpikeRun(input: {
   assistantMessageParts?: Record<string, unknown>[];
   assistantMessageMetadata?: Record<string, unknown>;
   resolvedModelId?: string;
+  usage?: AiAgentLifecycleUsage;
   failure: AiAgentSpikeFailure | null;
 }): Promise<void> {
   try {
@@ -339,6 +457,7 @@ async function settleAiAgentSpikeRun(input: {
       assistantMessageParts: input.assistantMessageParts,
       assistantMessageMetadata: input.assistantMessageMetadata,
       resolvedModelId: input.resolvedModelId,
+      usage: input.usage,
     });
   } catch (error) {
     console.error('[ai-agent-spike] Run 终态写入失败', {

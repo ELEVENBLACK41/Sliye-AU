@@ -68,6 +68,13 @@ function createSuccessfulToolResult(
 
 test('官方 Agent 应串联唯一候选与决策上下文，并传递受控工具上下文', async () => {
   const invocations: NextNestWorkspaceToolInvocationInput[] = [];
+  const lifecycleSteps: Array<{
+    sequence: number;
+    modelId: string;
+    finishReason: string;
+    toolCallIds: string[];
+  }> = [];
+  let lifecycleUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined;
   let observedRuntimeContext: NextNestWorkspaceAgentRuntimeContext | undefined;
   const invokeTool: NextNestWorkspaceToolInvoker = async (input) => {
     invocations.push(input);
@@ -116,6 +123,19 @@ test('官方 Agent 应串联唯一候选与决策上下文，并传递受控工�
       timeout: { totalMs: 240_000, stepMs: 180_000, chunkMs: 30_000 },
     },
     invokeTool,
+    lifecycle: {
+      onStepEnd: ({ stepNumber, model, finishReason, toolCalls }) => {
+        lifecycleSteps.push({
+          sequence: stepNumber + 1,
+          modelId: model.modelId,
+          finishReason,
+          toolCallIds: toolCalls.map((toolCall) => toolCall.toolCallId),
+        });
+      },
+      onEnd: ({ usage }) => {
+        lifecycleUsage = usage;
+      },
+    },
   });
   const result = await agent.generate({
     prompt: '请说明年度预算调整这项决策。',
@@ -129,6 +149,40 @@ test('官方 Agent 应串联唯一候选与决策上下文，并传递受控工�
   assert.deepEqual(Object.keys(agent.tools), ['findDecisionCandidates', 'getDecisionContext']);
   assert.deepEqual(observedRuntimeContext, { requestId: 'req-c1-unique', userId: 7 });
   assert.equal(result.text, '这项决策属于财务规划，当前状态为已决定。');
+  assert.deepEqual(lifecycleSteps, [
+    {
+      sequence: 1,
+      modelId: 'c1-unique-model',
+      finishReason: 'tool-calls',
+      toolCallIds: ['find-1'],
+    },
+    {
+      sequence: 2,
+      modelId: 'c1-unique-model',
+      finishReason: 'tool-calls',
+      toolCallIds: ['context-1'],
+    },
+    {
+      sequence: 3,
+      modelId: 'c1-unique-model',
+      finishReason: 'stop',
+      toolCallIds: [],
+    },
+  ]);
+  assert.deepEqual(lifecycleUsage, {
+    inputTokens: 30,
+    inputTokenDetails: {
+      noCacheTokens: 30,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+    outputTokens: 15,
+    outputTokenDetails: {
+      textTokens: 15,
+      reasoningTokens: 0,
+    },
+    totalTokens: 45,
+  });
   assert.deepEqual(
     invocations.map(({ toolName, toolInput, runId, executionLeaseId }) => ({
       toolName,

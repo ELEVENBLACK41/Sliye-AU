@@ -12,6 +12,7 @@ import {
   createNextNestWorkspaceAgentCore,
   type NextNestWorkspaceAgent,
   type NextNestWorkspaceAgentCoreOptions,
+  type NextNestWorkspaceAgentLifecycle,
   type NextNestWorkspaceAgentModelSettings,
   type NextNestWorkspaceAgentRuntimeContext,
   type NextNestWorkspaceAgentUIMessage,
@@ -38,6 +39,8 @@ export type NextNestWorkspaceAgentOptions = {
   model?: LanguageModel;
   /** 仅供 Mock 测试替换 NestJS 工具调用的函数。 */
   invokeTool?: NextNestWorkspaceToolInvoker;
+  /** 可选的官方 Agent lifecycle 回调，不承载 UIMessage 持久化。 */
+  lifecycle?: NextNestWorkspaceAgentLifecycle;
 };
 
 /** 创建服务端 Workspace Agent，并把模型和工具绑定到现有治理边界。 */
@@ -60,6 +63,7 @@ export function createNextNestWorkspaceAgent(options: NextNestWorkspaceAgentOpti
       timeout: resolvedModel.timeout,
     },
     invokeTool: options.invokeTool ?? invokeAiRuntimeTool,
+    lifecycle: options.lifecycle,
   });
 }
 
@@ -71,6 +75,7 @@ export {
 export type {
   NextNestWorkspaceAgent,
   NextNestWorkspaceAgentCoreOptions,
+  NextNestWorkspaceAgentLifecycle,
   NextNestWorkspaceAgentModelSettings,
   NextNestWorkspaceAgentRuntimeContext,
   NextNestWorkspaceAgentUIMessage,
