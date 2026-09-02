@@ -38,15 +38,18 @@ export function AiWorkspace() {
       className="mt-6 flex min-h-[calc(100dvh-8rem)] min-w-0 flex-1 overflow-hidden rounded-[1.4rem] border border-border/70 bg-card/75 shadow-sm lg:min-h-0"
       aria-label="AI 实验室"
     >
+      {/* 侧边栏 */}
       <AiWorkspaceSidebar
         data={sidebarData}
         {...sidebarActions}
       />
+      {/* 移动端得头部渲染 */}
       <div className="flex min-w-0 flex-1 flex-col">
         <AiWorkspaceMobileHeader
           data={sidebarData}
           {...sidebarActions}
         />
+        {/* 如下 */}
         <AiWorkspaceContent workspace={workspace} />
       </div>
     </section>

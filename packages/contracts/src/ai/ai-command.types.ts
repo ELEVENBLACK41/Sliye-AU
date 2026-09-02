@@ -12,7 +12,7 @@ export type CreateAiThreadMessageRequest = {
   message: string;
   /** 当前提交请求使用的稳定幂等键。 */
   idempotencyKey: string;
-  /** 普通排队或调整方向；省略时由服务端按普通发送处理。 */
+  /** 普通发送或调整方向；活跃 Run 期间普通发送会被服务端拒绝。 */
   submissionMode?: AiMessageSubmissionMode;
 };
 
@@ -28,7 +28,7 @@ export type AiThreadMessageSubmissionResult = {
   threadId: string;
   /** 新建或幂等重放得到的用户消息标识。 */
   messageId: string;
-  /** 已立即领取消息对应的 Run；仍在队列或已被替代时为空。 */
+  /** 已立即领取消息对应的 Run；历史排队或调整方向结果可能为空。 */
   runId: string | null;
   /** 当前消息的持久化投递状态。 */
   dispatchState: AiMessageDispatchState;

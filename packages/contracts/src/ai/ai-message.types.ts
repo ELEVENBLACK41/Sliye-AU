@@ -22,7 +22,7 @@ export type AiMessageDispatchState = (typeof AI_MESSAGE_DISPATCH_STATES)[number]
 /** 用户提交输入时选择的行为模式。 */
 export const AI_MESSAGE_SUBMISSION_MODES = ['NORMAL', 'STEER'] as const;
 
-/** 普通输入顺序排队，调整方向会替代尚未领取的旧输入。 */
+/** 普通发送或调整方向；历史数据仍可能保留排队/替代状态。 */
 export type AiMessageSubmissionMode = (typeof AI_MESSAGE_SUBMISSION_MODES)[number];
 
 /** Thread 中一条具有稳定标识的用户或助手消息。 */

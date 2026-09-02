@@ -85,7 +85,7 @@ export function createAiThread(
   });
 }
 
-/** 在既有 Thread 中提交用户消息，普通模式由服务端决定立即执行或进入队列。 */
+/** 在既有 Thread 中提交用户消息；普通模式遇到活跃 Run 时由服务端拒绝。 */
 export function createAiThreadMessage(
   threadId: string,
   body: CreateAiThreadMessageRequest,

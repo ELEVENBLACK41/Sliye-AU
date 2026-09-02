@@ -136,8 +136,8 @@ export class AiThreadService {
   }
 
   /**
-   * 原子持久化既有 Thread 的用户输入；空闲 Thread 只领取队首，活跃 Run 期间仅入队。
-   * 调整方向会替代全部尚未领取的旧用户输入，并在同一事务中请求取消当前 Run。
+   * 原子持久化既有 Thread 的用户输入；空闲 Thread 才能接受普通消息。
+   * 活跃 Run 期间普通消息直接拒绝，调整方向仍在同一事务中请求取消当前 Run。
    */
   async createMessageWithRun(
     input: CreateAiThreadMessageRunInput,
@@ -198,6 +198,13 @@ export class AiThreadService {
             lockedReplay,
             requestFingerprint,
           );
+        }
+        if (submissionMode === 'NORMAL' && thread.activeRunId !== null) {
+          throw new BusinessException({
+            code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE,
+            message: '当前回答尚未完成，请先停止或等待完成后再发送消息',
+            status: HttpStatus.CONFLICT,
+          });
         }
         if (submissionMode === 'STEER') {
           await this.queueService.supersedeQueuedMessages(tx, thread.id);

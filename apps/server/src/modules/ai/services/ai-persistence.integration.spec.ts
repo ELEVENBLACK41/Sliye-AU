@@ -197,7 +197,7 @@ describePersistence('AI 持久化事务地基', () => {
     await expect(prisma.aiRun.count()).resolves.toBe(1);
   });
 
-  it('活跃 Run 期间的并发普通输入稳定入队，不创建第二个非终态 Run', async () => {
+  it('活跃 Run 期间的并发普通输入稳定拒绝，不创建消息或第二个非终态 Run', async () => {
     const ownerUserId = await createTestUser();
     const initial = await threadService.createThreadWithInitialRun({
       ownerUserId,
@@ -206,7 +206,7 @@ describePersistence('AI 持久化事务地基', () => {
       modelRole: 'standard',
     });
 
-    const results = await Promise.all([
+    const results = await Promise.allSettled([
       threadService.createMessageWithRun({
         ownerUserId,
         threadId: initial.threadId,
@@ -223,11 +223,14 @@ describePersistence('AI 持久化事务地基', () => {
       }),
     ]);
 
-    expect(
-      results.every(
-        (result) => result.dispatchState === 'QUEUED' && result.runId === null,
-      ),
-    ).toBe(true);
+    results.forEach((result) => {
+      expect(result.status).toBe('rejected');
+      if (result.status === 'rejected') {
+        expect(result.reason).toMatchObject({
+          code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE,
+        });
+      }
+    });
     await expect(
       prisma.aiRun.count({
         where: {
@@ -243,44 +246,9 @@ describePersistence('AI 持久化事务地基', () => {
         },
       }),
     ).resolves.toBe(1);
-    const queuedMessages = await prisma.aiMessage.findMany({
-      where: { id: { in: results.map((result) => result.messageId) } },
-      orderBy: { queueSequence: 'asc' },
-      select: { id: true, dispatchState: true, queueSequence: true },
-    });
-    expect(queuedMessages).toEqual([
-      expect.objectContaining({ dispatchState: 'QUEUED', queueSequence: 2 }),
-      expect.objectContaining({ dispatchState: 'QUEUED', queueSequence: 3 }),
-    ]);
-
-    await runControlService.requestStop({
-      ownerUserId,
-      runId: initial.runId,
-      cancellationReason: 'USER_REQUESTED',
-    });
-    const dispatched = await prisma.aiRun.findFirst({
-      where: {
-        threadId: initial.threadId,
-        userMessageId: queuedMessages[0].id,
-      },
-      select: { id: true, status: true },
-    });
-    expect(dispatched).toMatchObject({ status: 'QUEUED' });
-
-    await runControlService.requestStop({
-      ownerUserId,
-      runId: dispatched!.id,
-      cancellationReason: 'USER_REQUESTED',
-    });
     await expect(
-      prisma.aiRun.findFirst({
-        where: {
-          threadId: initial.threadId,
-          userMessageId: queuedMessages[1].id,
-        },
-        select: { status: true },
-      }),
-    ).resolves.toMatchObject({ status: 'QUEUED' });
+      prisma.aiMessage.count({ where: { threadId: initial.threadId } }),
+    ).resolves.toBe(1);
   });
 
   it('Thread 内消息幂等键会重放同一消息和 Run，并拒绝不同正文', async () => {
@@ -290,6 +258,11 @@ describePersistence('AI 持久化事务地基', () => {
       message: '先建立可发送消息的会话。',
       idempotencyKey: 'create-002-message',
       modelRole: 'standard',
+    });
+    await runControlService.requestStop({
+      ownerUserId,
+      runId: initial.runId,
+      cancellationReason: 'USER_REQUESTED',
     });
     const input = {
       ownerUserId,
@@ -306,7 +279,7 @@ describePersistence('AI 持久化事务地基', () => {
 
     expect(first.messageId).toBe(replay.messageId);
     expect(first.runId).toBe(replay.runId);
-    expect(first.dispatchState).toBe('QUEUED');
+    expect(first.dispatchState).toBe('DISPATCHED');
     await expect(
       threadService.createMessageWithRun({
         ...input,
@@ -329,13 +302,15 @@ describePersistence('AI 持久化事务地基', () => {
       idempotencyKey: 'create-redirect-001',
       modelRole: 'standard',
     });
-    const normal = await threadService.createMessageWithRun({
-      ownerUserId,
-      threadId: initial.threadId,
-      message: '查一下投票结果。',
-      idempotencyKey: 'message-redirect-normal',
-      modelRole: 'standard',
-    });
+    await expect(
+      threadService.createMessageWithRun({
+        ownerUserId,
+        threadId: initial.threadId,
+        message: '查一下投票结果。',
+        idempotencyKey: 'message-redirect-normal',
+        modelRole: 'standard',
+      }),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE });
     const firstSteer = await threadService.createMessageWithRun({
       ownerUserId,
       threadId: initial.threadId,
@@ -353,24 +328,18 @@ describePersistence('AI 持久化事务地基', () => {
       submissionMode: 'STEER',
     });
 
-    expect(normal.dispatchState).toBe('QUEUED');
     expect(firstSteer.dispatchState).toBe('DISPATCHED');
     await expect(
       prisma.aiMessage.findMany({
         where: {
           id: {
-            in: [normal.messageId, firstSteer.messageId, latestSteer.messageId],
+            in: [firstSteer.messageId, latestSteer.messageId],
           },
         },
         orderBy: { queueSequence: 'asc' },
         select: { id: true, dispatchState: true, submissionMode: true },
       }),
     ).resolves.toEqual([
-      {
-        id: normal.messageId,
-        dispatchState: 'SUPERSEDED',
-        submissionMode: 'NORMAL',
-      },
       {
         id: firstSteer.messageId,
         dispatchState: 'DISPATCHED',
@@ -580,13 +549,15 @@ describePersistence('AI 持久化事务地基', () => {
     });
     const lease = await runService.claimQueuedRun(initial.runId);
     expect(lease).not.toBeNull();
-    const normal = await threadService.createMessageWithRun({
-      ownerUserId,
-      threadId: initial.threadId,
-      message: '这是会被调整方向替代的普通输入。',
-      idempotencyKey: 'redirect-cancellation-normal',
-      modelRole: 'standard',
-    });
+    await expect(
+      threadService.createMessageWithRun({
+        ownerUserId,
+        threadId: initial.threadId,
+        message: '这是不应进入队列的普通输入。',
+        idempotencyKey: 'redirect-cancellation-normal',
+        modelRole: 'standard',
+      }),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE });
     const steer = await threadService.createMessageWithRun({
       ownerUserId,
       threadId: initial.threadId,
@@ -596,7 +567,6 @@ describePersistence('AI 持久化事务地基', () => {
       submissionMode: 'STEER',
     });
 
-    expect(normal.dispatchState).toBe('QUEUED');
     expect(steer.dispatchState).toBe('QUEUED');
     await expect(
       prisma.$transaction((transaction) =>
@@ -617,12 +587,6 @@ describePersistence('AI 持久化事务地基', () => {
     );
     expect(cancelled).toMatchObject({ status: 'CANCELLED' });
     await expect(
-      prisma.aiMessage.findUnique({
-        where: { id: normal.messageId },
-        select: { dispatchState: true },
-      }),
-    ).resolves.toMatchObject({ dispatchState: 'SUPERSEDED' });
-    await expect(
       prisma.aiRun.findFirst({
         where: { threadId: initial.threadId, userMessageId: steer.messageId },
         select: { status: true },
@@ -630,7 +594,7 @@ describePersistence('AI 持久化事务地基', () => {
     ).resolves.toMatchObject({ status: 'QUEUED' });
   });
 
-  it('租约过期后对账把遗留 Run 收敛为失败并释放下一条排队输入', async () => {
+  it('租约过期后对账把遗留 Run 收敛为失败且不再派发排队输入', async () => {
     const ownerUserId = await createTestUser();
     const initial = await threadService.createThreadWithInitialRun({
       ownerUserId,
@@ -640,13 +604,15 @@ describePersistence('AI 持久化事务地基', () => {
     });
     const lease = await runService.claimQueuedRun(initial.runId);
     expect(lease).not.toBeNull();
-    const queued = await threadService.createMessageWithRun({
-      ownerUserId,
-      threadId: initial.threadId,
-      message: '等待旧 Run 失败后再处理。',
-      idempotencyKey: 'reconcile-expired-run-message',
-      modelRole: 'standard',
-    });
+    await expect(
+      threadService.createMessageWithRun({
+        ownerUserId,
+        threadId: initial.threadId,
+        message: '不应在旧 Run 执行期间进入队列。',
+        idempotencyKey: 'reconcile-expired-run-message',
+        modelRole: 'standard',
+      }),
+    ).rejects.toMatchObject({ code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE });
     await prisma.aiRun.update({
       where: { id: initial.runId },
       data: { executionLeaseExpiresAt: new Date(Date.now() - 1) },
@@ -656,7 +622,7 @@ describePersistence('AI 持久化事务地基', () => {
       scannedRunCount: 1,
       reconciledRunCount: 1,
       orphanQueuedRunCount: 0,
-      nextRunIds: [expect.any(String)],
+      nextRunIds: [],
     });
     await expect(
       prisma.aiRun.findUnique({
@@ -668,12 +634,6 @@ describePersistence('AI 持久化事务地基', () => {
       failureReason: 'EXECUTION_LEASE_EXPIRED',
       failureCode: API_ERROR_CODES.AI_EXECUTION_LEASE_EXPIRED,
     });
-    await expect(
-      prisma.aiRun.findFirst({
-        where: { threadId: initial.threadId, userMessageId: queued.messageId },
-        select: { status: true },
-      }),
-    ).resolves.toMatchObject({ status: 'QUEUED' });
   });
 
   it('重命名与归档不推进最后活动时间，归档会清除固定状态', async () => {
@@ -830,15 +790,27 @@ describePersistence('AI 持久化事务地基', () => {
       idempotencyKey: 'message-page-000',
       modelRole: 'standard',
     });
-    // 追加若干条用户消息，并让全部消息共享同一创建时间，
-    // 这样只有标识兜底才能保证翻页顺序稳定。
+    await runControlService.requestStop({
+      ownerUserId,
+      runId: initial.runId,
+      cancellationReason: 'USER_REQUESTED',
+    });
+    // 逐条追加用户消息；每条消息完成后释放活跃 Run，验证历史分页不依赖输入队列。
     for (let index = 1; index <= 4; index += 1) {
-      await threadService.createMessageWithRun({
+      const message = await threadService.createMessageWithRun({
         ownerUserId,
         threadId: initial.threadId,
         message: `消息 ${index}。`,
         idempotencyKey: `message-page-00${index}`,
         modelRole: 'standard',
+      });
+      if (!message.runId) {
+        throw new Error('空闲 Thread 发送消息后应立即关联 Run');
+      }
+      await runControlService.requestStop({
+        ownerUserId,
+        runId: message.runId,
+        cancellationReason: 'USER_REQUESTED',
       });
     }
     await prisma.aiMessage.updateMany({
@@ -1720,7 +1692,7 @@ describePersistence('AI 持久化事务地基', () => {
     }
   });
 
-  it('普通输入入队与旧 Run 终态竞争时只会产生一个后续活跃 Run', async () => {
+  it('普通输入与旧 Run 终态竞争时不会产生输入队列', async () => {
     const ownerUserId = await createTestUser();
     const initial = await threadService.createThreadWithInitialRun({
       ownerUserId,
@@ -1728,7 +1700,7 @@ describePersistence('AI 持久化事务地基', () => {
       idempotencyKey: 'terminal-race-queue-001',
       modelRole: 'standard',
     });
-    const [submission] = await Promise.all([
+    const [submission] = await Promise.allSettled([
       threadService.createMessageWithRun({
         ownerUserId,
         threadId: initial.threadId,
@@ -1743,22 +1715,29 @@ describePersistence('AI 持久化事务地基', () => {
       }),
     ]);
 
-    await expect(
-      prisma.aiRun.findMany({
-        where: {
-          threadId: initial.threadId,
-          status: {
-            in: [
-              'QUEUED',
-              'RUNNING',
-              'WAITING_APPROVAL',
-              'CANCELLATION_REQUESTED',
-            ],
-          },
+    const activeRuns = await prisma.aiRun.findMany({
+      where: {
+        threadId: initial.threadId,
+        status: {
+          in: [
+            'QUEUED',
+            'RUNNING',
+            'WAITING_APPROVAL',
+            'CANCELLATION_REQUESTED',
+          ],
         },
-        select: { userMessageId: true },
-      }),
-    ).resolves.toEqual([{ userMessageId: submission.messageId }]);
+      },
+      select: { userMessageId: true },
+    });
+    expect(activeRuns.length).toBeLessThanOrEqual(1);
+
+    if (submission.status === 'fulfilled') {
+      expect(submission.value.dispatchState).toBe('DISPATCHED');
+    } else {
+      expect(submission.reason).toMatchObject({
+        code: API_ERROR_CODES.AI_THREAD_RUN_ACTIVE,
+      });
+    }
   });
 
   it('取消与完成竞争时只保留一个终态，完成会在旧租约已失效后被拒绝', async () => {

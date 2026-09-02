@@ -51,17 +51,17 @@ export type CreateAiThreadMessageRunInput = {
   idempotencyKey: string;
   /** 本次 Run 采用的逻辑语言模型角色。 */
   modelRole: AiLanguageModelRole;
-  /** 普通输入顺序排队；调整方向替代尚未领取的旧输入。 */
+  /** 普通发送或调整方向；活跃 Run 期间普通发送会被拒绝。 */
   submissionMode?: AiMessageSubmissionMode;
 };
 
-/** 已持久化用户输入的投递结果；排队状态下不会关联新的 Run。 */
+/** 已持久化用户输入的投递结果；历史数据可能保留排队状态。 */
 export type AiThreadMessageSubmissionResult = {
   /** 消息所属 Thread 标识。 */
   threadId: string;
   /** 新建或幂等重放得到的用户消息标识。 */
   messageId: string;
-  /** 当前消息已被领取时关联的新 Run；仍在队列或已被替代时为 `null`。 */
+  /** 当前消息已被领取时关联的新 Run；历史排队或被替代时为 `null`。 */
   runId: string | null;
   /** 当前消息的持久化投递状态。 */
   dispatchState: AiMessageDispatchState;

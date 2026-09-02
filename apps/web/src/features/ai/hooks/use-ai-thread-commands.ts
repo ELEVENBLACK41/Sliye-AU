@@ -1,5 +1,5 @@
 /**
- * 本文件维护 AI Thread 的发送、排队、调整方向、停止和重试命令。
+ * 本文件维护 AI Thread 的发送、调整方向、停止和重试命令。
  * 命令只提交用户意图，最终消息与 Run 状态仍以服务端历史、POST SSE 和 GET SSE 为准。
  */
 'use client';
@@ -58,7 +58,7 @@ type AiThreadCommandOptions = {
   refreshCurrentThread: () => Promise<void>;
   /** 刷新活动侧栏列表。 */
   refreshThreadLists: (signal?: AbortSignal) => Promise<void>;
-  /** 更新输入框上方的本地排队确认。 */
+  /** 更新输入框上方的历史/调整方向确认。 */
   setLocalQueuedMessages: Dispatch<SetStateAction<AiWorkspaceQueuedMessage[]>>;
   /** 更新调整方向期间的旧 Run 标识。 */
   setSteeringRunId: Dispatch<SetStateAction<string | null>>;
@@ -128,7 +128,7 @@ export function useAiThreadCommands({
     return threadState.activeRun?.runId ?? null;
   }, [runEventStateRef, threadState.activeRun?.runId]);
 
-  /** 把服务端确认的排队投递结果同步到输入框上方的本地即时状态。 */
+  /** 把服务端确认的历史/调整方向投递结果同步到输入框上方的本地即时状态。 */
   const rememberQueuedSubmission = useCallback(
     (content: string, result: AiThreadMessageSubmissionResult) => {
       setLocalQueuedMessages((current) => {
@@ -387,7 +387,7 @@ export function useAiThreadCommands({
   /** 为一次用户操作生成稳定幂等键；请求重试会复用同一个请求体。 */
   const createIdempotencyKey = useCallback((): string => crypto.randomUUID(), []);
 
-  /** 提交用户消息；新会话创建 Thread，既有会话按服务端状态立即执行或排队。 */
+  /** 提交用户消息；既有 Thread 存在活跃 Run 时，普通消息不再进入队列。 */
   const submitMessage = useCallback(
     async (message: string, submissionMode: AiMessageSubmissionMode = 'NORMAL'): Promise<boolean> => {
       const content = message.trim();
@@ -395,6 +395,11 @@ export function useAiThreadCommands({
 
       const requestVersion = requestVersionRef.current;
       const requestVersionThreadId = threadId;
+      if (submissionMode === 'NORMAL' && requestVersionThreadId && getActiveRunId() !== null) {
+        setCommandError('当前回答尚未完成，请先停止或等待完成后再发送消息');
+        return false;
+      }
+
       const idempotencyKey = createIdempotencyKey();
       setCommandLifecycleState('SUBMITTING');
       setCommandError(null);
