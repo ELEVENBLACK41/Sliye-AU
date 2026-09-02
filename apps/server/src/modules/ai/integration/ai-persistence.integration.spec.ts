@@ -15,25 +15,25 @@ import { DecisionContextService } from '../../decisions/services/decision-contex
 import { DecisionVisibilityService } from '../../decisions/services/decision-visibility.service';
 import type { AiPermissionPolicyService } from '../policies/ai-permission-policy';
 import { GetDecisionContextToolService } from '../tools/decision/get-decision-context.service';
-import { AiAssistantMessageService } from './ai-assistant-message.service';
-import { AiEventService } from './ai-event.service';
+import { AiAssistantMessageService } from '../services/run/ai-assistant-message.service';
+import { AiEventService } from '../services/run/ai-event.service';
 import {
   AI_RUN_EXECUTION_LEASE_DURATION_MS,
   AiExecutionLeaseService,
-} from './ai-execution-lease.service';
-import { AiQueueService } from './ai-queue.service';
-import { AiRunControlService } from './ai-run-control.service';
-import { AiRunQueryService } from './ai-run-query.service';
-import { AiRunService } from './ai-run.service';
-import { AiSourceDependencyService } from './ai-source-dependency.service';
-import { AiStepService } from './ai-step.service';
-import { AiMessageQueryService } from './ai-message-query.service';
-import { AiSourceVisibilityService } from './ai-source-visibility.service';
-import { AiThreadMetadataService } from './ai-thread-metadata.service';
-import { AiThreadPinService } from './ai-thread-pin.service';
-import { AiThreadQueryService } from './ai-thread-query.service';
-import { AiThreadService } from './ai-thread.service';
-import { AiToolCallService } from './ai-tool-call.service';
+} from '../services/run/ai-execution-lease.service';
+import { AiQueueService } from '../services/run/ai-queue.service';
+import { AiRunControlService } from '../services/run/ai-run-control.service';
+import { AiRunQueryService } from '../services/run/ai-run-query.service';
+import { AiRunService } from '../services/run/ai-run.service';
+import { AiSourceDependencyService } from '../services/source/ai-source-dependency.service';
+import { AiStepService } from '../services/run/ai-step.service';
+import { AiMessageQueryService } from '../services/thread/ai-message-query.service';
+import { AiSourceVisibilityService } from '../services/source/ai-source-visibility.service';
+import { AiThreadMetadataService } from '../services/thread/ai-thread-metadata.service';
+import { AiThreadPinService } from '../services/thread/ai-thread-pin.service';
+import { AiThreadQueryService } from '../services/thread/ai-thread-query.service';
+import { AiThreadService } from '../services/thread/ai-thread.service';
+import { AiToolCallService } from '../services/tool/ai-tool-call.service';
 
 /** 只有明确指定隔离测试数据库时才执行真实数据库测试。 */
 const testDatabaseUrl = process.env['AI_PERSISTENCE_TEST_DATABASE_URL'];

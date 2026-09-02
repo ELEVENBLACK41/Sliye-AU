@@ -6,9 +6,9 @@
 
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import { AiMessageRole, Prisma } from '../../../generated/prisma';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import { AiMessageRole, Prisma } from '../../../../generated/prisma';
 import {
   AiExecutionLeaseService,
   type AiExecutionLeaseInput,

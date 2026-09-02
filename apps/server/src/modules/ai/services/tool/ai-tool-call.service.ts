@@ -9,18 +9,18 @@ import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import type { AiEvent } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import { AiToolCallStatus, type Prisma } from '../../../generated/prisma';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import { AiToolCallStatus, type Prisma } from '../../../../generated/prisma';
 import type {
   SettleAiToolCallInput,
   StartAiToolCallInput,
-} from '../types/ai-persistence.types';
-import { AiEventService } from './ai-event.service';
-import { AiExecutionLeaseService } from './ai-execution-lease.service';
-import { AiSourceDependencyService } from './ai-source-dependency.service';
-import { createAiJsonFingerprint } from './ai-persistence.utils';
-import { isTruncatedAiToolOutputSummary } from './ai-tool-output-summary';
+} from '../../types/ai-persistence.types';
+import { AiEventService } from '../run/ai-event.service';
+import { AiExecutionLeaseService } from '../run/ai-execution-lease.service';
+import { AiSourceDependencyService } from '../source/ai-source-dependency.service';
+import { createAiJsonFingerprint } from '../../utils/ai-persistence.utils';
+import { isTruncatedAiToolOutputSummary } from '../../utils/ai-tool-output-summary';
 
 /** 一次已持久化工具调用的稳定标识。 */
 export type StartedAiToolCall =

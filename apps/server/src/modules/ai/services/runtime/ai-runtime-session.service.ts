@@ -15,29 +15,29 @@ import type {
   AiRuntimeSession,
 } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import { AiRunStatus } from '../../../generated/prisma';
-import type { Prisma } from '../../../generated/prisma';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import { AiRunStatus } from '../../../../generated/prisma';
+import type { Prisma } from '../../../../generated/prisma';
 import type {
   CompleteAiRunInput,
   RecordAiStepInput,
-} from '../types/ai-persistence.types';
-import { AI_RUNTIME_SERVICE_IDENTITY } from '../types/ai-runtime.types';
-import type { AiToolExecutionContext } from '../types/ai-tool-registry.types';
-import { AiAssistantMessageService } from './ai-assistant-message.service';
+} from '../../types/ai-persistence.types';
+import { AI_RUNTIME_SERVICE_IDENTITY } from '../../types/ai-runtime.types';
+import type { AiToolExecutionContext } from '../../types/ai-tool-registry.types';
+import { AiAssistantMessageService } from '../run/ai-assistant-message.service';
 import { AiContextBudgetService } from './ai-context-budget.service';
-import { AiEventService } from './ai-event.service';
-import { AiRunControlService } from './ai-run-control.service';
-import { AiRunService } from './ai-run.service';
+import { AiEventService } from '../run/ai-event.service';
+import { AiRunControlService } from '../run/ai-run-control.service';
+import { AiRunService } from '../run/ai-run.service';
 import { AiRuntimeExecutionService } from './ai-runtime-execution.service';
-import { AiStepService, type RecordedAiStep } from './ai-step.service';
+import { AiStepService, type RecordedAiStep } from '../run/ai-step.service';
 import {
   AiToolInvocationService,
   type AiToolInvocationRequest,
   type AiToolInvocationResult,
-} from './ai-tool-invocation.service';
-import { AiToolRegistryService } from './ai-tool-registry.service';
+} from '../tool/ai-tool-invocation.service';
+import { AiToolRegistryService } from '../tool/ai-tool-registry.service';
 
 @Injectable()
 export class AiRuntimeSessionService {

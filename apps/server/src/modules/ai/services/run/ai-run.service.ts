@@ -5,18 +5,18 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import { AiRunStatus, Prisma } from '../../../generated/prisma';
-import { assertAiRunStatusTransition } from '../state/ai-state-transition';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import { AiRunStatus, Prisma } from '../../../../generated/prisma';
+import { assertAiRunStatusTransition } from '../../state/ai-state-transition';
 import type {
   AiThreadRunCreationResult,
   RetryAiRunInput,
-} from '../types/ai-persistence.types';
+} from '../../types/ai-persistence.types';
 import {
   assertAiRequiredText,
   createAiRequestFingerprint,
-} from './ai-persistence.utils';
+} from '../../utils/ai-persistence.utils';
 import {
   AiExecutionLeaseService,
   type AiExecutionLeaseInput,

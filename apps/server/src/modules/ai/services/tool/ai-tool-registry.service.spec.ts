@@ -3,7 +3,7 @@
  * 不注册实际工具实现，不访问数据库，也不调用模型。
  */
 
-import type { AiToolDescriptor } from '../types/ai-tool-registry.types';
+import type { AiToolDescriptor } from '../../types/ai-tool-registry.types';
 import { AiToolRegistryService } from './ai-tool-registry.service';
 
 /** 创建一项仅供注册表测试使用的完整只读工具描述。 */

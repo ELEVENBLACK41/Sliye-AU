@@ -11,21 +11,21 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { AiRuntimeToolInvocationResult } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import type { Prisma } from '../../../generated/prisma';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import type { Prisma } from '../../../../generated/prisma';
 import {
   AI_TOOL_EXECUTORS,
   type AiToolDescriptor,
   type AiToolDiscoveryRequirement,
   type AiToolExecutionContext,
-} from '../types/ai-tool-registry.types';
+} from '../../types/ai-tool-registry.types';
 import type {
   AiToolExecutionResult,
   AiToolExecutor,
   AiToolSourceRef,
-} from '../types/ai-tool-source.types';
+} from '../../types/ai-tool-source.types';
 import { AiToolCallService } from './ai-tool-call.service';
-import { toAiToolOutputSummary } from './ai-tool-output-summary';
+import { toAiToolOutputSummary } from '../../utils/ai-tool-output-summary';
 import { AiToolRegistryService } from './ai-tool-registry.service';
 
 /** 模型发起一次工具调用时提供的最小请求数据。 */

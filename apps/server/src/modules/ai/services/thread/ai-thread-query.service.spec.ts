@@ -5,8 +5,8 @@
  */
 
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import type { Prisma } from '../../../generated/prisma';
-import { AI_CURSOR_KINDS, decodeAiCursor } from './ai-cursor';
+import type { Prisma } from '../../../../generated/prisma';
+import { AI_CURSOR_KINDS, decodeAiCursor } from '../../utils/ai-cursor';
 import { AiThreadQueryService } from './ai-thread-query.service';
 
 /** 构造一行数据库投影结果。 */

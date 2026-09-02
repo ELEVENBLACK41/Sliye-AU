@@ -4,7 +4,7 @@
  * 不连接真实数据库，Prisma 为内存 mock。
  */
 
-import type { Prisma } from '../../../generated/prisma';
+import type { Prisma } from '../../../../generated/prisma';
 import { AiContextBudgetService } from './ai-context-budget.service';
 
 describe('AiContextBudgetService', () => {

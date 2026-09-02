@@ -11,7 +11,7 @@ import {
   type AiToolDescriptor,
   type AiToolDiscoveryRequirement,
   type AiToolFieldDescriptor,
-} from '../types/ai-tool-registry.types';
+} from '../../types/ai-tool-registry.types';
 
 /** 稳定工具名称必须使用 lowerCamelCase，避免模型、审计与持久化记录出现多个别名。 */
 const AI_TOOL_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;

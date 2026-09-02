@@ -6,11 +6,11 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../database/prisma.service';
+import { PrismaService } from '../../../../database/prisma.service';
 import {
   AiMessageDispatchState,
   AiMessageRole,
-} from '../../../generated/prisma';
+} from '../../../../generated/prisma';
 
 /** 注入模型的历史消息条数上限。 */
 const MAX_CONTEXT_MESSAGES = 12;

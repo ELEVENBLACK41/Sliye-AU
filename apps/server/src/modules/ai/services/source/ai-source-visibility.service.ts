@@ -12,10 +12,10 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../database/prisma.service';
-import type { AuthorizationContext } from '../../auth/types/auth.types';
-import { DecisionVisibilityService } from '../../decisions/services/decision-visibility.service';
-import { AiSourceType, AiSourceUsage } from '../../../generated/prisma';
+import { PrismaService } from '../../../../database/prisma.service';
+import type { AuthorizationContext } from '../../../auth/types/auth.types';
+import { DecisionVisibilityService } from '../../../decisions/services/decision-visibility.service';
+import { AiSourceType, AiSourceUsage } from '../../../../generated/prisma';
 
 /** 一条来源依赖在判定过程中使用的最小信息。 */
 type AiSourceDependencyRow = {

@@ -17,7 +17,7 @@ import {
   RecordAiStepDto,
 } from '../dto/ai-runtime.dto';
 import { AiRuntimeServiceGuard } from '../guards/ai-runtime-service.guard';
-import { AiRuntimeSessionService } from '../services/ai-runtime-session.service';
+import { AiRuntimeSessionService } from '../services/runtime/ai-runtime-session.service';
 
 /** 服务端已知的稳定错误码集合，用于校验 Runtime 回传的失败码。 */
 const KNOWN_API_ERROR_CODES = new Set<string>(Object.values(API_ERROR_CODES));

@@ -10,9 +10,9 @@ import { CurrentAuthorization } from '../../auth/decorators/current-authorizatio
 import { RequirePermissions } from '../../auth/decorators/permissions.decorator';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 import { ListAiRunEventsQueryDto, RetryAiRunDto } from '../dto/ai-request.dto';
-import { AiRunControlService } from '../services/ai-run-control.service';
-import { AiRunQueryService } from '../services/ai-run-query.service';
-import { AiRunService } from '../services/ai-run.service';
+import { AiRunControlService } from '../services/run/ai-run-control.service';
+import { AiRunQueryService } from '../services/run/ai-run-query.service';
+import { AiRunService } from '../services/run/ai-run.service';
 
 @ApiTags('ai')
 @ApiBearerAuth()

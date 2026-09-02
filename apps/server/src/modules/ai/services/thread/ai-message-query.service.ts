@@ -21,12 +21,16 @@ import {
 } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import type { AuthorizationContext } from '../../auth/types/auth.types';
-import { Prisma } from '../../../generated/prisma';
-import { AI_CURSOR_KINDS, decodeAiCursor, encodeAiCursor } from './ai-cursor';
-import { AiSourceVisibilityService } from './ai-source-visibility.service';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import type { AuthorizationContext } from '../../../auth/types/auth.types';
+import { Prisma } from '../../../../generated/prisma';
+import {
+  AI_CURSOR_KINDS,
+  decodeAiCursor,
+  encodeAiCursor,
+} from '../../utils/ai-cursor';
+import { AiSourceVisibilityService } from '../source/ai-source-visibility.service';
 
 /**
  * 消息及其所属 Run、工具调用的字段投影。

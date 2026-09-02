@@ -15,7 +15,7 @@ import type {
   AiToolExecutor,
   AiToolSourceRef,
 } from '../../types/ai-tool-source.types';
-import { assertAiRequiredText } from '../../services/ai-persistence.utils';
+import { assertAiRequiredText } from '../../utils/ai-persistence.utils';
 import { FIND_DECISION_CANDIDATES_DESCRIPTOR } from './find-decision-candidates.descriptor';
 import type {
   AiDecisionCandidate,

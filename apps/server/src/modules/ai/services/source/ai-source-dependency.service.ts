@@ -5,9 +5,13 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../database/prisma.service';
-import { AiSourceType, AiSourceUsage, Prisma } from '../../../generated/prisma';
-import type { AiToolSourceRef } from '../types/ai-tool-source.types';
+import { PrismaService } from '../../../../database/prisma.service';
+import {
+  AiSourceType,
+  AiSourceUsage,
+  Prisma,
+} from '../../../../generated/prisma';
+import type { AiToolSourceRef } from '../../types/ai-tool-source.types';
 
 /** 一条已登记来源依赖的稳定标识与展示名称。 */
 export type RegisteredAiSource = {

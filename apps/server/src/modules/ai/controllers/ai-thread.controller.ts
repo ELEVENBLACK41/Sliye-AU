@@ -18,11 +18,11 @@ import {
   ListAiThreadsQueryDto,
   SetAiThreadPinnedDto,
 } from '../dto/ai-request.dto';
-import { AiMessageQueryService } from '../services/ai-message-query.service';
-import { AiThreadMetadataService } from '../services/ai-thread-metadata.service';
-import { AiThreadPinService } from '../services/ai-thread-pin.service';
-import { AiThreadQueryService } from '../services/ai-thread-query.service';
-import { AiThreadService } from '../services/ai-thread.service';
+import { AiMessageQueryService } from '../services/thread/ai-message-query.service';
+import { AiThreadMetadataService } from '../services/thread/ai-thread-metadata.service';
+import { AiThreadPinService } from '../services/thread/ai-thread-pin.service';
+import { AiThreadQueryService } from '../services/thread/ai-thread-query.service';
+import { AiThreadService } from '../services/thread/ai-thread.service';
 
 @ApiTags('ai')
 @ApiBearerAuth()

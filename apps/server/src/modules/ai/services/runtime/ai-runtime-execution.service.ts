@@ -5,19 +5,19 @@
 
 import { Injectable } from '@nestjs/common';
 import type { AiLanguageModelRole } from '@workspace/contracts/ai';
-import { PrismaService } from '../../../database/prisma.service';
+import { PrismaService } from '../../../../database/prisma.service';
 import {
   AiLanguageModelRole as PrismaAiLanguageModelRole,
   AiRunStatus,
-} from '../../../generated/prisma';
+} from '../../../../generated/prisma';
 import {
   AI_RUNTIME_SERVICE_IDENTITY,
   type AiRuntimeServiceIdentity,
   type ClaimedAiRuntimeExecution,
   type ClaimAiRuntimeExecutionInput,
-} from '../types/ai-runtime.types';
-import { assertAiRequiredText } from './ai-persistence.utils';
-import { AiRunService } from './ai-run.service';
+} from '../../types/ai-runtime.types';
+import { assertAiRequiredText } from '../../utils/ai-persistence.utils';
+import { AiRunService } from '../run/ai-run.service';
 
 @Injectable()
 export class AiRuntimeExecutionService {

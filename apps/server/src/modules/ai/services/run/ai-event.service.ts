@@ -11,10 +11,10 @@ import type {
   AiToolCallStartedEvent,
 } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import { AiEventType, Prisma } from '../../../generated/prisma';
-import type { AppendAiEventInput } from '../types/ai-persistence.types';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import { AiEventType, Prisma } from '../../../../generated/prisma';
+import type { AppendAiEventInput } from '../../types/ai-persistence.types';
 import {
   AiExecutionLeaseService,
   type AiExecutionLeaseInput,

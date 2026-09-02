@@ -8,8 +8,8 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import type { AiEvent, AiRunEventPage } from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
 
 /** 单次事件补拉允许返回的最大条数，避免一次性拉取超长历史。 */
 const MAX_RUN_EVENT_PAGE_SIZE = 200;

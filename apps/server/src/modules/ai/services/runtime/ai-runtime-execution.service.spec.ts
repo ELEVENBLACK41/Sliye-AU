@@ -3,10 +3,10 @@
  * 不连接数据库、不调用模型或工具。
  */
 
-import { AiLanguageModelRole as PrismaAiLanguageModelRole } from '../../../generated/prisma';
-import { AI_RUNTIME_SERVICE_IDENTITY } from '../types/ai-runtime.types';
+import { AiLanguageModelRole as PrismaAiLanguageModelRole } from '../../../../generated/prisma';
+import { AI_RUNTIME_SERVICE_IDENTITY } from '../../types/ai-runtime.types';
 import { AiRuntimeExecutionService } from './ai-runtime-execution.service';
-import { AiRunService } from './ai-run.service';
+import { AiRunService } from '../run/ai-run.service';
 
 describe('AiRuntimeExecutionService', () => {
   /** 创建仅覆盖 Runtime 领取边界的服务实例，避免本单元测试访问真实数据库。 */

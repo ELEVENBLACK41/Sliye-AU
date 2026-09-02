@@ -6,10 +6,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import { AiRunStatus, Prisma } from '../../../generated/prisma';
-import { assertAiRequiredText } from './ai-persistence.utils';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import { AiRunStatus, Prisma } from '../../../../generated/prisma';
+import { assertAiRequiredText } from '../../utils/ai-persistence.utils';
 
 /** 第一版执行器租约时长；续租以同一时长滚动延长有效期。 */
 export const AI_RUN_EXECUTION_LEASE_DURATION_MS = 30_000;

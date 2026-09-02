@@ -12,14 +12,14 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import type { AiThreadListItem } from '@workspace/contracts/ai';
 import { AI_THREAD_TITLE_MAX_LENGTH } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import type { Prisma } from '../../../generated/prisma';
-import { AiQueueService } from './ai-queue.service';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import type { Prisma } from '../../../../generated/prisma';
+import { AiQueueService } from '../run/ai-queue.service';
 import {
   AI_THREAD_LIST_ITEM_SELECT,
   toAiThreadListItem,
-} from './ai-thread-projection';
+} from '../../projections/ai-thread.projection';
 
 @Injectable()
 export class AiThreadMetadataService {

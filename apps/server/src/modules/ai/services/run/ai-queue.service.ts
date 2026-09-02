@@ -8,8 +8,8 @@ import {
   AiMessageDispatchState,
   AiRunStatus,
   Prisma,
-} from '../../../generated/prisma';
-import { assertAiMessageDispatchStateTransition } from '../state/ai-message-state-transition';
+} from '../../../../generated/prisma';
+import { assertAiMessageDispatchStateTransition } from '../../state/ai-message-state-transition';
 
 /** 一次成功领取队首输入后创建的 Run 与消息标识。 */
 export type ClaimedAiQueueMessage = {

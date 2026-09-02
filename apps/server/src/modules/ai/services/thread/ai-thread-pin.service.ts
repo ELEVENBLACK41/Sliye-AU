@@ -17,13 +17,13 @@ import type {
 } from '@workspace/contracts/ai';
 import { AI_THREAD_PINNED_MAX } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import { Prisma } from '../../../generated/prisma';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import { Prisma } from '../../../../generated/prisma';
 import {
   AI_THREAD_LIST_ITEM_SELECT,
   toAiThreadListItem,
-} from './ai-thread-projection';
+} from '../../projections/ai-thread.projection';
 
 /**
  * advisory lock 的命名空间，避免与其他业务的 advisory lock 键冲突。

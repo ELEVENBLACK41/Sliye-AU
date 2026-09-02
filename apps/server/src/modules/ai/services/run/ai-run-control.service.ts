@@ -6,20 +6,20 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type { AiEvent, AiRuntimeRunStopResult } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import { AiRunStatus, Prisma } from '../../../generated/prisma';
-import { assertAiRunStatusTransition } from '../state/ai-state-transition';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import { AiRunStatus, Prisma } from '../../../../generated/prisma';
+import { assertAiRunStatusTransition } from '../../state/ai-state-transition';
 import type {
   AiRunStopResult,
   CompleteAiRunInput,
   RequestAiRunStopInput,
-} from '../types/ai-persistence.types';
+} from '../../types/ai-persistence.types';
 import { AiAssistantMessageService } from './ai-assistant-message.service';
 import { AiEventService } from './ai-event.service';
 import { AiExecutionLeaseService } from './ai-execution-lease.service';
 import { AiQueueService } from './ai-queue.service';
-import { AiToolCallService } from './ai-tool-call.service';
+import { AiToolCallService } from '../tool/ai-tool-call.service';
 
 /** 调整方向在已锁定 Thread 的事务内取消当前 Run 时所需的内部输入。 */
 export type RequestActiveRunCancellationInput = {

@@ -5,28 +5,28 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
 import {
   AiMessageDispatchState,
   AiMessageRole,
   AiMessageSubmissionMode,
   AiRunStatus,
-} from '../../../generated/prisma';
+} from '../../../../generated/prisma';
 import type {
   AiThreadMessageSubmissionResult,
   AiThreadRunCreationResult,
   CreateAiThreadMessageRunInput,
   CreateAiThreadRunInput,
-} from '../types/ai-persistence.types';
+} from '../../types/ai-persistence.types';
 import {
   assertAiRequiredText,
   createAiRequestFingerprint,
   createAiThreadTitle,
   toPrismaAiLanguageModelRole,
-} from './ai-persistence.utils';
-import { AiQueueService } from './ai-queue.service';
-import { AiRunControlService } from './ai-run-control.service';
+} from '../../utils/ai-persistence.utils';
+import { AiQueueService } from '../run/ai-queue.service';
+import { AiRunControlService } from '../run/ai-run-control.service';
 
 @Injectable()
 export class AiThreadService {

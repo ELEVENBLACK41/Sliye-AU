@@ -7,9 +7,9 @@
 
 import { Injectable } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
-import { PrismaService } from '../../../database/prisma.service';
-import type { Prisma } from '../../../generated/prisma';
-import type { RecordAiStepInput } from '../types/ai-persistence.types';
+import { PrismaService } from '../../../../database/prisma.service';
+import type { Prisma } from '../../../../generated/prisma';
+import type { RecordAiStepInput } from '../../types/ai-persistence.types';
 import { AiExecutionLeaseService } from './ai-execution-lease.service';
 
 /** 一条已持久化模型步骤的稳定标识。 */

@@ -18,15 +18,19 @@ import {
   AI_THREAD_PAGE_MAX_LIMIT,
 } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { BusinessException } from '../../../common/exceptions/business.exception';
-import { PrismaService } from '../../../database/prisma.service';
-import type { Prisma } from '../../../generated/prisma';
-import { isAiRunNonTerminalStatus } from '../state/ai-run.machine';
-import { AI_CURSOR_KINDS, decodeAiCursor, encodeAiCursor } from './ai-cursor';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
+import { PrismaService } from '../../../../database/prisma.service';
+import type { Prisma } from '../../../../generated/prisma';
+import { isAiRunNonTerminalStatus } from '../../state/ai-run.machine';
+import {
+  AI_CURSOR_KINDS,
+  decodeAiCursor,
+  encodeAiCursor,
+} from '../../utils/ai-cursor';
 import {
   AI_THREAD_LIST_ITEM_SELECT,
   toAiThreadListItem,
-} from './ai-thread-projection';
+} from '../../projections/ai-thread.projection';
 
 @Injectable()
 export class AiThreadQueryService {
