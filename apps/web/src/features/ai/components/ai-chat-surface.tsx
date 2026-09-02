@@ -32,7 +32,6 @@ import {
 } from '@/components/ai-elements/prompt-input';
 import type { AiWorkspaceMessage } from '../types/ai-message';
 import type { AiWorkspaceCommandState, AiWorkspaceQueuedMessage, AiWorkspaceStreamState } from '../types/ai-workspace';
-import { isAiRunActive } from '../utils/ai-event-reducer';
 
 /** 流式回答按字符淡入，保持模型小片段到达时的连续视觉反馈。 */
 const STREAMING_MESSAGE_ANIMATION = {
@@ -84,7 +83,7 @@ export function AiChatSurface({
   const [input, setInput] = useState('');
   const [enableWebSearch, setEnableWebSearch] = useState(false);
   const [editingQueuedMessageId, setEditingQueuedMessageId] = useState<string | null>(null);
-  const isRunning = isAiRunActive(activeRunStatus);
+  const isRunning = isActiveAiRunStatus(activeRunStatus);
   const isCommandPending = commandState !== 'IDLE';
 
   /** 提交输入框内容；编辑排队项时使用 STEER 替代原消息。 */
@@ -172,7 +171,17 @@ export function AiChatSurface({
 function toComposerStatus(activeRunStatus: AiRunStatus | null, commandState: AiWorkspaceCommandState): ChatStatus {
   if (commandState !== 'IDLE') return 'submitted';
   if (activeRunStatus === 'CANCELLATION_REQUESTED') return 'submitted';
-  return isAiRunActive(activeRunStatus) ? 'streaming' : 'ready';
+  return isActiveAiRunStatus(activeRunStatus) ? 'streaming' : 'ready';
+}
+
+/** 判断展示层的 Run 是否仍处于可继续运行状态，避免依赖旧事件 reducer。 */
+function isActiveAiRunStatus(status: AiRunStatus | null): boolean {
+  return (
+    status === 'QUEUED' ||
+    status === 'RUNNING' ||
+    status === 'WAITING_APPROVAL' ||
+    status === 'CANCELLATION_REQUESTED'
+  );
 }
 
 /** 渲染持久化消息、实时助手文本、运行提示和工具调用卡片。 */
