@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createAgentUIStreamResponse, simulateReadableStream, type LanguageModel } from 'ai';
+import { createAgentUIStreamResponse, simulateReadableStream, smoothStream, type LanguageModel } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 
 import {
@@ -141,6 +141,77 @@ test('官方 UI Message Stream 应输出工具 parts、文本增量和完成标�
   assert.ok(chunks.some((chunk) => chunk.type === 'finish'));
   assert.equal(raw.includes('live-delta'), false);
   assert.equal(raw.includes('ai-event'), false);
+});
+
+test('官方 UI Message Stream onEnd 应提供组装完成的 Assistant UIMessage', async () => {
+  const model = new MockLanguageModelV4({
+    provider: 'nextnest.mock',
+    modelId: 'c4-c-on-end-model',
+    doStream: createMockTextStreamResult('可持久化的完整回答。', 'c4-c-on-end-model'),
+  });
+  const agent = createTestAgent(
+    model,
+    async (_input: NextNestWorkspaceToolInvocationInput) => ({
+      status: 'SUCCEEDED',
+      toolCallId: 'unused',
+      output: {},
+      events: [],
+    }),
+  );
+  let onEndResult:
+    | {
+        responseMessage: { role: string; parts: Array<{ type: string; text?: string }> };
+        messages: Array<{ role: string }>;
+        isAborted: boolean;
+      }
+    | undefined;
+
+  const response = await createAgentUIStreamResponse({
+    agent,
+    uiMessages: [createUserMessage('测试 onEnd 持久化。')],
+    onEnd: ({ responseMessage, messages, isAborted }) => {
+      onEndResult = { responseMessage, messages, isAborted };
+    },
+  });
+
+  await response.text();
+
+  assert.equal(onEndResult?.isAborted, false);
+  assert.equal(onEndResult?.messages.at(-1)?.role, 'assistant');
+  const textPart = onEndResult?.responseMessage.parts.find((part) => part.type === 'text');
+  assert.equal(textPart?.text, '可持久化的完整回答。');
+});
+
+test('AI SDK 官方 smoothStream 应把中文 burst 拆成多个连续 delta 且不丢失文本', async () => {
+  const model = new MockLanguageModelV4({
+    provider: 'nextnest.mock',
+    modelId: 'c4-c-smooth-model',
+    doStream: createMockTextStreamResult('哪一个方向的 AI 工作台更适合当前项目？', 'c4-c-smooth-model'),
+  });
+  const agent = createTestAgent(
+    model,
+    async (_input: NextNestWorkspaceToolInvocationInput) => ({
+      status: 'SUCCEEDED',
+      toolCallId: 'unused',
+      output: {},
+      events: [],
+    }),
+  );
+
+  const response = await createAgentUIStreamResponse({
+    agent,
+    uiMessages: [createUserMessage('测试中文流平滑。')],
+    experimental_transform: smoothStream({
+      delayInMs: null,
+      chunking: new Intl.Segmenter('zh-CN', { granularity: 'word' }),
+    }),
+  });
+  const textDeltas = parseSseChunks(await response.text())
+    .filter((chunk) => chunk.type === 'text-delta')
+    .map((chunk) => String(chunk.delta ?? ''));
+
+  assert.ok(textDeltas.length > 1);
+  assert.equal(textDeltas.join(''), '哪一个方向的 AI 工作台更适合当前项目？');
 });
 
 test('UI Message Stream 错误应转换为脱敏的稳定中文错误 chunk', async () => {

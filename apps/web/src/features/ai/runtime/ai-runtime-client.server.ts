@@ -133,7 +133,7 @@ export async function invokeAiRuntimeTool(input: {
   });
 }
 
-/** 把 Run 收敛为完成或失败终态，并写入助手最终正文与用量。 */
+/** 把 Run 收敛为完成或失败终态，并写入助手 UIMessage parts、正文与用量。 */
 export async function completeAiRuntimeRun(input: {
   runId: string;
   executionLeaseId: string;
@@ -141,6 +141,8 @@ export async function completeAiRuntimeRun(input: {
   failureReason?: string;
   failureCode?: string;
   assistantMessageContent?: string;
+  assistantMessageParts?: Record<string, unknown>[];
+  assistantMessageMetadata?: Record<string, unknown>;
   resolvedModelId?: string;
   usage?: {
     inputTokens: number;

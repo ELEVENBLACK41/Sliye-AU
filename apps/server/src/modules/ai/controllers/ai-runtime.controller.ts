@@ -9,6 +9,7 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { Public } from '../../auth/decorators/public.decorator';
+import type { Prisma } from '../../../generated/prisma';
 import {
   AppendAiAssistantTextDto,
   AiRuntimeLeaseDto,
@@ -115,7 +116,7 @@ export class AiRuntimeController {
     });
   }
 
-  /** 把 Run 收敛为完成或失败终态，并写入助手最终正文与用量。 */
+  /** 把 Run 收敛为完成或失败终态，并写入助手 UIMessage 与用量。 */
   @Post(':runId/complete')
   complete(@Param('runId') runId: string, @Body() body: CompleteAiRunDto) {
     return this.runtimeSessionService.completeRun({
@@ -125,6 +126,12 @@ export class AiRuntimeController {
       failureReason: body.failureReason ?? null,
       failureCode: this.toKnownErrorCode(body.failureCode),
       assistantMessageContent: body.assistantMessageContent ?? null,
+      assistantMessageParts: body.assistantMessageParts as
+        | Prisma.InputJsonValue
+        | undefined,
+      assistantMessageMetadata: body.assistantMessageMetadata as
+        | Prisma.InputJsonValue
+        | undefined,
       resolvedModelId: body.resolvedModelId ?? null,
       usage: body.usage ? { ...body.usage } : null,
     });

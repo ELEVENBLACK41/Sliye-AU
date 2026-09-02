@@ -115,6 +115,8 @@ export class AiRunControlService {
             runId: run.id,
             threadId: run.threadId,
             content: input.assistantMessageContent,
+            parts: input.assistantMessageParts,
+            metadata: input.assistantMessageMetadata,
           },
         );
       }

@@ -35,6 +35,9 @@ const MAX_LIVE_DELTA_IDS_PER_EVENT = 256;
 /** 助手最终正文允许的最大长度。 */
 const MAX_ASSISTANT_CONTENT_LENGTH = 40_000;
 
+/** 一条 Assistant UIMessage 允许保存的最大 parts 数量。 */
+const MAX_ASSISTANT_PARTS = 256;
+
 /** 单个模型步骤允许关联的最大工具调用数量。 */
 const MAX_TOOL_CALLS_PER_STEP = 20;
 
@@ -200,7 +203,7 @@ export class AiRunUsageDto {
   estimatedCostUsd?: number;
 }
 
-/** 把 Run 收敛为完成或失败终态的内部请求。 */
+/** 把 Run 收敛为完成或失败终态并保存 Assistant UIMessage 的内部请求。 */
 export class CompleteAiRunDto extends AiRuntimeLeaseDto {
   /** 目标终态；用户取消不走本接口。 */
   @ApiProperty({ enum: ['COMPLETED', 'FAILED'] })
@@ -238,6 +241,20 @@ export class CompleteAiRunDto extends AiRuntimeLeaseDto {
   @IsString()
   @MaxLength(MAX_ASSISTANT_CONTENT_LENGTH)
   assistantMessageContent?: string;
+
+  /** 经 AI SDK 组装并校验的 Assistant UIMessage parts。 */
+  @ApiPropertyOptional({ type: [Object] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_ASSISTANT_PARTS)
+  @IsObject({ each: true })
+  assistantMessageParts?: Record<string, unknown>[];
+
+  /** Assistant UIMessage 的非敏感元数据。 */
+  @ApiPropertyOptional({ type: Object })
+  @IsOptional()
+  @IsObject()
+  assistantMessageMetadata?: Record<string, unknown>;
 
   /** Gateway 实际执行本次运行的供应商模型标识。 */
   @ApiPropertyOptional()

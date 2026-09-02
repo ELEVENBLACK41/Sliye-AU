@@ -1,11 +1,12 @@
 /**
  * 本文件编排 C2 临时 Workspace Agent Spike 的历史读取、Run 领取和官方流响应。
- * 它复用已有 Thread/Run 数据模型；C4-B2 只让历史 text parts 进入主链，完整
- * UIMessage onEnd 持久化仍由 C4-C 接入，本入口仍不承担最终主链职责。
+ * 它复用已有 Thread/Run 数据模型；C4-C1 已通过官方 onEnd 保存完整 Assistant
+ * UIMessage，本入口仍保留 Spike 标记，不承担最终主链替换职责。
  */
 
 import {
   createAgentUIStreamResponse,
+  smoothStream,
   validateUIMessages,
 } from 'ai';
 import type {
@@ -19,7 +20,10 @@ import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 
 import { apiError } from '@/app/api/_utils/response';
-import type { NextNestWorkspaceAgentUIMessage } from '@/features/ai/agents/nextnest-workspace-agent.server';
+import type {
+  NextNestWorkspaceAgent,
+  NextNestWorkspaceAgentUIMessage,
+} from '@/features/ai/agents/nextnest-workspace-agent.server';
 import { createNextNestWorkspaceAgent } from '@/features/ai/agents/nextnest-workspace-agent.server';
 import { normalizeAiModelError } from '@/features/ai/runtime/ai-model-error';
 import {
@@ -58,6 +62,11 @@ type AiAgentSpikeFailure = {
   /** 可以安全交给客户端的中文说明。 */
   message: string;
 };
+
+/** 使用 AI SDK 官方流平滑转换，避免模型 burst 让多个中文 delta 同时抵达浏览器。 */
+const AI_TEXT_STREAM_SMOOTHING_TRANSFORM = smoothStream<NextNestWorkspaceAgent['tools']>({
+  chunking: new Intl.Segmenter('zh-CN', { granularity: 'word' }),
+});
 
 /** 读取受保护 Thread 历史、领取 Run 并启动官方 Agent UI Message Stream。 */
 export async function startAiAgentSpike(input: AiAgentSpikeInput) {
@@ -209,6 +218,7 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
     return await createAgentUIStreamResponse({
       agent,
       uiMessages: validatedMessages,
+      experimental_transform: AI_TEXT_STREAM_SMOOTHING_TRANSFORM,
       headers: { 'X-NextNest-AI-Spike': 'c2' },
       onStepEnd: ({ model }) => {
         resolvedModelId = model.modelId;
@@ -223,10 +233,11 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
         return normalized.message;
       },
       onEnd: async ({ responseMessage, isAborted }) => {
+        const persistedMessage = toPersistedAssistantMessage(responseMessage);
         await settleAiAgentSpikeRun({
           runId: session.execution.runId,
           executionLeaseId: session.execution.executionLeaseId,
-          assistantMessageContent: extractUiMessageText(responseMessage),
+          ...persistedMessage,
           resolvedModelId,
           failure:
             streamFailure ??
@@ -274,6 +285,26 @@ function extractUiMessageText(message: NextNestWorkspaceAgentUIMessage): string 
     .join('');
 }
 
+/** 将官方 Assistant UIMessage 转为内部接口可传输的 parts、metadata 和纯文本投影。 */
+function toPersistedAssistantMessage(message: NextNestWorkspaceAgentUIMessage): {
+  assistantMessageContent: string;
+  assistantMessageParts: Record<string, unknown>[];
+  assistantMessageMetadata?: Record<string, unknown>;
+} {
+  const metadata = isJsonObject(message.metadata) ? message.metadata : undefined;
+
+  return {
+    assistantMessageContent: extractUiMessageText(message),
+    assistantMessageParts: message.parts as unknown as Record<string, unknown>[],
+    ...(metadata ? { assistantMessageMetadata: metadata } : {}),
+  };
+}
+
+/** 只允许 JSON 对象形式的非敏感消息 metadata 进入内部持久化请求。 */
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /** 消费 UI Message Stream 的服务端副本，并吞掉断开后的消费异常避免形成未处理 Promise。 */
 async function consumeAiAgentSpikeSseStream({ stream }: { stream: ReadableStream<string> }, runId: string): Promise<void> {
   try {
@@ -288,6 +319,8 @@ async function settleAiAgentSpikeRun(input: {
   runId: string;
   executionLeaseId: string;
   assistantMessageContent?: string;
+  assistantMessageParts?: Record<string, unknown>[];
+  assistantMessageMetadata?: Record<string, unknown>;
   resolvedModelId?: string;
   failure: AiAgentSpikeFailure | null;
 }): Promise<void> {
@@ -303,6 +336,8 @@ async function settleAiAgentSpikeRun(input: {
           }
         : {}),
       assistantMessageContent: input.assistantMessageContent || undefined,
+      assistantMessageParts: input.assistantMessageParts,
+      assistantMessageMetadata: input.assistantMessageMetadata,
       resolvedModelId: input.resolvedModelId,
     });
   } catch (error) {

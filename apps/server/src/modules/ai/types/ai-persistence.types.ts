@@ -102,6 +102,10 @@ export type CompleteAiRunInput = {
    * 没有生成正文（例如模型失败）时传入 `null` 或省略。
    */
   assistantMessageContent?: string | null;
+  /** AI SDK 组装完成的 Assistant UIMessage parts；保存前已由 Web Route 校验。 */
+  assistantMessageParts?: Prisma.InputJsonValue;
+  /** Assistant UIMessage 的非敏感元数据；没有时省略。 */
+  assistantMessageMetadata?: Prisma.InputJsonValue;
 };
 
 /** 用户请求停止当前 Run 的服务端输入；该操作不会直接向模型流注入新的文本。 */

@@ -1800,7 +1800,7 @@ describePersistence('AI 持久化事务地基', () => {
     expect(['CANCELLED', 'COMPLETED']).toContain(settled?.status);
   });
 
-  it('Run 终态事务返回本次新提交的状态事件回执，并与数据库记录一致', async () => {
+  it('Run 终态事务返回本次新提交的状态事件回执，并保存 Assistant UIMessage', async () => {
     const ownerUserId = await createTestUser();
     const initial = await threadService.createThreadWithInitialRun({
       ownerUserId,
@@ -1819,6 +1819,21 @@ describePersistence('AI 持久化事务地基', () => {
       failureReason: null,
       failureCode: null,
       assistantMessageContent: '已完成终态回执测试。',
+      assistantMessageParts: [
+        { type: 'text', text: '已完成终态回执测试。' },
+        {
+          type: 'tool-findDecisionCandidates',
+          toolCallId: 'tool-c4-c-1',
+          state: 'output-available',
+          input: { query: '终态回执' },
+          output: { ok: true },
+        },
+      ],
+      assistantMessageMetadata: { source: 'c4-c-test' },
+    });
+    const persistedAssistant = await prisma.aiMessage.findUnique({
+      where: { runId: initial.runId },
+      select: { content: true, parts: true, metadata: true },
     });
     const persistedEvents = await prisma.aiEvent.findMany({
       where: { runId: initial.runId },
@@ -1837,6 +1852,20 @@ describePersistence('AI 持久化事务地基', () => {
         createdAt: event.createdAt.toISOString(),
       })),
     );
+    expect(persistedAssistant).toEqual({
+      content: '已完成终态回执测试。',
+      parts: [
+        { type: 'text', text: '已完成终态回执测试。' },
+        {
+          type: 'tool-findDecisionCandidates',
+          toolCallId: 'tool-c4-c-1',
+          state: 'output-available',
+          input: { query: '终态回执' },
+          output: { ok: true },
+        },
+      ],
+      metadata: { source: 'c4-c-test' },
+    });
   });
 
   it('调整方向与完成竞争不会生成并发 Run，旧 Run 终态后才领取新方向', async () => {

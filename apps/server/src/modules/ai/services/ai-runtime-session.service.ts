@@ -141,7 +141,7 @@ export class AiRuntimeSessionService {
     return this.toolInvocationService.invokeTool(executionContext, request);
   }
 
-  /** 将 Run 收敛为完成或失败终态，并在同一事务写入助手最终正文与用量。 */
+  /** 将 Run 收敛为完成或失败终态，并在同一事务写入助手 UIMessage 与用量。 */
   async completeRun(
     input: Omit<CompleteAiRunInput, 'ownerUserId'> & {
       usage?: Prisma.InputJsonValue | null;
@@ -166,6 +166,8 @@ export class AiRuntimeSessionService {
       failureReason: input.failureReason,
       failureCode: input.failureCode,
       assistantMessageContent: input.assistantMessageContent,
+      assistantMessageParts: input.assistantMessageParts,
+      assistantMessageMetadata: input.assistantMessageMetadata,
     });
   }
 

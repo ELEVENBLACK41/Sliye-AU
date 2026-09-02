@@ -80,8 +80,16 @@ export class AiAssistantMessageService {
    */
   async writeFinalContentInTransaction(
     transaction: Prisma.TransactionClient,
-    input: { runId: string; threadId: string; content: string },
+    input: {
+      runId: string;
+      threadId: string;
+      content: string;
+      parts?: Prisma.InputJsonValue;
+      metadata?: Prisma.InputJsonValue;
+    },
   ): Promise<void> {
+    const parts = input.parts ?? createAiTextMessageParts(input.content);
+
     await transaction.aiMessage.upsert({
       where: { runId: input.runId },
       create: {
@@ -89,11 +97,13 @@ export class AiAssistantMessageService {
         runId: input.runId,
         role: AiMessageRole.ASSISTANT,
         content: input.content,
-        parts: createAiTextMessageParts(input.content),
+        parts,
+        ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
       },
       update: {
         content: input.content,
-        parts: createAiTextMessageParts(input.content),
+        parts,
+        ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
       },
     });
   }
