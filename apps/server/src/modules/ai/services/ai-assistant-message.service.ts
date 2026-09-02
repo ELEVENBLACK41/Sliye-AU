@@ -1,7 +1,8 @@
 /**
  * 本文件负责助手消息的占位创建与最终正文写入。
  * 助手消息在第一段文本增量之前先落库，使流事件可以携带稳定的 messageId，
- * 断线补拉时前端能把增量准确追加到同一条消息上；最终正文由 Run 终态事务写入。
+ * 断线补拉时前端能把增量准确追加到同一条消息上；最终正文和 text part
+ * 由 Run 终态事务写入，完整 UIMessage parts 由后续 onEnd 收敛。
  */
 
 import { HttpStatus, Injectable } from '@nestjs/common';
@@ -13,6 +14,7 @@ import {
   AiExecutionLeaseService,
   type AiExecutionLeaseInput,
 } from './ai-execution-lease.service';
+import { createAiTextMessageParts } from './ai-persistence.utils';
 
 /** 一条已存在或新建的助手消息标识。 */
 export type EnsuredAiAssistantMessage = {
@@ -63,6 +65,7 @@ export class AiAssistantMessageService {
           runId: input.runId,
           role: AiMessageRole.ASSISTANT,
           content: '',
+          parts: createAiTextMessageParts(''),
         },
         select: { id: true },
       });
@@ -86,8 +89,12 @@ export class AiAssistantMessageService {
         runId: input.runId,
         role: AiMessageRole.ASSISTANT,
         content: input.content,
+        parts: createAiTextMessageParts(input.content),
       },
-      update: { content: input.content },
+      update: {
+        content: input.content,
+        parts: createAiTextMessageParts(input.content),
+      },
     });
   }
 }

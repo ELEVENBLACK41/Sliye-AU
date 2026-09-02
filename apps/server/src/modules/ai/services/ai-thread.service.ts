@@ -21,6 +21,7 @@ import type {
 } from '../types/ai-persistence.types';
 import {
   assertAiRequiredText,
+  createAiTextMessageParts,
   createAiRequestFingerprint,
   createAiThreadTitle,
   toPrismaAiLanguageModelRole,
@@ -93,6 +94,7 @@ export class AiThreadService {
             requestFingerprint,
             role: AiMessageRole.USER,
             content: input.message,
+            parts: createAiTextMessageParts(input.message),
             dispatchState: AiMessageDispatchState.DISPATCHED,
             queueSequence: 1,
             submissionMode: AiMessageSubmissionMode.NORMAL,
@@ -215,6 +217,7 @@ export class AiThreadService {
             requestFingerprint,
             role: AiMessageRole.USER,
             content: input.message,
+            parts: createAiTextMessageParts(input.message),
             dispatchState: AiMessageDispatchState.QUEUED,
             queueSequence,
             submissionMode: this.toPrismaSubmissionMode(submissionMode),

@@ -6,7 +6,10 @@ import { createHash } from 'node:crypto';
 import { HttpStatus } from '@nestjs/common';
 import type { AiLanguageModelRole } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
-import { AiLanguageModelRole as PrismaAiLanguageModelRole } from '../../../generated/prisma';
+import {
+  AiLanguageModelRole as PrismaAiLanguageModelRole,
+  Prisma,
+} from '../../../generated/prisma';
 import { BusinessException } from '../../../common/exceptions/business.exception';
 
 /** 从客户端原始请求正文生成不可逆且可比较的 SHA-256 指纹。 */
@@ -63,4 +66,11 @@ export function toPrismaAiLanguageModelRole(
   return role === 'deepReview'
     ? PrismaAiLanguageModelRole.DEEP_REVIEW
     : PrismaAiLanguageModelRole.STANDARD;
+}
+
+/** 将服务端已校验的纯文本转换为最小 AI SDK UIMessage text part。 */
+export function createAiTextMessageParts(
+  content: string,
+): Prisma.InputJsonValue {
+  return [{ type: 'text', text: content }];
 }

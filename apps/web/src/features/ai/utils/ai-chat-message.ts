@@ -1,8 +1,8 @@
 /**
  * 本文件负责 C3 官方 useChat 工作台的 UIMessage 请求和展示适配。
  *
- * C4 完成 UIMessage parts 持久化前，历史消息只按纯文本恢复；实时工具状态
- * 直接消费 AI SDK 返回的 tool parts，不经过旧领域事件 reducer。
+ * 历史消息直接消费服务端保存的 UIMessage parts；实时工具状态直接消费 AI SDK
+ * 返回的 tool parts，不经过旧领域事件 reducer。
  */
 
 import { isToolUIPart, type ChatStatus } from 'ai';
@@ -33,7 +33,7 @@ export function createAiChatRequestBody(
   return { threadId, message };
 }
 
-/** 把现有历史接口的文本投影转换为官方 Agent UIMessage。 */
+/** 把新格式历史接口的 UIMessage 转换为官方 Agent UIMessage。 */
 export function toNextNestWorkspaceAgentUIMessages(
   history: AiMessageHistoryItem[],
 ): NextNestWorkspaceAgentUIMessage[] {
@@ -42,15 +42,11 @@ export function toNextNestWorkspaceAgentUIMessages(
     .map((message) => ({
       id: message.id,
       role: message.role === 'USER' ? 'user' : 'assistant',
-      parts: [
-        {
-          type: 'text' as const,
-          text:
-            message.contentVisibility === 'SOURCE_REVOKED'
-              ? REVOKED_MESSAGE_PLACEHOLDER
-              : message.content,
-        },
-      ],
+      parts:
+        message.contentVisibility === 'SOURCE_REVOKED'
+          ? [{ type: 'text' as const, text: REVOKED_MESSAGE_PLACEHOLDER }]
+          : (message.parts as unknown as NextNestWorkspaceAgentUIMessage['parts']),
+      metadata: message.contentVisibility === 'SOURCE_REVOKED' ? undefined : message.metadata ?? undefined,
     }));
 }
 

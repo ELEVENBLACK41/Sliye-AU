@@ -23,6 +23,8 @@ function createMessage(overrides: Partial<AiMessageHistoryItem> = {}): AiMessage
     queueSequence: 1,
     submissionMode: 'NORMAL',
     content: '原始问题',
+    parts: [{ type: 'text', text: '原始问题' }],
+    metadata: null,
     createdAt: '2026-08-26T00:00:00.000Z',
     run: null,
     contentVisibility: 'VISIBLE',

@@ -171,6 +171,8 @@ export function useAiThreadCommands({
         queueSequence: result.queueSequence,
         submissionMode: result.submissionMode,
         content,
+        parts: [{ type: 'text', text: content }],
+        metadata: null,
         createdAt,
         run: null,
         contentVisibility: 'VISIBLE',

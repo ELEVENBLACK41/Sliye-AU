@@ -10,10 +10,12 @@
 
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type {
+  AiMessageMetadata,
   AiMessageHistoryItem,
   AiMessagePage,
   AiMessageRun,
   AiMessageToolCall,
+  AiMessageUiPart,
 } from '@workspace/contracts/ai';
 import {
   AI_MESSAGE_PAGE_DEFAULT_LIMIT,
@@ -43,6 +45,8 @@ const AI_MESSAGE_HISTORY_SELECT = Prisma.validator<Prisma.AiMessageSelect>()({
   queueSequence: true,
   submissionMode: true,
   content: true,
+  parts: true,
+  metadata: true,
   createdAt: true,
   run: {
     select: {
@@ -207,6 +211,10 @@ export class AiMessageQueryService {
       queueSequence: row.queueSequence,
       submissionMode: row.submissionMode,
       content: isSourceRevoked ? '' : row.content,
+      parts: isSourceRevoked ? [] : (row.parts as unknown as AiMessageUiPart[]),
+      metadata: isSourceRevoked
+        ? null
+        : (row.metadata as unknown as AiMessageMetadata),
       createdAt: row.createdAt.toISOString(),
       run: row.run ? this.toRunSummary(row.run, isSourceRevoked) : null,
       contentVisibility: isSourceRevoked ? 'SOURCE_REVOKED' : 'VISIBLE',

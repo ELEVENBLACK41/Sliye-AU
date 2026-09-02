@@ -1501,6 +1501,10 @@ model AiMessage {
 
   role      AiMessageRole
   content   String
+  /// AI SDK UIMessage 的完整 parts；新格式消息必须保存该 JSON 数组。
+  parts     Json      @default("[]")
+  /// UIMessage 的可选非敏感元数据；密钥、Cookie 和内部凭据不得写入。
+  metadata  Json?
   createdAt DateTime      @default(now())
 
   thread      AiThread @relation(fields: [threadId], references: [id], onDelete: Cascade)

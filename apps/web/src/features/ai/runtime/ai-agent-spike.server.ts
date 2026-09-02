@@ -1,6 +1,7 @@
 /**
  * 本文件编排 C2 临时 Workspace Agent Spike 的历史读取、Run 领取和官方流响应。
- * 它复用已有 Thread/Run 数据模型；C2 不写入新的 UIMessage 持久化格式，也不承担主链职责。
+ * 它复用已有 Thread/Run 数据模型；C4-B2 只让历史 text parts 进入主链，完整
+ * UIMessage onEnd 持久化仍由 C4-C 接入，本入口仍不承担最终主链职责。
  */
 
 import {
@@ -252,12 +253,16 @@ export async function startAiAgentSpike(input: AiAgentSpikeInput) {
   }
 }
 
-/** 把现有历史接口的文本投影转换为 AI SDK 可验证的 UIMessage。 */
+/** 把新格式历史接口的 UIMessage parts 转换为 AI SDK 可验证的 UIMessage。 */
 function toUiMessage(item: AiMessageHistoryItem): NextNestWorkspaceAgentUIMessage {
   return {
     id: item.id,
     role: item.role === 'USER' ? 'user' : 'assistant',
-    parts: item.content ? [{ type: 'text', text: item.content }] : [],
+    parts:
+      item.contentVisibility === 'SOURCE_REVOKED'
+        ? []
+        : (item.parts as unknown as NextNestWorkspaceAgentUIMessage['parts']),
+    metadata: item.contentVisibility === 'SOURCE_REVOKED' ? undefined : item.metadata ?? undefined,
   };
 }
 

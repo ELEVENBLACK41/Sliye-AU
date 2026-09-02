@@ -26,6 +26,8 @@ function createHistoryMessage(overrides: Partial<AiMessageHistoryItem> = {}): Ai
     queueSequence: 1,
     submissionMode: 'NORMAL',
     content: '第一条问题',
+    parts: [{ type: 'text', text: '第一条问题' }],
+    metadata: null,
     createdAt: '2026-09-02T00:00:00.000Z',
     run: null,
     contentVisibility: 'VISIBLE',
