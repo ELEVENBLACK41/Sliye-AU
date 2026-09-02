@@ -1,9 +1,10 @@
 # NextNest AI 模块：Decision Agent 与 RAG 可测试实施路线图
 
-> 状态：实施基线 v1.3（阶段 0、1、2 已完成；Gate C 执行中）
+> 状态：实施基线 v1.4（阶段 0、1、2 已完成；Gate C 执行中）
 > 日期：2026-08-17  
-> 最近修订：2026-09-01
-> 适用项目：NextNest（Next.js 16 + React 19 + NestJS 11 + Prisma 7 + PostgreSQL）  
+> 最近修订：2026-09-02
+> 适用项目：NextNest（Next.js 16.2.6 + React 19.2.4 + NestJS 11 + Prisma 7.8 + PostgreSQL）
+> 当前 AI 版本：`ai@7.0.18`、`@ai-sdk/react@4.0.19`、`@ai-sdk/gateway@4.0.14`
 > 关联笔记：[[AI]]、[[第一次讨论方案0817]]  
 > 文档目的：把既有 AI 架构草稿拆成可逐步实现、逐步测试、随时可停和可回滚的工程路线。
 > 当前执行基线：阶段 0、1、2 已完成；阶段 2 与阶段 3 之间插入强制 Gate C。C0～C11 期间以 `AI运行时官方能力收敛与渐进回退执行计划-2026-09-01.md` 为唯一详细执行基线，第二阶段及 2.7 文档仅作历史实现与临时回退依据，第三阶段暂停。C11 完成后再同步更新第二、第三阶段详细计划并恢复第三阶段。
@@ -40,7 +41,7 @@ NextNest 的 AI 不应该做成一个脱离业务数据的通用聊天框，也�
 
 | 决策项       | 当前决定                                                   | 原因                                                |
 | --------- | ------------------------------------------------------ | ------------------------------------------------- |
-| Agent 运行时 | Vercel AI SDK 7 `ToolLoopAgent` / `streamText`         | 项目已经安装并有流式原型；工具、结构化输出、测试 Mock、遥测能力够用              |
+| Agent 运行时 | Vercel AI SDK 7 `ToolLoopAgent`                         | 官方 Agent Loop 作为唯一默认主链；`streamText` 只作为官方底层原语用于非 Agent 生成或经单独批准的窄例外 |
 | 模型入口      | Vercel AI Gateway，业务层自建模型注册表                           | 保留切换、A/B、失败降级和成本统计能力，避免路由内硬编码                     |
 | 权威业务层     | NestJS                                                 | 权限、事务、审计、写操作继续由后端裁决；Next.js 不直接读 Prisma           |
 | 事实存储      | PostgreSQL + Prisma                                    | 决策、提案、投票、决议等继续以关系数据为唯一事实源                         |
@@ -57,32 +58,53 @@ NextNest 的 AI 不应该做成一个脱离业务数据的通用聊天框，也�
 
 > **2026-09 运行时收敛说明：** 第二阶段已经验收的 Thread、历史、权限、工具和来源能力继续有效；其自研 `AiEvent` 逐增量持久化、租约/fencing、POST/GET 事件恢复和进程内执行器只作为迁移来源，不再默认代表未来普通聊天主链。第二阶段验收之后、第三阶段业务工具扩展之前，插入收敛计划 C0～C11。C0～C11 是架构迁移门禁，不是总路线图的新阶段编号；C11 通过后才恢复第三阶段业务工具开发。
 
-### 1.2 单实例、多实例与 Redis 的关系
+### 1.2 主技术栈红线与官方 API 准入
 
-> Gate C 说明：本节关于 `AiEvent`、进程内 executor、Redis 实时事件转发和浏览器事件补拉的内容记录的是已完成第二阶段的旧运行时边界，不再作为普通短对话的新实现要求。收敛首轮不引入 Redis、Queues 或 Workflow；Token 级续流、跨实例取消和真正持久长任务出现明确需求时，再分别评估共享取消协调、Redis resumable stream 或 WorkflowAgent。
+后续 AI 实现固定遵循下面这条官方能力链：
+
+```text
+ToolLoopAgent
+  -> createAgentUIStreamResponse / UI Message Stream
+  -> useChat<InferAgentUIMessage<typeof agent>>
+  -> DefaultChatTransport
+  -> apps/web/src/components/ai-elements + Streamdown
+```
+
+以下规则是路线图的技术准入条件：
+
+- Agent 多步循环默认只能使用 `ToolLoopAgent`；`streamText` 仍属于 AI SDK 官方能力，但不得再被写成另一套 Agent Loop 基线，也不得在业务代码中手写模型—工具循环。
+- 浏览器主链只能消费 AI SDK UI Message Stream；领域 SSE、`AiEvent.sequence`、自定义 POST/GET stream 和浏览器事件 reducer 只属于历史兼容链路，不能作为 `useChat` 的默认 Transport。
+- `apps/web/src/components/ai-elements` 是基于 AI Elements 官方 registry 的本地组件，负责视觉和交互组合；消息状态、工具 parts、停止和重试由 AI SDK UI 管理，不把本地组件误当成服务端 Runtime。
+- 模型只能经业务模型注册表和 AI Gateway 解析；任何新增或更换模型，必须在实际实现当天重新读取 Gateway Model API，文档中的模型 ID 只可作为评测候选，不能直接当永久配置。
+- 在动手前必须以当前 lockfile 对应的 `apps/web/node_modules/ai/docs`、`apps/web/node_modules/ai/src` 和现有仓库用法核对 API；若官方 API 与本路线图不一致，先更新路线图和收敛计划，再写实现。
+- 普通短时聊天不引入 Workflow、Queues、Redis/BullMQ 作为隐含前置；只有真实长任务、后台索引、跨实例协调或暂停/恢复需求通过独立选型门禁后，才允许新增对应 Vercel 能力或其他基础设施。
+
+### 1.3 单实例、多实例与 Redis 的关系
+
+> Gate C 说明：本节关于 `AiEvent`、进程内 executor、Redis 实时事件转发和浏览器事件补拉的内容只记录已完成第二阶段的旧运行时边界，不再作为普通短对话的新实现要求。收敛首轮不引入 Redis、Queues 或 Workflow；Token 级续流、跨实例取消和真正持久长任务出现明确需求时，先按第 1.2 节和第 7/10 阶段的选型门禁评估当前版本的 AI SDK UI 恢复能力、Vercel Workflow/Queues，再考虑其他方案。
 
 **单实例部署**是指生产环境同一时刻只有一个 NestJS 进程/容器接收业务请求。所有请求、WebSocket 连接和内存变量都在这一个进程里。它的优点是部署简单；缺点是进程重启时内存状态消失，单机故障会造成服务中断，CPU/内存上限也受单台实例限制。
 
 **多实例部署**是指同时运行两个或更多 NestJS 进程/容器，前面由负载均衡器把请求分发给不同实例。每个实例的 Node 内存彼此独立：实例 A 写入的内存 Map、锁、限流计数和 Socket.IO 房间，实例 B 默认看不到。多实例通常用于提高吞吐、容灾、滚动发布和水平扩容。
 
-| 场景 | 单实例时 | 多实例时 | Redis 的作用 |
+| 场景 | 单实例时 | 多实例时 | 共享协调层（仅在选用时） |
 | --- | --- | --- | --- |
 | HTTP 请求 | 都进入同一个 Nest 进程 | 由负载均衡分配到不同进程 | 通常不直接参与普通请求路由 |
 | Socket.IO | 所有连接都在一个进程内 | 房间成员可能分散在不同进程 | Redis Adapter 广播跨实例事件；仅有粘性会话不能代替跨实例广播 |
-| 后台任务 | 本进程可执行，但重启/并发/重试需要自行管理 | 多个进程可能抢同一任务 | BullMQ 统一领取、并发、延迟、重试和进度 |
+| 后台任务 | 本进程可执行，但重启/并发/重试需要自行管理 | 多个进程可能抢同一任务 | 优先评估 Vercel Workflow/Queues；Redis/BullMQ 仅在选型通过后使用 |
 | 限流与额度 | 内存计数基本可用，但重启清零 | 每个实例各算一份会失真 | 共享计数和原子递增，形成全局限制 |
 | 短期缓存 | 只对当前进程有效 | 各实例缓存可能不一致 | 共享 TTL 缓存和统一失效 |
-| Agent 实时事件 | 当前进程可直接推送 | Run 在 A 执行，用户连接可能在 B | Redis Pub/Sub/Streams 把事件转到正确连接所在实例 |
+| Agent 实时事件 | 普通聊天由 AI SDK UI Message Stream 承载 | 跨实例耐久/通知需求需单独设计 | 不为普通聊天默认引入 Redis Pub/Sub；按需求评估官方恢复或 Vercel 能力 |
 
-Redis 与多实例不是绑定关系：**单实例也可以使用 Redis，使用 Redis 也不代表已经多实例。** NextNest 先单实例部署，但 Redis 仍能为 Embedding、会议转写、决策回放生成、模型限流和短期缓存提供稳定基础；未来变成多实例时，这套基础不需要推倒重来。
+Redis 与多实例不是绑定关系：**单实例也可以使用 Redis，使用 Redis 也不代表已经多实例。** NextNest 先单实例部署，只有 Embedding、会议转写、决策回放生成、模型限流或短期缓存出现明确共享需求时才评估 Redis；未来变成多实例时也要重新核对 Vercel 托管能力与部署成本。
 
 职责边界必须固定：
 
-- PostgreSQL：`AiRun / AiStep / AiEvent / AiToolCall / AiApproval / AiCitation`、业务事实、Outbox 和最终任务结果，是权威数据源。
-- Redis/BullMQ：任务调度、临时进度、限流、缓存和实时广播，是可恢复的协调层，不是永久审计库。
-- Node 进程内存：第一版允许保存正在执行 Run 的 executor/AbortController 临时注册表，但不承担权威状态；浏览器重连只从 PostgreSQL 补拉事件，进程重启后由数据库对账收敛遗留 Run。
+- PostgreSQL：`AiMessage / AiRun / AiToolCall / AiSourceDependency / AiCitation`、业务事实、Outbox 和最终任务结果，是当前目标架构的权威数据源；`AiStep/AiEvent` 仅在兼容窗口内按需保留。
+- 选定的 Workflow/Queue/执行器：只承担任务调度、临时进度、重试和协调，不承担永久审计；具体技术由第 7/10 阶段的选型门禁决定。
+- Node 进程内存：旧 Runtime 兼容期间可以存在临时 executor/AbortController，但不承担权威状态；新普通聊天主链不以进程内注册表、事件补拉或跨实例 Pub/Sub 为前提。
 
-Redis 不可用时，可以暂时影响后台任务消费、缓存和实时广播，但不能造成 Agent 审计数据丢失或业务数据不一致。生产部署需使用持久化/托管 Redis、健康检查和明确的降级策略，不能把开发机上的无持久化 Redis 当成可靠队列。
+如果最终选用 Redis，Redis 不可用时可以暂时影响对应后台任务、缓存或协调能力，但不能造成 Agent 审计数据丢失或业务数据不一致。生产部署需使用持久化/托管 Redis、健康检查和明确的降级策略，不能把开发机上的无持久化 Redis 当成可靠队列。
 
 ---
 
@@ -178,9 +200,10 @@ Redis 不可用时，可以暂时影响后台任务消费、缓存和实时广�
 flowchart LR
     U["Web 用户"] --> UI["AI Chat / 草稿 / 引用 UI"]
     UI --> BFF["Next.js BFF"]
-    BFF --> AR["AI Agent Runtime"]
-    AR --> GW["Vercel AI Gateway"]
-    AR --> TR["受限业务工具注册表"]
+    BFF --> ROUTE["Next.js Agent Route"]
+    ROUTE --> AGENT["AI SDK ToolLoopAgent"]
+    AGENT --> GW["Vercel AI Gateway"]
+    AGENT --> TR["受限业务工具注册表"]
     TR --> NEST["NestJS AI / 领域 API"]
     NEST --> AUTH["ProjectAccessService / AI Policy"]
     AUTH --> PG["PostgreSQL 权威业务数据"]
@@ -190,14 +213,16 @@ flowchart LR
     RET --> RR["RRF / Rerank"]
     PG --> OUTBOX["OutboxEvent"]
     OUTBOX --> DISPATCHER["Outbox Dispatcher"]
-    DISPATCHER --> REDIS["Redis / BullMQ"]
-    REDIS --> WORKER["Embedding Worker"]
+    DISPATCHER --> ASYNC["Vercel Workflow / Queues 或经批准的执行器"]
+    ASYNC --> WORKER["Embedding Worker"]
     WORKER --> EMB["Embedding Model"]
     EMB --> VEC
-    AR --> STATE["Thread / Run / Event / Citation"]
+    AGENT --> STREAM["AI SDK UI Message Stream"]
+    STREAM --> UI
+    AGENT --> LIFE["AI SDK onEnd / Tool lifecycle"]
+    LIFE --> STATE["AiMessage / AiRun / ToolCall / Citation"]
     STATE --> PG
-    AR -. "实时进度 / 限流 / 短期缓存" .-> REDIS
-    AR --> OTEL["Tracing / Usage / Cost / Eval"]
+    AGENT --> OTEL["Tracing / Usage / Cost / Eval"]
 ```
 
 ### 5.1 一次请求的标准链路
@@ -377,6 +402,8 @@ AI Gateway 的统一模型入口、Codex 的模型/运行配置与业务循环�
 ## 9. 第 2 阶段：建立可恢复的 AI 状态模型
 
 > 当前状态：✅ 已完成。`AI第二阶段实施计划-2026-08-25.md` 与 2.7 计划记录本阶段已经交付的历史实现和验收资产；Gate C 会替换其中部分自建运行时，但不会撤销阶段完成状态，也不会删除权限、数据、UI、来源和测试资产。
+>
+> 阅读边界：本节的运行时、事件、租约、队列、领域 SSE 和 `runId + afterSequence` 设计是阶段 2 的历史实现记录。C0～C11 期间不得从本节复制未来架构；普通聊天和后续 Agent 的唯一执行基线以收敛计划及本路线图第 1.2 节为准。
 
 ### 目标
 
@@ -578,6 +605,8 @@ Codex 的 Thread/Turn/rollout/事件记录与可恢复运行思想，以及长�
 3. `queue/steer`、Token 级续流和真正持久长任务不默认纳入首轮；若需要保留或引入，必须先确认产品收益、跨实例机制、部署成本与验收方式。
 4. C11 统一更新第二、第三阶段及本文的历史运行时描述，然后从一个窄的授权业务工具恢复第三阶段，不并行铺开。
 
+Gate C 完成后，第三阶段不再以历史 `streamText` Loop、领域事件协议或自研 Runtime 状态机作为实现前提；恢复开发必须从 `ToolLoopAgent` 和 AI SDK UI Message Stream 主链开始。
+
 ### 完成标志
 
 官方 Agent/UI 主链稳定，旧通用 Runtime 不再承担主链职责，阶段 0～2 的权限、数据、来源、UI 和评测能力没有回退；第三阶段拥有唯一、清晰、可验证的新执行基线。
@@ -613,7 +642,7 @@ Codex 的 Thread/Turn/rollout/事件记录与可恢复运行思想，以及长�
 
 ### 要完成的工作
 
-1. 用 AI SDK `ToolLoopAgent` 或等价 `streamText` Loop 建立 Agent，显式设置 8～12 步停止上限，不依赖默认值。
+1. 用 AI SDK `ToolLoopAgent` 建立 Agent，并使用 `stopWhen: stepCountIs(n)` 显式设置 8～12 步停止上限，不依赖默认值；`streamText` 仅在独立的非 Agent 生成场景使用，不作为第三阶段 Agent Loop 替代方案。
 2. 建中心工具注册表，统一保存：
    - 工具名与用途说明。
    - Zod 输入 Schema。
@@ -849,73 +878,72 @@ sequenceDiagram
     participant D as "领域事务"
     participant P as "PostgreSQL"
     participant O as "Outbox Dispatcher"
-    participant R as "Redis / BullMQ"
+    participant R as "Vercel Workflow / Queues 或经批准的队列"
     participant W as "Embedding Worker"
     participant G as "AI Gateway Embedding"
 
     D->>P: "写消息/转写 + OutboxEvent（同一事务）"
     O->>P: "FOR UPDATE SKIP LOCKED 领取待发布 Outbox"
-    O->>R: "按 outboxEventId 写入幂等 Job"
+    O->>R: "按 outboxEventId 投递幂等任务"
     O->>P: "标记已发布；失败则保留待重试"
-    W->>R: "领取 Job；BullMQ 控制并发/退避/重试"
+    W->>R: "按选定运行时控制并发/退避/重试"
     W->>P: "读取仍有权限且未删除的来源"
     W->>W: "规范化、切块、计算 hash"
     W->>G: "embedMany"
     G-->>W: "vectors"
     W->>P: "幂等 upsert chunks + 保存最终索引状态"
-    W->>R: "完成 Job 或进入失败/死信策略"
+    W->>R: "完成任务或进入失败/重放策略"
     Note over O,W: "投递和消费均按至少一次设计；业务处理必须幂等"
 ```
 
 ### 要完成的工作
 
 1. 新 migration 启用 `vector` 扩展并创建 Chunk/Job 所需结构。
-2. 部署 Redis，按环境设置独立前缀、认证、连接超时、TLS（托管服务支持时）和持久化策略。BullMQ 使用的 Redis 必须采用适合队列的 `noeviction` 策略；缓存可能需要不同淘汰策略，因此生产优先准备 `REDIS_QUEUE_URL` 与 `REDIS_CACHE_URL` 两个职责配置，开发期可以指向同一实例，但命名空间并不能隔离内存淘汰策略。
-3. 接入 BullMQ，建立至少 `ai-indexing` 队列；会议转写、决策回放生成等后续任务使用独立队列和独立并发，避免互相阻塞。
-4. 复用现有 `OutboxEvent`，实现 Outbox Dispatcher：通过数据库锁领取事件，以稳定 `outboxEventId` 作为 BullMQ `jobId` 发布，成功后再更新发布状态。
-5. 整条链路按“至少一次”投递设计。Dispatcher 在“入队成功、更新 Outbox 状态前”崩溃仍可能重复发布，因此 Worker 必须根据来源版本、内容 Hash 和索引版本幂等处理，不能依赖队列天然实现恰好一次；同时增加对账任务，根据 Outbox、来源版本和最终索引状态重新发布异常缺失任务，防止 Redis 数据丢失后出现永久空洞。
-6. BullMQ 配置并发、指数退避、最大重试、超时、失败任务保留和死信/人工重放策略；Worker 重启后能够继续处理未完成任务。
-7. 使用 `embedMany` 批处理并限制并发；同时使用 Redis 原子计数或队列限速控制供应商 RPM/TPM，保存模型和维数版本。
-8. 更新/删除来源时在同一领域事务内写 Outbox，最终删除或失效对应 Chunk；Redis 缓存不能延迟权限撤销和删除生效。
+2. 在实现队列前完成异步执行选型：优先比较 Vercel Workflow（耐久编排）与 Vercel Queues（任务投递）；只有部署形态、吞吐、跨环境运行或成本约束证明 Vercel 方案不合适时，才评估 Redis/BullMQ 或其他队列。选型记录必须包含任务时长、重试/暂停语义、幂等、观测、部署绑定和失败恢复。
+3. 使用选定的官方或经批准运行时承载 `ai-indexing`；会议转写、决策回放生成等后续任务使用独立任务类型和独立并发，避免互相阻塞。
+4. 复用现有 `OutboxEvent`，实现 Outbox Dispatcher：通过数据库锁领取事件，以稳定 `outboxEventId` 作为选定运行时的幂等键发布，成功后再更新发布状态。
+5. 整条链路按“至少一次”投递设计。Dispatcher 在“任务投递成功、更新 Outbox 状态前”崩溃仍可能重复发布，因此 Worker 必须根据来源版本、内容 Hash 和索引版本幂等处理，不能依赖执行器天然实现恰好一次；同时增加对账任务，根据 Outbox、来源版本和最终索引状态重新发布异常缺失任务，防止执行器数据丢失后出现永久空洞。
+6. 为选定运行时配置并发、指数退避、最大重试、超时、失败任务保留和人工重放策略；执行器重启后能够继续处理未完成任务。
+7. 使用 `embedMany` 批处理并限制并发；使用选定执行器的限速能力或经批准的共享计数控制供应商 RPM/TPM，保存模型和维数版本。
+8. 更新/删除来源时在同一领域事务内写 Outbox，最终删除或失效对应 Chunk；任何缓存都不能延迟权限撤销和删除生效。
 9. 提供全量 rebuild、按来源 rebuild、按模型版本 shadow rebuild 命令；大量 rebuild 使用低优先级队列，不阻塞实时增量索引。
-10. Agent 实时过程继续先追加写入 PostgreSQL `AiEvent`，再通过 Redis Pub/Sub 或 Streams 通知连接所在进程；Redis 消息丢失时，前端使用事件序号从 PostgreSQL 补拉。
-11. Redis 短期缓存仅保存可重建数据，必须有 TTL、版本化 Key 和明确失效方式；权限相关缓存必须包含用户、项目/区域和权限版本，无法保证正确失效时就不缓存。
+10. 普通 Agent 实时过程使用 AI SDK UI Message Stream；后台索引任务的进度和结果写入 PostgreSQL，不能为了通知连接而恢复 `AiEvent` 文本增量、Redis Pub/Sub 或浏览器事件补拉协议。
+11. 只有明确的共享缓存需求才单独评估 Vercel 或其他缓存能力；缓存仅保存可重建数据，必须有 TTL、版本化 Key 和明确失效方式，不能延迟权限撤销和来源删除。
 12. 第一版先精确余弦搜索，不立即建 HNSW；当前数据量下精确搜索提供完美召回基线。
 
 ### 新增技术
 
 - PostgreSQL `pgvector`。
-- Redis：承担队列底座、全局限流、短期缓存和实时事件广播；不承担 Agent 权威状态。
-- BullMQ：承担后台 Job 的并发、优先级、延迟、重试、进度和失败管理。
-- NestJS 集成优先评估 `@nestjs/bullmq` + `bullmq`；如果业务代码还需要直接操作 Redis，可统一评估 `ioredis`，避免同时维护两套 Redis Client。
+- Vercel Workflow/Queues：在异步索引确有耐久编排或可靠任务投递需求、且部署形态适配时优先评估；两者不是普通聊天主链依赖。
+- Redis/BullMQ：仅作为选型门禁后的条件方案；如果采用，才评估 `@nestjs/bullmq`、`bullmq`、`ioredis`、连接隔离、淘汰策略和运维成本。
 - 使用 AI SDK `embed` / `embedMany` 与 Gateway Embedding Model。
 - 不再以 `@nestjs/schedule` 轮询业务任务作为主方案；它仍可用于低风险定时维护，但不能替代可靠队列。
 - 暂不新增 Kafka、RabbitMQ 或独立向量数据库。
 
-### Redis/BullMQ 的边界与替代方案
+### 异步执行方案的边界与替代方案
 
-采用 Redis/BullMQ 不意味着把所有数据都搬进 Redis：
+无论最终采用 Vercel Workflow、Vercel Queues、Redis/BullMQ 还是其他经批准的执行器，都不意味着把权威数据搬离 PostgreSQL：
 
-- `AiRun / AiEvent / AiToolCall / AiCitation` 与最终索引状态必须写 PostgreSQL。
-- BullMQ 中的 Job 状态用于执行调度；需要长期展示的进度和结果同步写入 PostgreSQL。
-- Redis Pub/Sub 是实时通知，不是可恢复日志；可恢复事件仍以 `AiEvent.sequence` 补拉。
-- Redis 分布式锁只在确有跨进程互斥需求时使用，优先通过数据库唯一约束、幂等键和事务解决一致性。
+- `AiMessage / AiRun / AiToolCall / AiSourceDependency / AiCitation` 与最终索引状态必须写 PostgreSQL；`AiEvent` 仅在兼容窗口内按需读取。
+- 执行器中的任务状态只用于调度；需要长期展示的进度和结果同步写入 PostgreSQL。
+- 普通聊天的可见流必须继续使用 AI SDK UI Message Stream；任何跨实例通知不能重新定义第二套 UI 流协议。
+- 分布式锁只在确有跨进程互斥需求时使用，优先通过数据库唯一约束、幂等键和事务解决一致性。
 
-如果未来后端改为完全 Serverless、无法运行常驻 BullMQ Worker，再比较 Vercel Queues/Workflow 或托管队列；这属于部署适配，不改变 Outbox、幂等和 PostgreSQL 权威状态原则。
+如果未来后端改为完全 Serverless，先比较 Vercel Workflow/Queues 与其他托管执行器；这属于部署适配，不改变 Outbox、幂等和 PostgreSQL 权威状态原则。
 
 ### 测试
 
 - 同一 Outbox 重放不会重复创建 Chunk。
-- 模拟“BullMQ 入队成功但 Outbox 尚未标记”的崩溃窗口，重复投递仍只产生一个有效索引版本。
+- 模拟“任务投递成功但 Outbox 尚未标记”的崩溃窗口，重复投递仍只产生一个有效索引版本。
 - 内容没变时不会重复付费 Embedding。
 - Worker 处理中崩溃后 Job 能自动恢复或重试，最终状态与 PostgreSQL 一致。
-- Redis 短时不可用时领域事务和 Outbox 仍可提交；恢复后积压任务继续发布。
-- 模拟 Redis 队列数据丢失，对账任务能根据 PostgreSQL 状态重新发布缺失索引任务。
+- 选定执行器短时不可用时领域事务和 Outbox 仍可提交；恢复后积压任务继续发布。
+- 模拟选定执行器任务数据丢失或重启，对账任务能根据 PostgreSQL 状态重新发布缺失索引任务。
 - PostgreSQL 短时不可用时 Worker 不得把 Job 错误标记为业务完成。
 - 超过重试次数的任务可查询、告警和人工重放，且不会丢失失败原因。
 - 队列并发与限速能保护 Embedding Provider，不会因多个 Worker 突破全局配额。
 - 缓存 Key 包含环境前缀并具备 TTL；测试环境不会读到开发/生产缓存。
-- Redis Pub/Sub 故意丢弃一次实时事件后，浏览器可从 PostgreSQL 按 sequence 补回。
+- 普通聊天不依赖 Redis Pub/Sub 或 `AiEvent.sequence`；AI SDK UI Message Stream 的断开、恢复和最终落库按收敛计划中的官方能力验证。
 - 删除消息后索引在目标时限内不可召回。
 - 模型版本升级可双写/影子索引，不破坏旧索引回滚。
 - 向量长度和 DB 列维数不一致时在写入前失败。
@@ -923,11 +951,11 @@ sequenceDiagram
 
 ### 借鉴来源
 
-RAG/DPR 的稠密检索、Anthropic Contextual Retrieval 的上下文化切块、Transactional Outbox 的事务可靠性、BullMQ 的可靠任务调度，以及 Codex 对长任务可恢复的原则。
+RAG/DPR 的稠密检索、Anthropic Contextual Retrieval 的上下文化切块、Transactional Outbox 的事务可靠性、选定执行器的可靠任务调度，以及 Codex 对长任务可恢复的原则。
 
 ### 完成标志
 
-可以从空向量表全量重建；Redis 或 Worker 重启后任务可恢复；重复投递不会重复付费或污染索引；向量检索有独立 Recall 报告，并明确列出它相对关键词新增召回了哪些样本。
+可以从空向量表全量重建；选定执行器或 Worker 重启后任务可恢复；重复投递不会重复付费或污染索引；向量检索有独立 Recall 报告，并明确列出它相对关键词新增召回了哪些样本。
 
 ---
 
@@ -1085,7 +1113,7 @@ Reciprocal Rank Fusion、pgvector 官方 Hybrid Search 建议、Lost in the Midd
 2. 每个 Step 记录估算/实际 Token 与截断原因。
 3. 在达到预算前生成压缩检查点，而不是等模型报超长错误。
 4. `AbortSignal` 从浏览器传到 BFF、Agent、模型和可取消工具。
-5. 对收敛后的官方 UI Message Stream、必要时的 `resumable-stream` 或 Workflow 恢复机制做长时间运行、频繁断连和并发重连压力测试；不再把第 2 阶段的 `runId + afterSequence` 作为普通聊天主链的固定前提。
+5. 对收敛后的官方 UI Message Stream、当前版本支持的 `useChat`/Transport 恢复能力，以及真正长任务所需的 Workflow 恢复机制做长时间运行、频繁断连和并发重连压力测试；不再把第 2 阶段的 `runId + afterSequence` 作为普通聊天主链的固定前提。
 6. Run 失败可基于旧 Evidence Receipt 创建新 Run 重试，不能悄悄改写旧历史；旧 Run 保持原终态，不恢复成 `running`。
 
 ### 新增技术
@@ -1378,12 +1406,12 @@ apps/web/src/features/ai/
 - Vercel AI Gateway：统一模型入口。
 - PostgreSQL/Prisma：业务事实、Thread/Message 和轻量 Run/Tool/Source 审计源。
 - Jest + AI SDK Mock：Agent/Embedding 的确定性测试。
-- Redis + BullMQ：保留为后续索引/后台任务候选；是否采用 BullMQ、Vercel Workflow 或 Vercel Queues，进入第 7/10 阶段后依据部署形态、任务时长和恢复需求重新决策，不作为普通聊天主链的既定依赖。
+- Vercel Workflow/Queues：作为后续索引/后台任务的优先评估方向，但必须在第 7/10 阶段依据部署形态、任务时长和恢复需求决定；不作为普通聊天主链的既定依赖。
 
 ### 到对应阶段再采用
 
 - 第 6 阶段：`pg_trgm`。
-- 第 7 阶段：`pgvector`、Redis、BullMQ、`@nestjs/bullmq`，并按直接访问需求评估 `ioredis`。
+- 第 7 阶段：`pgvector`、AI SDK Embedding，以及按选型门禁决定的 Vercel Workflow/Queues 或 Redis/BullMQ；不预设具体队列实现。
 - 第 9 阶段：Rerank 模型。
 - 第 11 阶段：OpenTelemetry、Feature Flag/成本限制能力。
 - 第 12 阶段：对象存储和转写服务，前提是会议材料真正接入；复用第 7 阶段已有队列基础。
@@ -1392,7 +1420,7 @@ apps/web/src/features/ai/
 
 - HNSW：精确向量搜索延迟达不到目标时。
 - 独立向量数据库：百万级以上 Chunk、高并发/跨区域、独立扩缩容或隔离要求明确时。
-- Vercel Workflow/Queues：部署模型适合托管持久工作流时。
+- Vercel Workflow/Queues：任务确实需要耐久执行、可靠投递、暂停/恢复或跨请求重试，且部署模型适配时。
 - Elasticsearch/OpenSearch：复杂中文全文检索和分析能力成为明显瓶颈时。
 - OPA/Casbin：权限政策复杂到不能由当前领域服务可靠维护时。
 - 图数据库：Evidence Graph 的多跳查询超过 PostgreSQL 能力时。
@@ -1465,6 +1493,9 @@ apps/web/src/features/ai/
 
 ### Vercel / AI SDK
 
+- [AI SDK Agents](https://ai-sdk.dev/docs/agents)
+- [AI SDK UI `useChat`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat)
+- [AI SDK UI Message Stream Protocol](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol)
 - [AI SDK Core Reference](https://ai-sdk.dev/docs/reference/ai-sdk-core)
 - [AI SDK Embeddings](https://ai-sdk.dev/docs/ai-sdk-core/embeddings)
 - [AI SDK Reranking](https://ai-sdk.dev/docs/ai-sdk-core/reranking)
