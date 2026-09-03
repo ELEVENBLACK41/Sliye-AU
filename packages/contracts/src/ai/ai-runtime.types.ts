@@ -7,6 +7,7 @@ import type { ApiErrorCode } from '../common/api-response.ts';
 import type { AiEvent } from './ai-event.types.ts';
 import type { AiLanguageModelRole } from './ai-model.types.ts';
 import type { AiRunCancellationReason, AiRunFailureReason, AiRunStatus } from './ai-run.types.ts';
+import type { AiSourceType } from './ai-tool.types.ts';
 
 /** 第二阶段内部工具只允许读取业务数据。 */
 export type AiRuntimeToolAccessMode = 'READ';
@@ -46,6 +47,52 @@ export type AiRuntimeToolDiscoveryRequirement = {
   candidateIdentifierField: string;
 };
 
+/**
+ * 工具的风险等级。
+ * L0～L2 覆盖只读、分析和需要用户主动触发的高成本能力；L3 为未来写操作预留，
+ * 不能因为 Descriptor 声明了等级就绕过后端权限或审批校验。
+ */
+export type AiRuntimeToolRiskLevel = 'L0' | 'L1' | 'L2' | 'L3';
+
+/** 工具自动重试策略；重试次数不包含第一次执行。 */
+export type AiRuntimeToolRetryPolicy = {
+  /** 允许自动重试的最大次数；具体是否可重试仍由执行层按错误类型决定。 */
+  maxRetries: number;
+};
+
+/** 工具被模型在同一轮并行调用时的策略。 */
+export type AiRuntimeToolParallelPolicy = 'ALLOW' | 'DENY';
+
+/** 工具返回模型前必须遵守的结果大小上限。 */
+export type AiRuntimeToolResultLimit = {
+  /** 最多返回的记录数量；没有列表语义时可以不设置。 */
+  maxItems?: number;
+  /** 最多返回的文本字符数；结构化字段仍需由执行器单独裁剪。 */
+  maxChars?: number;
+};
+
+/** 工具在 AI 工作台中展示时使用的名称，不会拼入模型工具描述。 */
+export type AiRuntimeToolPresentation = {
+  /** 面向用户展示的中文工具名称。 */
+  displayName: string;
+};
+
+/** 工具统一治理元数据；3.1-A 先冻结结构，3.1-B 再由注册表强制完整校验。 */
+export type AiRuntimeToolGovernance = {
+  /** 当前工具的风险等级。 */
+  riskLevel: AiRuntimeToolRiskLevel;
+  /** 工具执行前必须具备的系统权限码；资源级权限仍由业务域实时判断。 */
+  requiredPermissions: readonly string[];
+  /** 工具可能读取并登记的来源类型；不得包含匿名个人选票等禁止来源。 */
+  sourceTypes: readonly AiSourceType[];
+  /** 工具返回模型的数据数量和文本大小上限。 */
+  resultLimit: AiRuntimeToolResultLimit;
+  /** 工具失败时的自动重试策略。 */
+  retryPolicy: AiRuntimeToolRetryPolicy;
+  /** 是否允许与同一模型步骤中的其他工具并行执行。 */
+  parallelPolicy: AiRuntimeToolParallelPolicy;
+};
+
 /** NestJS 中心注册表批准并发送给 Runtime 的只读工具描述。 */
 export type AiRuntimeToolDescriptor = {
   /** 稳定工具名称。 */
@@ -56,6 +103,10 @@ export type AiRuntimeToolDescriptor = {
   accessMode: AiRuntimeToolAccessMode;
   /** 单次调用超时上限，单位为毫秒。 */
   timeoutMs: number;
+  /** 工具在 AI 工作台中展示时使用的名称；旧 Descriptor 可在 3.1-B 前暂不提供。 */
+  presentation?: AiRuntimeToolPresentation;
+  /** 工具的权限、风险、来源、结果、重试和并行治理信息。 */
+  governance?: AiRuntimeToolGovernance;
   /** 工具窄输入契约。 */
   input: AiRuntimeToolDataContract;
   /** 工具窄输出契约。 */

@@ -53,7 +53,7 @@ Dashboard 导航只展示拥有对应系统权限码的模块。页面入口在 
 
 决策列表和详情由 Server Component 读取，返回数据已经在 NestJS 通过 Prisma `where` 按授权范围裁剪。创建成功时，创建人会自动成为 `OWNER` 参与者，因此拥有 `PARTICIPATED` 读取范围的成员仍能看到自己创建的决策。
 
-`/api/chat` 在创建 AI 流之前读取最新认证资料并校验 `ai:chat:use`。成功响应保持 AI SDK 流协议；401、403、400 和 500 使用统一 JSON 错误契约。
+AI 工作台通过 `/api/ai/*` BFF 与持久化 Thread/Run 流程交互；服务端会在创建、发送、停止和恢复前校验 `ai:chat:use`。旧的 `/api/chat` Mock 联调入口已移除，避免与真实 AI Runtime 形成第二套链路。
 
 ## 目录
 
