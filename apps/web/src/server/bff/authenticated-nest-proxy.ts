@@ -16,7 +16,7 @@ import { requestNest, requestNestRaw, type NestResponse } from '@/services/bff-r
 const refreshFlights = new Map<string, Promise<NestResponse<AuthSession>>>();
 
 /** 受保护 BFF 请求支持的 HTTP 方法。 */
-type ProxyHttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type ProxyHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** 受保护 BFF 转发函数参数。 */
 type AuthenticatedProxyOptions = {
@@ -187,6 +187,19 @@ export async function getAuthenticatedRouteUser(): Promise<AuthUser | null> {
   }
 
   return profile.body.success ? profile.body.data : null;
+}
+
+/**
+ * 为需要在 Next.js 内部反复调用 NestJS 的接口解析一次可用的 access token。
+ *
+ * 与普通 BFF 转发共用 refresh single-flight，适合 SSE 长轮询这类无法把每次
+ * 上游请求都交给 `proxyAuthenticatedNestRequest` 的场景。
+ */
+export async function resolveAuthenticatedAccessToken(): Promise<string | undefined> {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(AUTH_ACCESS_COOKIE_NAME)?.value;
+
+  return accessToken ?? (await refreshAccessTokenFromCookie());
 }
 
 /** 向 NestJS 发出携带 Bearer token 的业务请求。 */

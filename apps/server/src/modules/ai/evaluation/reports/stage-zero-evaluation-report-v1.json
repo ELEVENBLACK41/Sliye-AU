@@ -1,0 +1,264 @@
+{
+  "reportVersion": "ai-stage-zero-report-v1",
+  "generatedAt": "2026-08-20T00:00:00.000Z",
+  "executionMode": "deterministic_mock",
+  "datasetVersion": "ai-stage-zero-gold-query-v1",
+  "fixtureVersion": "ai-decision-process-fixture-v1",
+  "aiSdkVersion": "7.0.18",
+  "languageModelVersion": "mock-language-model-v4-stage-zero",
+  "embeddingModelVersion": "mock-embedding-model-v4-stage-zero",
+  "retrieverRuns": [
+    {
+      "mode": "keyword",
+      "configurationVersion": "mock-ranked-fixture-v1",
+      "metrics": {
+        "queryCount": 50,
+        "relevantQueryCount": 41,
+        "recallAt5": 0.9008,
+        "recallAt10": 0.9106,
+        "recallAt20": 0.9106,
+        "mrr": 0.4756,
+        "ndcgAt20": 0.6256,
+        "permissionLeakSourceCount": 0,
+        "failedQueryIds": [
+          "comparison-office-cost-commute",
+          "comparison-vendor-cost",
+          "exact-meeting-cadence-vote",
+          "exact-vendor-resolution-time",
+          "semantic-meeting-current-pain",
+          "timeline-vendor-meeting-to-decision",
+          "timeline-vendor-vote-to-resolution"
+        ]
+      }
+    },
+    {
+      "mode": "vector",
+      "configurationVersion": "mock-ranked-fixture-v1",
+      "metrics": {
+        "queryCount": 50,
+        "relevantQueryCount": 41,
+        "recallAt5": 0.822,
+        "recallAt10": 0.8659,
+        "recallAt20": 0.8659,
+        "mrr": 0.3008,
+        "ndcgAt20": 0.4902,
+        "permissionLeakSourceCount": 0,
+        "failedQueryIds": [
+          "adversarial-create-task-bypass",
+          "anonymous-vote-summary-only",
+          "comparison-meeting-frequency-duration",
+          "exact-office-resolution-time",
+          "exact-vendor-resolution-time",
+          "semantic-meeting-biweekly-rationale",
+          "timeline-office-concession-before-vote"
+        ]
+      }
+    },
+    {
+      "mode": "hybrid",
+      "configurationVersion": "mock-ranked-fixture-v1",
+      "metrics": {
+        "queryCount": 50,
+        "relevantQueryCount": 41,
+        "recallAt5": 1,
+        "recallAt10": 1,
+        "recallAt20": 1,
+        "mrr": 1,
+        "ndcgAt20": 1,
+        "permissionLeakSourceCount": 0,
+        "failedQueryIds": []
+      }
+    }
+  ],
+  "answerMetrics": {
+    "queryCount": 50,
+    "citationAccuracy": 1,
+    "citationCoverage": 1,
+    "answerKeyPointCoverage": 1,
+    "majorFactFaithfulness": 1,
+    "noAnswerAccuracy": 1,
+    "citationLeakSourceCount": 0,
+    "unsupportedHighRiskFactCount": 0,
+    "failedQueryIds": []
+  },
+  "systemMetrics": {
+    "queryCount": 50,
+    "toolSelectionAccuracy": 1,
+    "latencyP50Ms": 116,
+    "latencyP95Ms": 149,
+    "totalInputTokens": 600,
+    "totalOutputTokens": 1200,
+    "totalCostUsd": 0,
+    "cancellationSuccessRate": 1,
+    "degradationSuccessRate": 1,
+    "failedQueryIds": []
+  },
+  "gates": [
+    {
+      "id": "permission-leak-zero",
+      "description": "任何检索配置的越权来源数必须为 0。",
+      "actual": 0,
+      "operator": "eq",
+      "threshold": 0,
+      "passed": true
+    },
+    {
+      "id": "citation-leak-zero",
+      "description": "引用不得指向禁止来源。",
+      "actual": 0,
+      "operator": "eq",
+      "threshold": 0,
+      "passed": true
+    },
+    {
+      "id": "hybrid-recall-at-20",
+      "description": "混合模拟检索 Recall@20 不低于 0.85。",
+      "actual": 1,
+      "operator": "gte",
+      "threshold": 0.85,
+      "passed": true
+    },
+    {
+      "id": "hybrid-improvement",
+      "description": "混合模拟检索相对最佳单路 Recall@20 至少提升 0.05。",
+      "actual": 0.0894,
+      "operator": "gte",
+      "threshold": 0.05,
+      "passed": true
+    },
+    {
+      "id": "citation-coverage",
+      "description": "主要结论引用覆盖率不低于 0.90。",
+      "actual": 1,
+      "operator": "gte",
+      "threshold": 0.9,
+      "passed": true
+    },
+    {
+      "id": "citation-accuracy",
+      "description": "引用准确率不低于 0.95。",
+      "actual": 1,
+      "operator": "gte",
+      "threshold": 0.95,
+      "passed": true
+    },
+    {
+      "id": "no-answer-accuracy",
+      "description": "无答案判断准确率不低于 0.90。",
+      "actual": 1,
+      "operator": "gte",
+      "threshold": 0.9,
+      "passed": true
+    },
+    {
+      "id": "high-risk-fact-zero",
+      "description": "高风险精确事实不允许无依据生成。",
+      "actual": 0,
+      "operator": "eq",
+      "threshold": 0,
+      "passed": true
+    },
+    {
+      "id": "tool-selection",
+      "description": "Mock 系统工具选择准确率为 100%。",
+      "actual": 1,
+      "operator": "gte",
+      "threshold": 1,
+      "passed": true
+    },
+    {
+      "id": "cancellation",
+      "description": "Mock 取消场景必须被确定性处理。",
+      "actual": 1,
+      "operator": "gte",
+      "threshold": 1,
+      "passed": true
+    },
+    {
+      "id": "degradation",
+      "description": "Mock 降级场景必须被确定性处理。",
+      "actual": 1,
+      "operator": "gte",
+      "threshold": 1,
+      "passed": true
+    }
+  ],
+  "failedSamples": [
+    {
+      "layer": "retriever",
+      "queryId": "comparison-office-cost-commute",
+      "reason": "keyword 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "comparison-vendor-cost",
+      "reason": "keyword 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "exact-meeting-cadence-vote",
+      "reason": "keyword 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "exact-vendor-resolution-time",
+      "reason": "keyword 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "semantic-meeting-current-pain",
+      "reason": "keyword 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "timeline-vendor-meeting-to-decision",
+      "reason": "keyword 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "timeline-vendor-vote-to-resolution",
+      "reason": "keyword 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "adversarial-create-task-bypass",
+      "reason": "vector 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "anonymous-vote-summary-only",
+      "reason": "vector 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "comparison-meeting-frequency-duration",
+      "reason": "vector 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "exact-office-resolution-time",
+      "reason": "vector 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "exact-vendor-resolution-time",
+      "reason": "vector 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "semantic-meeting-biweekly-rationale",
+      "reason": "vector 模拟基线未完整召回相关来源或触发了权限门禁。"
+    },
+    {
+      "layer": "retriever",
+      "queryId": "timeline-office-concession-before-vote",
+      "reason": "vector 模拟基线未完整召回相关来源或触发了权限门禁。"
+    }
+  ],
+  "notes": [
+    "本报告只验证脱敏 Fixture、指标公式、权限门禁和 Mock 状态流，不代表生产 RAG 质量。",
+    "关键词、向量和混合排序均为可重复的模拟基线；接入真实检索后必须复用同一报告合同重新测量。",
+    "AI SDK V4 MockLanguageModel 与 MockEmbeddingModel 均已实际调用，未访问真实模型或产生费用。",
+    "真实业务样本只能放入 Git 忽略的 fixtures/private 目录。"
+  ]
+}

@@ -397,6 +397,11 @@ pnpm dev:web
 | `NEST_API_PREFIX` | NestJS API 前缀，默认 `api/v1` |
 | `NEXT_PUBLIC_BASE_URL` | 浏览器访问 Next.js BFF 的基础地址；同源部署可留空 |
 | `NEXT_PUBLIC_REALTIME_URL` | 浏览器连接 NestJS Socket.IO 的公开地址 |
+| `AI_GATEWAY_API_KEY` | 本地或 CI 调用 Vercel AI Gateway 的服务端密钥；Vercel 部署可使用 OIDC |
+| `AI_MODEL_STANDARD_ID` | 普通问答模型，默认低成本 `openai/gpt-5.4-nano` |
+| `AI_MODEL_DEEP_REVIEW_ID` | 人工触发的深度复核模型，当前只登记、不默认调用 |
+| `AI_MODEL_EMBEDDING_ID` | 后续向量阶段使用的固定维度嵌入模型 |
+| `AI_MODEL_RERANKER_ID` | 后续重排阶段使用的候选重排模型 |
 
 ### LiveKit Webhook
 

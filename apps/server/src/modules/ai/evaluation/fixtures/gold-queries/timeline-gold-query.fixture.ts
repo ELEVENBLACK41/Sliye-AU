@@ -1,0 +1,212 @@
+/**
+ * 本文件提供第 0 阶段的 8 条时间线类 Gold Query，
+ * 覆盖创建、讨论、提案、投票和决议的先后关系。
+ */
+import type { AiGoldQueryV1 } from '../../types/ai-gold-query.types';
+
+/** 时间线类 Gold Query。 */
+export const AI_TIMELINE_GOLD_QUERIES_V1 = [
+  {
+    id: 'timeline-vendor-full-process',
+    category: 'timeline',
+    question: '客服平台供应商选型从创建到形成决议依次发生了什么？',
+    requestScope: {
+      requesterId: 1001,
+      projectId: 2001,
+      decisionId: 5001,
+      scopeLevel: 'area',
+      areaId: 3001,
+    },
+    expectedAccess: 'allowed',
+    relevantSourceReferences: [
+      { sourceType: 'decision_event', sourceId: 5201 },
+      { sourceType: 'decision_event', sourceId: 5202 },
+      { sourceType: 'decision_event', sourceId: 5203 },
+      { sourceType: 'decision_event', sourceId: 5204 },
+      { sourceType: 'decision_event', sourceId: 5205 },
+    ],
+    forbiddenSourceReferences: [],
+    answerKeyPoints: [
+      '先创建决策。',
+      '随后登记两个提案。',
+      '之后开放并关闭投票。',
+      '最后创建正式决议。',
+    ],
+    shouldRefuse: false,
+  },
+  {
+    id: 'timeline-vendor-risks-before-vote',
+    category: 'timeline',
+    question: '供应商投票开放前记录了哪些关键风险？',
+    requestScope: {
+      requesterId: 1001,
+      projectId: 2001,
+      decisionId: 5001,
+      scopeLevel: 'area',
+      areaId: 3001,
+    },
+    expectedAccess: 'allowed',
+    relevantSourceReferences: [
+      { sourceType: 'discussion_message', sourceId: 4101 },
+      { sourceType: 'discussion_message', sourceId: 4102 },
+      { sourceType: 'decision_event', sourceId: 5203 },
+    ],
+    forbiddenSourceReferences: [],
+    answerKeyPoints: [
+      '投票前先记录了迁移中断风险。',
+      '还记录了数据存储不合规风险。',
+      '之后才开放投票。',
+    ],
+    shouldRefuse: false,
+  },
+  {
+    id: 'timeline-vendor-vote-to-resolution',
+    category: 'timeline',
+    question: '客服平台投票关闭后到正式决议之间发生了什么？',
+    requestScope: {
+      requesterId: 1001,
+      projectId: 2001,
+      decisionId: 5001,
+      scopeLevel: 'area',
+      areaId: 3001,
+    },
+    expectedAccess: 'allowed',
+    relevantSourceReferences: [
+      { sourceType: 'decision_event', sourceId: 5204 },
+      { sourceType: 'decision_event', sourceId: 5205 },
+      { sourceType: 'resolution', sourceId: 5301 },
+    ],
+    forbiddenSourceReferences: [],
+    answerKeyPoints: [
+      '1 月 16 日投票关闭。',
+      '1 月 20 日确认采用星舟云并创建正式决议。',
+    ],
+    shouldRefuse: false,
+  },
+  {
+    id: 'timeline-meeting-cadence-process',
+    category: 'timeline',
+    question: '研发例会调整从提案到正式决议的顺序是什么？',
+    requestScope: {
+      requesterId: 1001,
+      projectId: 2001,
+      decisionId: 5002,
+      scopeLevel: 'area',
+      areaId: 3002,
+    },
+    expectedAccess: 'allowed',
+    relevantSourceReferences: [
+      { sourceType: 'decision_event', sourceId: 5222 },
+      { sourceType: 'decision_event', sourceId: 5223 },
+      { sourceType: 'decision_event', sourceId: 5224 },
+      { sourceType: 'decision_event', sourceId: 5225 },
+    ],
+    forbiddenSourceReferences: [],
+    answerKeyPoints: [
+      '先登记两个提案。',
+      '随后开放和关闭投票。',
+      '最后确认每周短会决议。',
+    ],
+    shouldRefuse: false,
+  },
+  {
+    id: 'timeline-meeting-cadence-discussion',
+    category: 'timeline',
+    question: '研发例会的两种观点是什么时候提出、什么时候进入投票的？',
+    requestScope: {
+      requesterId: 1001,
+      projectId: 2001,
+      decisionId: 5002,
+      scopeLevel: 'area',
+      areaId: 3002,
+    },
+    expectedAccess: 'allowed',
+    relevantSourceReferences: [
+      { sourceType: 'discussion_message', sourceId: 4201 },
+      { sourceType: 'discussion_message', sourceId: 4202 },
+      { sourceType: 'decision_event', sourceId: 5223 },
+    ],
+    forbiddenSourceReferences: [],
+    answerKeyPoints: [
+      '两种观点在 2 月 4 日的讨论中提出。',
+      '2 月 9 日进入投票。',
+    ],
+    shouldRefuse: false,
+  },
+  {
+    id: 'timeline-office-full-process',
+    category: 'timeline',
+    question: '办公室方案从创建到续租决议依次经历了哪些节点？',
+    requestScope: {
+      requesterId: 1001,
+      projectId: 2001,
+      decisionId: 5004,
+      scopeLevel: 'project',
+      areaId: null,
+    },
+    expectedAccess: 'allowed',
+    relevantSourceReferences: [
+      { sourceType: 'decision_event', sourceId: 5241 },
+      { sourceType: 'decision_event', sourceId: 5242 },
+      { sourceType: 'decision_event', sourceId: 5243 },
+      { sourceType: 'decision_event', sourceId: 5244 },
+      { sourceType: 'decision_event', sourceId: 5245 },
+    ],
+    forbiddenSourceReferences: [],
+    answerKeyPoints: [
+      '先创建决策并登记两项提案。',
+      '随后进行匿名投票。',
+      '最后确认续租两年的正式决议。',
+    ],
+    shouldRefuse: false,
+  },
+  {
+    id: 'timeline-office-concession-before-vote',
+    category: 'timeline',
+    question: '三个月装修免租条件是在投票前还是投票后出现的？',
+    requestScope: {
+      requesterId: 1001,
+      projectId: 2001,
+      decisionId: 5004,
+      scopeLevel: 'project',
+      areaId: null,
+    },
+    expectedAccess: 'allowed',
+    relevantSourceReferences: [
+      { sourceType: 'discussion_message', sourceId: 4403 },
+      { sourceType: 'decision_event', sourceId: 5243 },
+    ],
+    forbiddenSourceReferences: [],
+    answerKeyPoints: [
+      '免租条件在 3 月 8 日记录。',
+      '匿名投票在 3 月 12 日开放，因此条件出现在投票前。',
+    ],
+    shouldRefuse: false,
+  },
+  {
+    id: 'timeline-vendor-meeting-to-decision',
+    category: 'timeline',
+    question: '供应商评审会之后，投票和正式决议分别何时发生？',
+    requestScope: {
+      requesterId: 1001,
+      projectId: 2001,
+      decisionId: 5001,
+      scopeLevel: 'area',
+      areaId: 3001,
+    },
+    expectedAccess: 'allowed',
+    relevantSourceReferences: [
+      { sourceType: 'meeting_record', sourceId: 5401 },
+      { sourceType: 'decision_event', sourceId: 5203 },
+      { sourceType: 'decision_event', sourceId: 5204 },
+      { sourceType: 'decision_event', sourceId: 5205 },
+    ],
+    forbiddenSourceReferences: [],
+    answerKeyPoints: [
+      '1 月 12 日完成评审会记录。',
+      '1 月 15 日开放投票，1 月 16 日关闭。',
+      '1 月 20 日形成正式决议。',
+    ],
+    shouldRefuse: false,
+  },
+] as const satisfies readonly AiGoldQueryV1[];

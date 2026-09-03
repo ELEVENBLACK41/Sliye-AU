@@ -22,6 +22,8 @@ export interface ServerEnvConfig {
   CHAT_SOCKET_TICKET_TTL_SECONDS: number;
   NOTIFICATION_SOCKET_TICKET_SECRET?: string;
   NOTIFICATION_SOCKET_TICKET_TTL_SECONDS: number;
+  /** Next.js Agent Runtime 调用 NestJS 内部执行接口时使用的共享密钥；浏览器不得持有。 */
+  AI_RUNTIME_SERVICE_TOKEN?: string;
   LIVEKIT_URL?: string;
   LIVEKIT_API_KEY?: string;
   LIVEKIT_API_SECRET?: string;
@@ -70,6 +72,12 @@ export function validateEnvConfig(
   const notificationSocketTicketSecret = readOptionalSecret(
     config.NOTIFICATION_SOCKET_TICKET_SECRET,
     'NOTIFICATION_SOCKET_TICKET_SECRET',
+    nodeEnv,
+    errors,
+  );
+  const aiRuntimeServiceToken = readOptionalSecret(
+    config.AI_RUNTIME_SERVICE_TOKEN,
+    'AI_RUNTIME_SERVICE_TOKEN',
     nodeEnv,
     errors,
   );
@@ -136,6 +144,7 @@ export function validateEnvConfig(
       DEFAULT_NOTIFICATION_SOCKET_TICKET_TTL_SECONDS,
       errors,
     ),
+    AI_RUNTIME_SERVICE_TOKEN: aiRuntimeServiceToken,
     LIVEKIT_URL: readOptionalValue(config.LIVEKIT_URL, 'LIVEKIT_URL', errors),
     LIVEKIT_API_KEY: readOptionalValue(
       config.LIVEKIT_API_KEY,

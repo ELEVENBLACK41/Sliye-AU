@@ -16,6 +16,7 @@ import { MeetingRuntime } from '@/features/meeting-session/components/meeting-ru
 import { NotificationRuntime } from '@/features/notifications/components/notification-runtime';
 import { Toaster } from '@workspace/ui/components/sonner';
 
+import 'streamdown/styles.css';
 import '../styles/globals.css';
 
 const geistSans = Geist({

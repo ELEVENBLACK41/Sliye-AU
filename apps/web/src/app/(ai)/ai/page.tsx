@@ -1,19 +1,9 @@
-/*
- * @Author: shaoliye elevenblack41@gmail.com
- * @Date: 2026-08-20 15:03:41
- * @LastEditors: shaoliye elevenblack41@gmail.com
- * @LastEditTime: 2026-08-20 15:04:01
- * @FilePath: \NextNest\apps\web\src\app\(ai)\ai\page.tsx
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+/**
+ * 本文件提供新 AI 会话工作区入口；现有会话由动态 Thread 路由恢复。
  */
-import React from 'react'
+import { AiWorkspace } from '@/features/ai/components/ai-workspace';
 
-const Ai = () => {
-  return (
-    <div>
-      用来测试AI页面
-    </div>
-  )
+/** 渲染没有指定 Thread 的新会话工作区。 */
+export default function AiPage() {
+  return <AiWorkspace />;
 }
-
-export default Ai

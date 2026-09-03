@@ -6,6 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "predev": "pnpm --filter @workspace/contracts build:runtime",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "dev": "nest start --watch",
@@ -19,11 +20,15 @@
     "collaboration-data:reset": "ts-node --skipIgnore --project tsconfig.script.json prisma/reset-collaboration-data.ts --reset --confirm=RESET_DECISION_COLLABORATION",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test:db:create": "ts-node --skipIgnore --project tsconfig.script.json prisma/create-test-database.ts",
+    "test:ai:evaluation": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js modules/ai/evaluation --runInBand",
+    "check-types:ai:evaluation": "tsc --project src/modules/ai/evaluation/tsconfig.json",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "ai:evaluation:report": "ts-node --project tsconfig.json src/modules/ai/evaluation/runners/generate-stage-zero-report.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -56,6 +61,7 @@
     "@types/node": "^24.0.0",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.0.0",
+    "ai": "^7.0.18",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
@@ -80,6 +86,9 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
+    "setupFiles": [
+      "<rootDir>/../test/jest-setup-ai-test-db.ts"
+    ],
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },

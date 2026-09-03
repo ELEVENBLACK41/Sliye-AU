@@ -1,0 +1,9 @@
+// 本文件为 AI 第 0 阶段评测提供独立类型检查入口，避免无关模块测试 Fixture 阻断验证。
+{
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": ["./**/*.ts"]
+}
