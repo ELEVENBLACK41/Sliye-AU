@@ -3,7 +3,7 @@
  */
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import type { DecisionSummary } from '@workspace/contracts/decisions';
 import type { MeetingSummary } from '@workspace/contracts/meetings';
@@ -61,7 +61,6 @@ type ProjectSpacePageProps = {
 
 /** 渲染接入真实业务数据后的项目空间。 */
 export function ProjectSpacePage(props: ProjectSpacePageProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isOverviewCollapsed, setIsOverviewCollapsed] = useState(false);
@@ -73,11 +72,11 @@ export function ProjectSpacePage(props: ProjectSpacePageProps) {
     setIsOverviewCollapsed((currentValue) => !currentValue);
   }
 
-  /** 切换项目模块，并把当前位置写入查询参数以支持刷新和浏览器返回。 */
+  /** 在客户端切换项目模块，并用 History API 保留刷新和浏览器返回地址。 */
   function handleSectionChange(section: ProjectSectionKey): void {
     const nextSearchParams = new URLSearchParams(searchParams.toString());
     nextSearchParams.set('section', section);
-    router.push(`${pathname}?${nextSearchParams}`, { scroll: false });
+    window.history.pushState(null, '', `${pathname}?${nextSearchParams}`);
   }
 
   return (

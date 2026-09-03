@@ -113,15 +113,14 @@ export function ProjectSectionNavigation({ activeSection, onSectionChange }: Pro
     };
   }, [moveNavigationIndicator]);
 
-  /** 响应模块按钮点击，先完成胶囊位移再更新内容，避免布局变化打断动画。 */
+  /** 响应模块按钮点击，立即更新内容并同步播放胶囊位移动画。 */
   function handleSectionClick(event: MouseEvent<HTMLButtonElement>): void {
     const targetSection = event.currentTarget.dataset.sectionKey as ProjectSectionKey;
     if (activeSectionRef.current === targetSection) return;
 
     activeSectionRef.current = targetSection;
-    moveNavigationIndicator(targetSection, true, () => {
-      if (activeSectionRef.current === targetSection) onSectionChange(targetSection);
-    });
+    moveNavigationIndicator(targetSection, true);
+    onSectionChange(targetSection);
   }
 
   return (
