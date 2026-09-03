@@ -63,8 +63,8 @@ test('enqueue 不等待数据库，drain 会按顺序聚合并返回持久化确
     onFatalError: () => assert.fail('未预期的持久化失败'),
   });
 
-  queue.enqueue(createLiveDelta(1, '你好'));
-  queue.enqueue(createLiveDelta(2, '，世界'));
+  await queue.enqueue(createLiveDelta(1, '你好'));
+  await queue.enqueue(createLiveDelta(2, '，世界'));
 
   assert.equal(batches.length, 0);
   await queue.drain();
@@ -105,9 +105,9 @@ test('达到字符阈值后后台冲刷，数据库慢不会阻塞后续 enqueue
     onFatalError: (error) => assert.fail(String(error)),
   });
 
-  queue.enqueue(createLiveDelta(1, '首'));
+  await queue.enqueue(createLiveDelta(1, '首'));
   await waitForQueue();
-  queue.enqueue(createLiveDelta(2, '次'));
+  await queue.enqueue(createLiveDelta(2, '次'));
   assert.equal(batches.length, 1);
 
   releasePersist();
@@ -119,12 +119,12 @@ test('达到字符阈值后后台冲刷，数据库慢不会阻塞后续 enqueue
   );
 });
 
-test('队列超过上限时通知 Runtime 并在 drain 中失败，不静默丢弃为成功', async () => {
+test('队列达到上限时等待已有写入完成，不中止模型流', async () => {
   let releasePersist!: () => void;
   const persistGate = new Promise<void>((resolve) => {
     releasePersist = resolve;
   });
-  const errors: unknown[] = [];
+  let secondEnqueueFinished = false;
   const queue = createAiRuntimeTextPersistenceQueue({
     executionLeaseId: 'lease-1',
     maxBatchCharacters: 1,
@@ -134,14 +134,41 @@ test('队列超过上限时通知 Runtime 并在 drain 中失败，不静默丢�
       return createPersistedEvent(batch);
     },
     onPersisted: () => undefined,
+    onFatalError: () => assert.fail('正常背压不应触发持久化失败'),
+  });
+
+  await queue.enqueue(createLiveDelta(1, '首'));
+  await waitForQueue();
+
+  const secondEnqueue = queue.enqueue(createLiveDelta(2, '次')).then(() => {
+    secondEnqueueFinished = true;
+  });
+
+  await waitForQueue();
+  assert.equal(secondEnqueueFinished, false);
+
+  releasePersist();
+
+  await secondEnqueue;
+  await queue.drain();
+  assert.equal(secondEnqueueFinished, true);
+});
+
+test('真实持久化失败时仍通知 Runtime 并让 drain 失败', async () => {
+  const persistenceError = new Error('数据库暂时不可用');
+  const errors: unknown[] = [];
+  const queue = createAiRuntimeTextPersistenceQueue({
+    executionLeaseId: 'lease-1',
+    maxBatchCharacters: 1,
+    persist: async () => {
+      throw persistenceError;
+    },
+    onPersisted: () => undefined,
     onFatalError: (error) => errors.push(error),
   });
 
-  queue.enqueue(createLiveDelta(1, '首'));
-  await waitForQueue();
-  queue.enqueue(createLiveDelta(2, '次'));
-  releasePersist();
+  await queue.enqueue(createLiveDelta(1, '失'));
 
-  await assert.rejects(queue.drain());
-  assert.equal(errors.length, 1);
+  await assert.rejects(queue.drain(), persistenceError);
+  assert.deepEqual(errors, [persistenceError]);
 });

@@ -10,14 +10,40 @@ import type { AiEvent } from './ai-event.types.ts';
 import type { AiMessageDispatchState, AiMessageSubmissionMode } from './ai-message.types.ts';
 import type { AiRunCancellationReason, AiRunFailureReason, AiRunStatus } from './ai-run.types.ts';
 
-/** POST 直出流允许出现的命名事件。 */
+/** POST 直出流允许出现的命名事件，自定义业务协议 */
 export const AI_POST_STREAM_EVENT_NAMES = [
+
   'submission',
+  /** 用户消息提交成功后的回执。
+   * 说明 Thread、Message、Run 是否创建成功，以及当前消息的投递状态。
+   * POST SSE 中的第一个业务事件，不包含模型回答内容。
+   */
   'live-delta',
+  /** 模型生成的即时文本增量。
+   * 用于让前端立即展示模型正在输出的内容。
+   * 它优先保证实时性，尚未经过数据库持久化，不是最终权威事件。
+   */
   'ai-event',
+  /** 已经持久化到数据库的 AI 领域事件。
+   * 事件内容可能是文本增量、Run 状态变化或工具调用状态。
+   * 它携带 sequence，可用于断线重连、顺序恢复和事件去重。
+   */
   'run-status',
+  /** 当前 AI Run 的状态快照。
+   * 用于通知前端 Run 是排队中、执行中、已完成、已取消还是失败。
+   * 同时可以携带失败原因、取消原因、后继 Run 和最后持久化事件序号。
+   */
   'stream-handoff',
+  /** POST 直出流结束后的恢复提示。
+   * 告诉客户端当前 POST 流应该结束，并通过 GET SSE 从 afterSequence 继续恢复。
+   * 它表示切换传输方式，不一定表示模型执行失败。
+   */
   'stream-error',
+  /** 流式响应发生错误时的终止事件。
+   * 由于 SSE 响应头已经发送，无法再返回普通 JSON 错误，
+   * 因此使用该事件发送稳定错误信息，然后关闭当前流。
+   * 它不代表一定要把 Run 伪造成失败终态。
+   */
 ] as const;
 
 /** POST 直出流命名事件名称。 */

@@ -174,7 +174,7 @@ async function executeClaimedSession(session: AiRuntimeSession, liveSink?: AiRun
         delta,
       };
       publishAiRuntimeLiveDelta(liveSink, liveDelta);
-      persistenceQueue.enqueue(liveDelta);
+      await persistenceQueue.enqueue(liveDelta);//由于写入速度跟不上模型得生成速度 等待
     }
 
     await persistenceQueue.drain();

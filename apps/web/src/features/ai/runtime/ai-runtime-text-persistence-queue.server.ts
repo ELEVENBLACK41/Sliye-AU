@@ -45,8 +45,8 @@ export type AiRuntimeTextPersistenceQueueOptions = {
 
 /** 单个 Run 的异步文本持久化队列。 */
 export type AiRuntimeTextPersistenceQueue = {
-  /** 立即接受一个 live delta，不等待数据库写入完成。 */
-  enqueue: (liveDelta: AiPostStreamLiveDeltaData) => void;
+  /** 接受一个 live delta；队列达到上限时等待已有写入释放容量。 */
+  enqueue: (liveDelta: AiPostStreamLiveDeltaData) => Promise<void>;
   /** 等待所有已接受 delta 完成持久化；失败时抛出队列错误。 */
   drain: () => Promise<void>;
 };
@@ -56,8 +56,8 @@ export function createAiRuntimeTextPersistenceQueue(
   options: AiRuntimeTextPersistenceQueueOptions,
 ): AiRuntimeTextPersistenceQueue {
   const maxBufferedDeltas = options.maxBufferedDeltas ?? 256;
-  const maxBatchCharacters = options.maxBatchCharacters ?? 40;
-  const flushIntervalMs = options.flushIntervalMs ?? 100;
+  const maxBatchCharacters = options.maxBatchCharacters ?? 120;
+  const flushIntervalMs = options.flushIntervalMs ?? 400;
   const bufferedDeltas: AiPostStreamLiveDeltaData[] = [];
   let bufferedCharacters = 0;
   let inFlightDeltas = 0;
@@ -151,15 +151,22 @@ export function createAiRuntimeTextPersistenceQueue(
     };
   }
 
-  /** 接受一个即时模型增量；达到上限时立即触发持久化或失败收敛。 */
-  function enqueue(liveDelta: AiPostStreamLiveDeltaData): void {
+  /**
+   * 接受一个即时模型增量；达到上限时等待串行写入链释放容量，
+   * 避免模型输出速度暂时超过持久化速度就被直接中止。
+   */
+  async function enqueue(liveDelta: AiPostStreamLiveDeltaData): Promise<void> {
     if (fatalError !== null) {
-      return;
+      throw fatalError;
     }
 
-    if (bufferedDeltas.length + inFlightDeltas >= maxBufferedDeltas) {
-      fail(new Error('AI 文本持久化队列已满，无法保证直出内容可恢复。'));
-      return;
+    while (bufferedDeltas.length + inFlightDeltas >= maxBufferedDeltas) {
+      flushBufferedDeltas();
+      await writeChain;
+
+      if (fatalError !== null) {
+        throw fatalError;
+      }
     }
 
     bufferedDeltas.push(liveDelta);
