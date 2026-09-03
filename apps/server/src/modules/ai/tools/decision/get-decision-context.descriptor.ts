@@ -4,7 +4,6 @@
  * 真实查询逻辑在 `get-decision-context.service.ts` 中委托给 decisions 模块。
  */
 
-import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 import type { AiToolDescriptor } from '../../types/ai-tool-registry.types';
 
 /** `getDecisionContext` 的中心工具注册表描述。 */
@@ -19,7 +18,6 @@ export const GET_DECISION_CONTEXT_DESCRIPTOR: AiToolDescriptor = {
   },
   governance: {
     riskLevel: 'L0',
-    requiredPermissions: [SYSTEM_PERMISSIONS.decision.read],
     sourceTypes: ['DECISION', 'DECISION_RESOLUTION'],
     resultLimit: {
       maxChars: 4_000,

@@ -20,7 +20,6 @@ function createToolDescriptor(
     },
     governance: {
       riskLevel: 'L0',
-      requiredPermissions: ['decision:read'],
       sourceTypes: ['DECISION'],
       resultLimit: {
         maxItems: 5,
@@ -82,16 +81,6 @@ const INVALID_DESCRIPTOR_CASES: Array<{
       },
     },
     message: '只读 AI 工具风险等级非法',
-  },
-  {
-    name: '声明非法权限码',
-    overrides: {
-      governance: {
-        ...createToolDescriptor().governance!,
-        requiredPermissions: ['permission:not-exists'],
-      },
-    },
-    message: 'AI 工具所需权限码非法',
   },
   {
     name: '声明当前不支持的来源类型',
@@ -170,18 +159,12 @@ describe('AiToolRegistryService', () => {
     const service = new AiToolRegistryService([descriptor]);
     const registered = service.findDescriptor(descriptor.name);
 
-    (descriptor.governance!.requiredPermissions as string[])[0] =
-      'project:update';
     descriptor.governance!.resultLimit.maxItems = 99;
 
     expect(registered?.governance).toMatchObject({
-      requiredPermissions: ['decision:read'],
       resultLimit: { maxItems: 5 },
     });
     expect(Object.isFrozen(registered?.governance)).toBe(true);
-    expect(Object.isFrozen(registered?.governance?.requiredPermissions)).toBe(
-      true,
-    );
     expect(Object.isFrozen(registered?.governance?.resultLimit)).toBe(true);
   });
 

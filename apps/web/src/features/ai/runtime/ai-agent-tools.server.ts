@@ -9,7 +9,7 @@ import { dynamicTool, type ToolSet } from 'ai';
 import type { AiEvent, AiRuntimeToolDescriptor, AiRuntimeToolField } from '@workspace/contracts/ai';
 import { z } from 'zod';
 
-import { invokeAiRuntimeTool } from './ai-runtime-client.server.ts';
+import { AiRuntimeRequestError, invokeAiRuntimeTool, isAiExecutionLeaseInvalid } from './ai-runtime-client.server.ts';
 
 /** 构造动态工具集合时需要的当前执行凭据。 */
 export type AiAgentToolContext = {
@@ -42,23 +42,87 @@ export function buildAiAgentTools(
       description: `${descriptor.description}\n输入：${descriptor.input.description}\n输出：${descriptor.output.description}`,
       inputSchema: toInputSchema(descriptor.input.fields),
       execute: async (input, toolOptions) => {
-        const result = await invokeAiRuntimeTool({
-          runId: context.runId,
-          executionLeaseId: context.executionLeaseId,
-          providerToolCallId: toolOptions.toolCallId,
-          toolName: descriptor.name,
-          toolInput: toToolInput(input),
-        });
-        liveOptions.onCommittedEvents?.(result.events);
+        const requestControl = createToolRequestControl(toolOptions.abortSignal, descriptor.timeoutMs);
 
-        return result.status === 'SUCCEEDED'
-          ? { ok: true, data: result.output }
-          : { ok: false, error: result.failureReason };
+        try {
+          const result = await invokeAiRuntimeTool({
+            runId: context.runId,
+            executionLeaseId: context.executionLeaseId,
+            providerToolCallId: toolOptions.toolCallId,
+            toolName: descriptor.name,
+            toolInput: toToolInput(input),
+            signal: requestControl.signal,
+          });
+          liveOptions.onCommittedEvents?.(result.events);
+
+          return result.status === 'SUCCEEDED'
+            ? { ok: true, data: result.output }
+            : { ok: false, error: result.failureReason };
+        } catch (error: unknown) {
+          if (toolOptions.abortSignal?.aborted || isAiExecutionLeaseInvalid(error)) {
+            throw error;
+          }
+
+          return {
+            ok: false,
+            error: toSafeToolRequestError(error, requestControl.timedOut()),
+          };
+        } finally {
+          requestControl.dispose();
+        }
       },
     });
   }
 
   return tools;
+}
+
+/** 单工具请求的生命周期控制器，合并上游取消并提供可清理的 Descriptor 超时。 */
+function createToolRequestControl(
+  parentSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): {
+  signal: AbortSignal;
+  timedOut: () => boolean;
+  dispose: () => void;
+} {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutHandle = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException('AI 工具执行超时', 'TimeoutError'));
+  }, timeoutMs);
+  const abortFromParent = () => {
+    controller.abort(parentSignal?.reason);
+  };
+
+  if (parentSignal?.aborted) {
+    abortFromParent();
+  } else {
+    parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    dispose: () => {
+      clearTimeout(timeoutHandle);
+      parentSignal?.removeEventListener('abort', abortFromParent);
+    },
+  };
+}
+
+/** 将内部工具请求失败转换为可以安全交回模型的通用说明。 */
+function toSafeToolRequestError(error: unknown, timedOut: boolean): string {
+  if (timedOut) {
+    return '工具执行超时，请稍后重试或缩小查询范围。';
+  }
+
+  if (error instanceof AiRuntimeRequestError) {
+    return '工具暂时不可用，请稍后重试或改用其他方式回答。';
+  }
+
+  return '工具执行失败，请稍后重试或改用其他方式回答。';
 }
 
 /** 把服务端字段描述转换为模型可见的 Zod 输入结构。 */

@@ -13,7 +13,7 @@ import type {
   AiRuntimeToolInvocationResult,
 } from '@workspace/contracts/ai';
 
-import { requestNest } from '@/services/bff-request';
+import { requestNest } from '../../../services/bff-request.ts';
 
 /** 内部执行接口在 NestJS 中的统一路径前缀。 */
 const AI_RUNTIME_PATH_PREFIX = '/internal/ai/runs';
@@ -124,13 +124,18 @@ export async function invokeAiRuntimeTool(input: {
   providerToolCallId: string;
   toolName: string;
   toolInput: Record<string, unknown>;
+  signal?: AbortSignal;
 }): Promise<AiRuntimeToolInvocationResult> {
-  return callRuntime<AiRuntimeToolInvocationResult>(`/${input.runId}/tool-calls`, {
-    executionLeaseId: input.executionLeaseId,
-    providerToolCallId: input.providerToolCallId,
-    toolName: input.toolName,
-    input: input.toolInput,
-  });
+  return callRuntime<AiRuntimeToolInvocationResult>(
+    `/${input.runId}/tool-calls`,
+    {
+      executionLeaseId: input.executionLeaseId,
+      providerToolCallId: input.providerToolCallId,
+      toolName: input.toolName,
+      input: input.toolInput,
+    },
+    { signal: input.signal },
+  );
 }
 
 /** 把 Run 收敛为完成或失败终态，并写入助手最终正文与用量。 */
@@ -165,12 +170,24 @@ export async function reconcileAiRuntimeRuns(): Promise<AiRuntimeReconciliationR
 }
 
 /** 统一发起内部执行请求，并把统一失败响应转换为可判断的运行时错误。 */
-async function callRuntime<TData>(path: string, body: unknown): Promise<TData> {
+/** 可传给内部 Runtime 请求的生命周期控制选项。 */
+type RuntimeRequestOptions = {
+  /** 当前模型步骤或工具调用的中止信号。 */
+  signal?: AbortSignal;
+};
+
+/** 统一发起内部执行请求，并保持请求级取消信号贯穿到 NestJS。 */
+async function callRuntime<TData>(path: string, body: unknown, options: RuntimeRequestOptions = {}): Promise<TData> {
   const response = await requestNest<TData>(`${AI_RUNTIME_PATH_PREFIX}${path}`, {
     method: 'POST',
     headers: { [AI_RUNTIME_TOKEN_HEADER]: readRuntimeServiceToken() },
     body,
+    signal: options.signal,
   });
+
+  if (options.signal?.aborted) {
+    throw options.signal.reason ?? new DOMException('AI Runtime 请求已取消', 'AbortError');
+  }
 
   if (!response.body.success) {
     throw new AiRuntimeRequestError(response.body.code, response.body.message, response.status);

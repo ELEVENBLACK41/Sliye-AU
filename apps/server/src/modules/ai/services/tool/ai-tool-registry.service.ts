@@ -4,7 +4,6 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { SYSTEM_PERMISSION_CODES } from '@workspace/contracts/access';
 import type {
   AiRuntimeToolGovernance,
   AiRuntimeToolPresentation,
@@ -32,9 +31,6 @@ const AI_READ_TOOL_RISK_LEVELS = new Set(['L0', 'L1', 'L2']);
 
 /** 当前注册表允许的并行策略。 */
 const AI_TOOL_PARALLEL_POLICIES = new Set(['ALLOW', 'DENY']);
-
-/** 当前系统权限目录中的合法权限码。 */
-const SYSTEM_PERMISSION_CODE_SET = new Set<string>(SYSTEM_PERMISSION_CODES);
 
 /** 当前已经支持来源登记的业务来源类型。 */
 const AI_TOOL_SOURCE_TYPE_SET = new Set<string>(AI_TOOL_SOURCE_TYPES);
@@ -105,7 +101,7 @@ export class AiToolRegistryService {
     this.assertDiscoveryRequirement(descriptor);
   }
 
-  /** 校验工具展示名称和权限、来源、预算、重试及并行治理元数据。 */
+  /** 校验工具展示名称和来源、预算、重试及并行治理元数据。 */
   private assertGovernance(descriptor: AiToolDescriptor): void {
     const presentation = descriptor.presentation;
     if (!presentation || presentation.displayName.trim().length === 0) {
@@ -120,34 +116,12 @@ export class AiToolRegistryService {
       throw new Error(`只读 AI 工具风险等级非法：${descriptor.name}`);
     }
 
-    this.assertRequiredPermissions(
-      descriptor.name,
-      governance.requiredPermissions,
-    );
     this.assertSourceTypes(descriptor.name, governance.sourceTypes);
     this.assertResultLimit(descriptor.name, governance.resultLimit);
     this.assertRetryPolicy(descriptor.name, governance.retryPolicy);
 
     if (!AI_TOOL_PARALLEL_POLICIES.has(governance.parallelPolicy)) {
       throw new Error(`AI 工具并行策略非法：${descriptor.name}`);
-    }
-  }
-
-  /** 校验工具至少声明一个合法的系统权限码，避免把权限判断留给模型猜测。 */
-  private assertRequiredPermissions(
-    toolName: string,
-    permissions: readonly string[],
-  ): void {
-    if (permissions.length === 0) {
-      throw new Error(`AI 工具所需权限不能为空：${toolName}`);
-    }
-    for (const permission of permissions) {
-      if (
-        permission.trim().length === 0 ||
-        !SYSTEM_PERMISSION_CODE_SET.has(permission)
-      ) {
-        throw new Error(`AI 工具所需权限码非法：${toolName}.${permission}`);
-      }
     }
   }
 
@@ -322,7 +296,6 @@ export class AiToolRegistryService {
   ): AiRuntimeToolGovernance {
     return Object.freeze({
       ...governance,
-      requiredPermissions: Object.freeze([...governance.requiredPermissions]),
       sourceTypes: Object.freeze([...governance.sourceTypes]),
       resultLimit: Object.freeze({ ...governance.resultLimit }),
       retryPolicy: Object.freeze({ ...governance.retryPolicy }),

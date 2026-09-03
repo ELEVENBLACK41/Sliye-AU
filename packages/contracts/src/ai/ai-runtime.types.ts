@@ -81,8 +81,6 @@ export type AiRuntimeToolPresentation = {
 export type AiRuntimeToolGovernance = {
   /** 当前工具的风险等级。 */
   riskLevel: AiRuntimeToolRiskLevel;
-  /** 工具执行前必须具备的系统权限码；资源级权限仍由业务域实时判断。 */
-  requiredPermissions: readonly string[];
   /** 工具可能读取并登记的来源类型；不得包含匿名个人选票等禁止来源。 */
   sourceTypes: readonly AiSourceType[];
   /** 工具返回模型的数据数量和文本大小上限。 */

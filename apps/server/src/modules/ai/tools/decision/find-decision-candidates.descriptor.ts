@@ -4,7 +4,6 @@
  * 真实查询逻辑在 `find-decision-candidates.service.ts` 中委托给 decisions 模块。
  */
 
-import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 import type { AiToolDescriptor } from '../../types/ai-tool-registry.types';
 
 /** `findDecisionCandidates` 的中心工具注册表描述。 */
@@ -19,7 +18,6 @@ export const FIND_DECISION_CANDIDATES_DESCRIPTOR: AiToolDescriptor = {
   },
   governance: {
     riskLevel: 'L0',
-    requiredPermissions: [SYSTEM_PERMISSIONS.decision.read],
     sourceTypes: ['DECISION'],
     resultLimit: {
       maxItems: 5,
