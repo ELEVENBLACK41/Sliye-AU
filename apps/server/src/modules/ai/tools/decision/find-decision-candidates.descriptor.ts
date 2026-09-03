@@ -4,6 +4,7 @@
  * 真实查询逻辑在 `find-decision-candidates.service.ts` 中委托给 decisions 模块。
  */
 
+import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 import type { AiToolDescriptor } from '../../types/ai-tool-registry.types';
 
 /** `findDecisionCandidates` 的中心工具注册表描述。 */
@@ -13,6 +14,22 @@ export const FIND_DECISION_CANDIDATES_DESCRIPTOR: AiToolDescriptor = {
     '按当前用户实时可访问范围查找可能匹配的决策候选，不读取决策详情、讨论正文或其他业务对象。',
   accessMode: 'READ',
   timeoutMs: 3_000,
+  presentation: {
+    displayName: '查找决策候选',
+  },
+  governance: {
+    riskLevel: 'L0',
+    requiredPermissions: [SYSTEM_PERMISSIONS.decision.read],
+    sourceTypes: ['DECISION'],
+    resultLimit: {
+      maxItems: 5,
+      maxChars: 3_000,
+    },
+    retryPolicy: {
+      maxRetries: 0,
+    },
+    parallelPolicy: 'ALLOW',
+  },
   input: {
     description: '用户消息中提取的决策名称、别名或可见标识符。',
     fields: [

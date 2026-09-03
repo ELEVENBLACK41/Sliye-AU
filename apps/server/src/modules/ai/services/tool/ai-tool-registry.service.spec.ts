@@ -15,6 +15,22 @@ function createToolDescriptor(
     description: '按用户可见范围查找可能匹配的决策，不读取决策详情。',
     accessMode: 'READ',
     timeoutMs: 3_000,
+    presentation: {
+      displayName: '查找决策候选',
+    },
+    governance: {
+      riskLevel: 'L0',
+      requiredPermissions: ['decision:read'],
+      sourceTypes: ['DECISION'],
+      resultLimit: {
+        maxItems: 5,
+        maxChars: 3_000,
+      },
+      retryPolicy: {
+        maxRetries: 0,
+      },
+      parallelPolicy: 'ALLOW',
+    },
     input: {
       description: '用户消息中提取的决策名称、别名或可见标识符。',
       fields: [
@@ -40,6 +56,84 @@ function createToolDescriptor(
     ...overrides,
   };
 }
+
+/** 注册表治理校验的非法输入夹具，使用契约类型避免测试表格导致字面量被拓宽。 */
+const INVALID_DESCRIPTOR_CASES: Array<{
+  name: string;
+  overrides: Partial<AiToolDescriptor>;
+  message: string;
+}> = [
+  {
+    name: '缺少治理元数据',
+    overrides: { governance: undefined },
+    message: 'AI 工具治理元数据缺失',
+  },
+  {
+    name: '缺少展示名称',
+    overrides: { presentation: undefined },
+    message: 'AI 工具展示名称不能为空',
+  },
+  {
+    name: '只读工具使用写风险等级',
+    overrides: {
+      governance: {
+        ...createToolDescriptor().governance!,
+        riskLevel: 'L3' as never,
+      },
+    },
+    message: '只读 AI 工具风险等级非法',
+  },
+  {
+    name: '声明非法权限码',
+    overrides: {
+      governance: {
+        ...createToolDescriptor().governance!,
+        requiredPermissions: ['permission:not-exists'],
+      },
+    },
+    message: 'AI 工具所需权限码非法',
+  },
+  {
+    name: '声明当前不支持的来源类型',
+    overrides: {
+      governance: {
+        ...createToolDescriptor().governance!,
+        sourceTypes: ['DECISION_PROPOSAL' as never],
+      },
+    },
+    message: 'AI 工具来源类型非法',
+  },
+  {
+    name: '声明非法最大条数',
+    overrides: {
+      governance: {
+        ...createToolDescriptor().governance!,
+        resultLimit: { maxItems: 0 },
+      },
+    },
+    message: 'AI 工具最大条数必须为正整数',
+  },
+  {
+    name: '声明非法重试次数',
+    overrides: {
+      governance: {
+        ...createToolDescriptor().governance!,
+        retryPolicy: { maxRetries: -1 },
+      },
+    },
+    message: 'AI 工具最大重试次数必须为非负整数',
+  },
+  {
+    name: '声明非法并行策略',
+    overrides: {
+      governance: {
+        ...createToolDescriptor().governance!,
+        parallelPolicy: 'AUTO' as never,
+      },
+    },
+    message: 'AI 工具并行策略非法',
+  },
+];
 
 describe('AiToolRegistryService', () => {
   it('返回已批准工具的只读描述，并且不暴露未注册名称', () => {
@@ -69,6 +163,26 @@ describe('AiToolRegistryService', () => {
         ],
       },
     });
+  });
+
+  it('复制并冻结治理元数据，阻止注册后的策略被外部修改', () => {
+    const descriptor = createToolDescriptor();
+    const service = new AiToolRegistryService([descriptor]);
+    const registered = service.findDescriptor(descriptor.name);
+
+    (descriptor.governance!.requiredPermissions as string[])[0] =
+      'project:update';
+    descriptor.governance!.resultLimit.maxItems = 99;
+
+    expect(registered?.governance).toMatchObject({
+      requiredPermissions: ['decision:read'],
+      resultLimit: { maxItems: 5 },
+    });
+    expect(Object.isFrozen(registered?.governance)).toBe(true);
+    expect(Object.isFrozen(registered?.governance?.requiredPermissions)).toBe(
+      true,
+    );
+    expect(Object.isFrozen(registered?.governance?.resultLimit)).toBe(true);
   });
 
   it('拒绝重复名称、写能力和不完整字段描述', () => {
@@ -167,5 +281,11 @@ describe('AiToolRegistryService', () => {
           }),
         ]),
     ).toThrow('AI 工具不能把自己声明为前置发现工具');
+  });
+
+  it.each(INVALID_DESCRIPTOR_CASES)('$name', ({ overrides, message }) => {
+    expect(
+      () => new AiToolRegistryService([createToolDescriptor(overrides)]),
+    ).toThrow(message);
   });
 });

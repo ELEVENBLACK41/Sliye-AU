@@ -4,6 +4,7 @@
  * 真实查询逻辑在 `get-decision-context.service.ts` 中委托给 decisions 模块。
  */
 
+import { SYSTEM_PERMISSIONS } from '@workspace/contracts/access';
 import type { AiToolDescriptor } from '../../types/ai-tool-registry.types';
 
 /** `getDecisionContext` 的中心工具注册表描述。 */
@@ -13,6 +14,21 @@ export const GET_DECISION_CONTEXT_DESCRIPTOR: AiToolDescriptor = {
     '读取一项决策的结构化上下文事实，只能使用 findDecisionCandidates 在本次对话中返回的候选决策主键；不接受凭空猜测的主键，也不返回讨论正文、会议转写或提案投票明细。',
   accessMode: 'READ',
   timeoutMs: 3_000,
+  presentation: {
+    displayName: '读取决策上下文',
+  },
+  governance: {
+    riskLevel: 'L0',
+    requiredPermissions: [SYSTEM_PERMISSIONS.decision.read],
+    sourceTypes: ['DECISION', 'DECISION_RESOLUTION'],
+    resultLimit: {
+      maxChars: 4_000,
+    },
+    retryPolicy: {
+      maxRetries: 0,
+    },
+    parallelPolicy: 'DENY',
+  },
   input: {
     description: '本 Run 已发现候选中唯一命中的决策主键。',
     fields: [

@@ -4,6 +4,13 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
+import { SYSTEM_PERMISSION_CODES } from '@workspace/contracts/access';
+import type {
+  AiRuntimeToolGovernance,
+  AiRuntimeToolPresentation,
+  AiRuntimeToolResultLimit,
+  AiRuntimeToolRetryPolicy,
+} from '@workspace/contracts/ai';
 import {
   AI_TOOL_DESCRIPTORS,
   AI_TOOL_VALUE_TYPES,
@@ -12,12 +19,25 @@ import {
   type AiToolDiscoveryRequirement,
   type AiToolFieldDescriptor,
 } from '../../types/ai-tool-registry.types';
+import { AI_TOOL_SOURCE_TYPES } from '../../types/ai-tool-source.types';
 
 /** 稳定工具名称必须使用 lowerCamelCase，避免模型、审计与持久化记录出现多个别名。 */
 const AI_TOOL_NAME_PATTERN = /^[a-z][A-Za-z0-9]*$/;
 
 /** 用于校验运行时配置的合法工具字段值类型集合。 */
 const AI_TOOL_VALUE_TYPE_SET = new Set<string>(AI_TOOL_VALUE_TYPES);
+
+/** 当前只读工具允许使用的风险等级；L3 为未来写操作预留。 */
+const AI_READ_TOOL_RISK_LEVELS = new Set(['L0', 'L1', 'L2']);
+
+/** 当前注册表允许的并行策略。 */
+const AI_TOOL_PARALLEL_POLICIES = new Set(['ALLOW', 'DENY']);
+
+/** 当前系统权限目录中的合法权限码。 */
+const SYSTEM_PERMISSION_CODE_SET = new Set<string>(SYSTEM_PERMISSION_CODES);
+
+/** 当前已经支持来源登记的业务来源类型。 */
+const AI_TOOL_SOURCE_TYPE_SET = new Set<string>(AI_TOOL_SOURCE_TYPES);
 
 @Injectable()
 export class AiToolRegistryService {
@@ -79,9 +99,107 @@ export class AiToolRegistryService {
       throw new Error(`AI 工具超时必须为正整数：${descriptor.name}`);
     }
 
+    this.assertGovernance(descriptor);
     this.assertDataContract(descriptor.name, '输入', descriptor.input);
     this.assertDataContract(descriptor.name, '输出', descriptor.output);
     this.assertDiscoveryRequirement(descriptor);
+  }
+
+  /** 校验工具展示名称和权限、来源、预算、重试及并行治理元数据。 */
+  private assertGovernance(descriptor: AiToolDescriptor): void {
+    const presentation = descriptor.presentation;
+    if (!presentation || presentation.displayName.trim().length === 0) {
+      throw new Error(`AI 工具展示名称不能为空：${descriptor.name}`);
+    }
+
+    const governance = descriptor.governance;
+    if (!governance) {
+      throw new Error(`AI 工具治理元数据缺失：${descriptor.name}`);
+    }
+    if (!AI_READ_TOOL_RISK_LEVELS.has(governance.riskLevel)) {
+      throw new Error(`只读 AI 工具风险等级非法：${descriptor.name}`);
+    }
+
+    this.assertRequiredPermissions(
+      descriptor.name,
+      governance.requiredPermissions,
+    );
+    this.assertSourceTypes(descriptor.name, governance.sourceTypes);
+    this.assertResultLimit(descriptor.name, governance.resultLimit);
+    this.assertRetryPolicy(descriptor.name, governance.retryPolicy);
+
+    if (!AI_TOOL_PARALLEL_POLICIES.has(governance.parallelPolicy)) {
+      throw new Error(`AI 工具并行策略非法：${descriptor.name}`);
+    }
+  }
+
+  /** 校验工具至少声明一个合法的系统权限码，避免把权限判断留给模型猜测。 */
+  private assertRequiredPermissions(
+    toolName: string,
+    permissions: readonly string[],
+  ): void {
+    if (permissions.length === 0) {
+      throw new Error(`AI 工具所需权限不能为空：${toolName}`);
+    }
+    for (const permission of permissions) {
+      if (
+        permission.trim().length === 0 ||
+        !SYSTEM_PERMISSION_CODE_SET.has(permission)
+      ) {
+        throw new Error(`AI 工具所需权限码非法：${toolName}.${permission}`);
+      }
+    }
+  }
+
+  /** 校验工具声明的来源类型都属于当前已经支持实时可见性判定的集合。 */
+  private assertSourceTypes(
+    toolName: string,
+    sourceTypes: readonly string[],
+  ): void {
+    if (sourceTypes.length === 0) {
+      throw new Error(`AI 工具来源类型不能为空：${toolName}`);
+    }
+    for (const sourceType of sourceTypes) {
+      if (!AI_TOOL_SOURCE_TYPE_SET.has(sourceType)) {
+        throw new Error(`AI 工具来源类型非法：${toolName}.${sourceType}`);
+      }
+    }
+  }
+
+  /** 校验工具至少声明一个正数结果上限，并拒绝非安全整数。 */
+  private assertResultLimit(
+    toolName: string,
+    resultLimit: AiRuntimeToolResultLimit,
+  ): void {
+    const { maxItems, maxChars } = resultLimit;
+    if (maxItems === undefined && maxChars === undefined) {
+      throw new Error(`AI 工具结果上限不能为空：${toolName}`);
+    }
+    if (
+      maxItems !== undefined &&
+      (!Number.isSafeInteger(maxItems) || maxItems <= 0)
+    ) {
+      throw new Error(`AI 工具最大条数必须为正整数：${toolName}`);
+    }
+    if (
+      maxChars !== undefined &&
+      (!Number.isSafeInteger(maxChars) || maxChars <= 0)
+    ) {
+      throw new Error(`AI 工具最大字符数必须为正整数：${toolName}`);
+    }
+  }
+
+  /** 校验自动重试次数为非负安全整数，允许明确声明不自动重试。 */
+  private assertRetryPolicy(
+    toolName: string,
+    retryPolicy: AiRuntimeToolRetryPolicy,
+  ): void {
+    if (
+      !Number.isSafeInteger(retryPolicy.maxRetries) ||
+      retryPolicy.maxRetries < 0
+    ) {
+      throw new Error(`AI 工具最大重试次数必须为非负整数：${toolName}`);
+    }
   }
 
   /** 校验前置发现声明指向的字段真实存在，避免编排层拿到无法执行的规则。 */
@@ -169,6 +287,16 @@ export class AiToolRegistryService {
   ): AiToolDescriptor {
     return Object.freeze({
       ...descriptor,
+      ...(descriptor.presentation
+        ? {
+            presentation: this.createImmutablePresentation(
+              descriptor.presentation,
+            ),
+          }
+        : {}),
+      ...(descriptor.governance
+        ? { governance: this.createImmutableGovernance(descriptor.governance) }
+        : {}),
       input: this.createImmutableDataContract(descriptor.input),
       output: this.createImmutableDataContract(descriptor.output),
       ...(descriptor.discoveryRequirement
@@ -178,6 +306,26 @@ export class AiToolRegistryService {
             ),
           }
         : {}),
+    });
+  }
+
+  /** 深拷贝并冻结工作台展示元数据，避免外部改写工具名称。 */
+  private createImmutablePresentation(
+    presentation: AiRuntimeToolPresentation,
+  ): AiRuntimeToolPresentation {
+    return Object.freeze({ ...presentation });
+  }
+
+  /** 深拷贝并冻结治理元数据，保证已注册工具的策略快照不可变。 */
+  private createImmutableGovernance(
+    governance: AiRuntimeToolGovernance,
+  ): AiRuntimeToolGovernance {
+    return Object.freeze({
+      ...governance,
+      requiredPermissions: Object.freeze([...governance.requiredPermissions]),
+      sourceTypes: Object.freeze([...governance.sourceTypes]),
+      resultLimit: Object.freeze({ ...governance.resultLimit }),
+      retryPolicy: Object.freeze({ ...governance.retryPolicy }),
     });
   }
 
