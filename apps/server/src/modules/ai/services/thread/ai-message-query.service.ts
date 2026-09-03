@@ -31,6 +31,7 @@ import {
   encodeAiCursor,
 } from '../../utils/ai-cursor';
 import { AiSourceVisibilityService } from '../source/ai-source-visibility.service';
+import { toAiWebSourcesFromSummary } from '../../utils/ai-web-search';
 
 /**
  * 消息及其所属 Run、工具调用的字段投影。
@@ -64,6 +65,7 @@ const AI_MESSAGE_HISTORY_SELECT = Prisma.validator<Prisma.AiMessageSelect>()({
           durationMs: true,
           failureCode: true,
           failureReason: true,
+          outputSummary: true,
           startedAt: true,
         },
         orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
@@ -238,7 +240,7 @@ export class AiMessageQueryService {
     };
   }
 
-  /** 把工具调用转换为只含名称与状态的摘要。 */
+  /** 把工具调用转换为名称、状态与公开网页来源摘要。 */
   private toToolCall(
     toolCall: NonNullable<AiMessageHistoryRow['run']>['toolCalls'][number],
   ): AiMessageToolCall {
@@ -249,6 +251,10 @@ export class AiMessageQueryService {
       durationMs: toolCall.durationMs,
       failureCode: toolCall.failureCode as ApiErrorCode | null,
       failureReason: toolCall.failureReason,
+      webSources:
+        toolCall.toolName === 'parallel_search'
+          ? toAiWebSourcesFromSummary(toolCall.outputSummary)
+          : [],
     };
   }
 }

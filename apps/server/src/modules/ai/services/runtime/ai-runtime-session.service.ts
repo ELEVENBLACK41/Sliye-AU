@@ -11,6 +11,9 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import type {
   AiEvent,
+  AiRuntimeProviderWebSearchResult,
+  AiRuntimeProviderWebSearchSettleInput,
+  AiRuntimeProviderWebSearchStartInput,
   AiRuntimeRunStopResult,
   AiRuntimeSession,
 } from '@workspace/contracts/ai';
@@ -139,6 +142,38 @@ export class AiRuntimeSessionService {
     );
 
     return this.toolInvocationService.invokeTool(executionContext, request);
+  }
+
+  /** 登记一次由 Gateway 执行的网页检索开始事件。 */
+  async startProviderWebSearch(
+    runId: string,
+    input: AiRuntimeProviderWebSearchStartInput,
+  ): Promise<AiRuntimeProviderWebSearchResult> {
+    const executionContext = await this.loadToolExecutionContext(
+      runId,
+      input.executionLeaseId,
+    );
+
+    return this.toolInvocationService.startProviderWebSearch(executionContext, {
+      providerToolCallId: input.providerToolCallId,
+      input: input.input,
+    });
+  }
+
+  /** 持久化 Gateway 网页检索来源并结束对应工具调用。 */
+  async settleProviderWebSearch(
+    runId: string,
+    input: AiRuntimeProviderWebSearchSettleInput,
+  ): Promise<AiRuntimeProviderWebSearchResult> {
+    const executionContext = await this.loadToolExecutionContext(
+      runId,
+      input.executionLeaseId,
+    );
+
+    return this.toolInvocationService.settleProviderWebSearch(
+      executionContext,
+      input,
+    );
   }
 
   /** 将 Run 收敛为完成或失败终态，并在同一事务写入助手最终正文与用量。 */

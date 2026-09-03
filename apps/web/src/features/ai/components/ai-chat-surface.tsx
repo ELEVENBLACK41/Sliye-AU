@@ -6,11 +6,9 @@
 import { useState, type ReactNode } from 'react';
 import type { ChatStatus } from 'ai';
 import { Button } from '@workspace/ui/components/button';
-import { Copy, Globe2 } from 'lucide-react';
+import { Copy } from 'lucide-react';
 
 import type { AiMessageSubmissionMode, AiRunStatus } from '@workspace/contracts/ai';
-
-import { Switch } from '@workspace/ui/components/switch';
 
 import { AiCitationList } from './ai-citation-list';
 import { AiQueuedMessages } from './ai-queued-messages';
@@ -82,7 +80,6 @@ export function AiChatSurface({
   onRetry: (runId: string) => void;
 }) {
   const [input, setInput] = useState('');
-  const [enableWebSearch, setEnableWebSearch] = useState(false);
   const [editingQueuedMessageId, setEditingQueuedMessageId] = useState<string | null>(null);
   const isRunning = isAiRunActive(activeRunStatus);
   const isCommandPending = commandState !== 'IDLE';
@@ -125,9 +122,7 @@ export function AiChatSurface({
           status={toComposerStatus(activeRunStatus, commandState)}
           isRunning={isRunning}
           isCommandPending={isCommandPending}
-          enableWebSearch={enableWebSearch}
           onInputChange={setInput}
-          onWebSearchChange={setEnableWebSearch}
           onStop={onStop}
           onSubmit={handleMessageSubmit}
         />
@@ -222,6 +217,7 @@ function AiConversationMessage({
   const messageText = message.content;
   const hasAssistantText = message.role === 'assistant' && message.content.trim().length > 0;
   const toolParts = toAiToolMessageParts(message);
+  const webSources = message.run?.toolCalls.flatMap((toolCall) => toolCall.webSources) ?? [];
 
   if (message.role === 'user') {
     return (
@@ -246,17 +242,15 @@ function AiConversationMessage({
           <>
             {toolParts.length > 0 ? <AiToolCallGroup parts={toolParts} /> : null}
             {message.content ? (
-              <MessageResponse 
-              animated={STREAMING_MESSAGE_ANIMATION} 
-              // animated={{ animation: "slideUp" }}
-              isAnimating={isStreaming}
+              <MessageResponse
+                animated={STREAMING_MESSAGE_ANIMATION}
+                // animated={{ animation: "slideUp" }}
+                isAnimating={isStreaming}
               >
                 {message.content}
               </MessageResponse>
             ) : null}
-            {/*引用显示组件*/}
-
-            {hasAssistantText ? <AiCitationList /> : null}  
+            <AiCitationList sources={webSources} />
           </>
         )}
         <AiRunStatusNotice status={message.run?.status ?? null} runId={message.run?.runId ?? null} onRetry={onRetry} />
@@ -408,9 +402,7 @@ function AiComposer({
   status,
   isRunning,
   isCommandPending,
-  enableWebSearch,
   onInputChange,
-  onWebSearchChange,
   onStop,
   onSubmit,
 }: {
@@ -418,9 +410,7 @@ function AiComposer({
   status: ChatStatus;
   isRunning: boolean;
   isCommandPending: boolean;
-  enableWebSearch: boolean;
   onInputChange: (value: string) => void;
-  onWebSearchChange: (enabled: boolean) => void;
   onStop: () => void;
   onSubmit: (message: PromptInputMessage) => void | Promise<void>;
 }) {
@@ -438,18 +428,7 @@ function AiComposer({
         disabled={isCommandPending}
         onChange={(event) => onInputChange(event.currentTarget.value)}
       />
-      <PromptInputFooter className="justify-between">
-        <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
-          <Globe2 className="size-3.5" aria-hidden />
-          <span>联网检索（暂未接入）</span>
-          <Switch
-            aria-label="开启联网检索"
-            checked={enableWebSearch}
-            disabled
-            onCheckedChange={onWebSearchChange}
-            size="sm"
-          />
-        </div>
+      <PromptInputFooter className="justify-end">
         <PromptInputSubmit
           status={status}
           onStop={onStop}

@@ -210,6 +210,25 @@ test('动态工具不会把权限、Token 或租约信息拼入模型工具描�
   assert.equal(description.includes('lease-1'), false);
 });
 
+test('正式 Agent 始终提供由模型自行决定是否调用的 Gateway 网页检索工具', () => {
+  const webSearch = buildAiAgentTools([], {
+    runId: 'run-1',
+    executionLeaseId: 'lease-1',
+  }).parallel_search;
+
+  assert.ok(webSearch);
+  assert.equal(webSearch.type, 'provider');
+  assert.equal('id' in webSearch ? webSearch.id : null, 'gateway.parallel_search');
+  assert.deepEqual('args' in webSearch ? webSearch.args : null, {
+    mode: 'agentic',
+    maxResults: 5,
+    excerpts: {
+      maxCharsPerResult: 800,
+      maxCharsTotal: 4_000,
+    },
+  });
+});
+
 test('动态工具把上游 abortSignal 传递给 Nest 请求并保留取消语义', async () => {
   const controller = new AbortController();
   let receivedSignal: AbortSignal | undefined;

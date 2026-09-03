@@ -15,6 +15,8 @@ import {
   CompleteAiRunDto,
   InvokeAiToolDto,
   RecordAiStepDto,
+  SettleProviderWebSearchDto,
+  StartProviderWebSearchDto,
 } from '../dto/ai-runtime.dto';
 import { AiRuntimeServiceGuard } from '../guards/ai-runtime-service.guard';
 import { AiRuntimeSessionService } from '../services/runtime/ai-runtime-session.service';
@@ -113,6 +115,24 @@ export class AiRuntimeController {
       toolName: body.toolName,
       input: body.input,
     });
+  }
+
+  /** 登记一次由 AI Gateway 执行的网页检索开始事件。 */
+  @Post(':runId/provider-tools/web-search/start')
+  startProviderWebSearch(
+    @Param('runId') runId: string,
+    @Body() body: StartProviderWebSearchDto,
+  ) {
+    return this.runtimeSessionService.startProviderWebSearch(runId, body);
+  }
+
+  /** 持久化 AI Gateway 网页检索来源并结束工具调用。 */
+  @Post(':runId/provider-tools/web-search/settle')
+  settleProviderWebSearch(
+    @Param('runId') runId: string,
+    @Body() body: SettleProviderWebSearchDto,
+  ) {
+    return this.runtimeSessionService.settleProviderWebSearch(runId, body);
   }
 
   /** 把 Run 收敛为完成或失败终态，并写入助手最终正文与用量。 */

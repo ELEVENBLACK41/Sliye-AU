@@ -1,6 +1,6 @@
 /** 本文件提供 AI 工作区消息分页与实时 Run 状态的纯数据转换。 */
 
-import type { AiMessageHistoryItem, AiMessageRun } from '@workspace/contracts/ai';
+import type { AiMessageHistoryItem, AiMessageRun, AiMessageWebSource } from '@workspace/contracts/ai';
 
 import type { AiWorkspaceMessage } from '../types/ai-message';
 import type { AiWorkspaceQueuedMessage } from '../types/ai-workspace';
@@ -35,9 +35,7 @@ export function toAiWorkspaceMessages(
   history: AiMessageHistoryItem[],
   liveRun: AiEventReducerState | null,
 ): AiWorkspaceMessage[] {
-  const messages = history
-    .filter((message) => message.dispatchState !== 'QUEUED')
-    .map(toWorkspaceMessage);
+  const messages = history.filter((message) => message.dispatchState !== 'QUEUED').map(toWorkspaceMessage);
 
   if (!liveRun || !liveRun.status) {
     return messages;
@@ -161,8 +159,29 @@ function toAiMessageRun(liveRun: AiEventReducerState): AiMessageRun {
       durationMs: toolCall.durationMs,
       failureCode: toolCall.failureCode,
       failureReason: toolCall.failureReason,
+      webSources: toolCall.toolName === 'parallel_search' ? toWebSources(toolCall.outputSummary) : [],
     })),
   };
+}
+
+/** 从实时工具结束事件的受控摘要中读取网页来源。 */
+function toWebSources(summary: Record<string, unknown> | null): AiMessageWebSource[] {
+  if (!summary || !Array.isArray(summary.webSources)) {
+    return [];
+  }
+
+  return summary.webSources.flatMap((source) => {
+    if (
+      typeof source === 'object' &&
+      source !== null &&
+      typeof (source as Record<string, unknown>).url === 'string' &&
+      typeof (source as Record<string, unknown>).title === 'string'
+    ) {
+      return [source as AiMessageWebSource];
+    }
+
+    return [];
+  });
 }
 
 /** 判断实时快照是否仍处于需要流式表现的非终态。 */

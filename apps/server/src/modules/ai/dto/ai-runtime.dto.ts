@@ -5,7 +5,11 @@
  */
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type { AiRunFailureReason } from '@workspace/contracts/ai';
+import type {
+  AiRunFailureReason,
+  AiRuntimeProviderWebSearchSettleInput,
+  AiRuntimeProviderWebSearchStartInput,
+} from '@workspace/contracts/ai';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -170,6 +174,41 @@ export class InvokeAiToolDto extends AiRuntimeLeaseDto {
   @ApiProperty({ type: Object })
   @IsObject()
   input!: Record<string, unknown>;
+}
+
+/** 开始记录一次 Gateway 网页检索的内部请求。 */
+export class StartProviderWebSearchDto
+  extends AiRuntimeLeaseDto
+  implements AiRuntimeProviderWebSearchStartInput
+{
+  /** Gateway 生成的工具调用标识。 */
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  providerToolCallId!: string;
+
+  /** 模型提交给网页检索工具的输入。 */
+  @ApiProperty({ type: Object })
+  @IsObject()
+  input!: Record<string, unknown>;
+}
+
+/** 完成一次 Gateway 网页检索的内部请求。 */
+export class SettleProviderWebSearchDto
+  extends StartProviderWebSearchDto
+  implements AiRuntimeProviderWebSearchSettleInput
+{
+  /** Gateway 返回的网页检索结果。 */
+  @ApiProperty({ type: Object })
+  @IsObject()
+  output!: Record<string, unknown>;
+
+  /** 从工具调用到结果返回的耗时，单位为毫秒。 */
+  @ApiProperty({ minimum: 0 })
+  @IsInt()
+  @Min(0)
+  durationMs!: number;
 }
 
 /** 一次 Run 聚合后的模型用量。 */
