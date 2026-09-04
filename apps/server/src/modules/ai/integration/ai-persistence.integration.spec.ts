@@ -8,7 +8,12 @@ import { AI_THREAD_PINNED_MAX } from '@workspace/contracts/ai';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../../database/prisma.service';
-import { DataScope } from '../../../generated/prisma';
+import {
+  DataScope,
+  DiscussionAreaType,
+  VoteMethod,
+  VoteRoundStatus,
+} from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
 import { DecisionContextService } from '../../decisions/services/decision-context.service';
@@ -1408,6 +1413,129 @@ describePersistence('AI 持久化事务地基', () => {
       await prisma.decision.deleteMany({ where: { id: decision.id } });
       await prisma.project.deleteMany({ where: { id: project.id } });
       await prisma.department.deleteMany({ where: { id: department.id } });
+    }
+  });
+
+  it('提案和投票轮次来源随私有父决策失权而隐藏并在恢复后重新可见', async () => {
+    const ownerUserId = await createTestUser();
+    const department = await prisma.department.create({
+      data: {
+        code: `AI-CHILD-SOURCE-${randomUUID()}`,
+        name: 'AI 子来源失权测试部门',
+      },
+    });
+    const project = await prisma.project.create({
+      data: {
+        title: 'AI 子来源失权测试项目',
+        createdById: ownerUserId,
+        deptId: department.id,
+        members: { create: { userId: ownerUserId } },
+      },
+    });
+    const area = await prisma.discussionArea.create({
+      data: {
+        projectId: project.id,
+        createdById: ownerUserId,
+        name: '私有评审小组',
+        type: DiscussionAreaType.PRIVATE,
+        members: { create: { userId: ownerUserId } },
+      },
+    });
+    const decision = await prisma.decision.create({
+      data: {
+        title: '私有子来源失权决策',
+        projectId: project.id,
+        areaId: area.id,
+        creatorId: ownerUserId,
+        deptId: department.id,
+      },
+    });
+    const proposal = await prisma.decisionProposal.create({
+      data: {
+        decisionId: decision.id,
+        creatorId: ownerUserId,
+        title: '私有候选方案',
+      },
+    });
+    const voteRound = await prisma.decisionVoteRound.create({
+      data: {
+        decisionId: decision.id,
+        creatorId: ownerUserId,
+        title: '私有方案投票',
+        method: VoteMethod.SINGLE_CHOICE,
+        status: VoteRoundStatus.DRAFT,
+      },
+    });
+    const authorization = buildAuthorization(ownerUserId);
+    const visibilityService = new AiSourceVisibilityService(
+      prisma,
+      new DecisionVisibilityService(prisma, new AuthorizationService(prisma)),
+    );
+
+    try {
+      const created = await threadService.createThreadWithInitialRun({
+        ownerUserId,
+        message: '依赖私有决策过程来源的会话。',
+        idempotencyKey: 'child-source-visibility-001',
+        modelRole: 'standard',
+      });
+      await prisma.aiSourceDependency.createMany({
+        data: [
+          {
+            runId: created.runId,
+            sourceType: 'DECISION',
+            sourceId: String(decision.id),
+            usage: 'READ',
+            label: decision.title,
+          },
+          {
+            runId: created.runId,
+            sourceType: 'DECISION_PROPOSAL',
+            sourceId: String(proposal.id),
+            usage: 'READ',
+            label: proposal.title,
+          },
+          {
+            runId: created.runId,
+            sourceType: 'DECISION_VOTE_ROUND',
+            sourceId: String(voteRound.id),
+            usage: 'READ',
+            label: voteRound.title,
+          },
+        ],
+      });
+
+      await expect(
+        visibilityService.evaluateRunsSourceVisibility(authorization, [
+          created.runId,
+        ]),
+      ).resolves.toEqual(new Map([[created.runId, true]]));
+
+      await prisma.discussionAreaMember.deleteMany({
+        where: { areaId: area.id, userId: ownerUserId },
+      });
+      await expect(
+        visibilityService.evaluateRunsSourceVisibility(authorization, [
+          created.runId,
+        ]),
+      ).resolves.toEqual(new Map([[created.runId, false]]));
+
+      await prisma.discussionAreaMember.create({
+        data: { areaId: area.id, userId: ownerUserId },
+      });
+      await expect(
+        visibilityService.evaluateRunsSourceVisibility(authorization, [
+          created.runId,
+        ]),
+      ).resolves.toEqual(new Map([[created.runId, true]]));
+    } finally {
+      await clearAiTables();
+      await prisma.decisionVoteRound.delete({ where: { id: voteRound.id } });
+      await prisma.decisionProposal.delete({ where: { id: proposal.id } });
+      await prisma.decision.delete({ where: { id: decision.id } });
+      await prisma.discussionArea.delete({ where: { id: area.id } });
+      await prisma.project.delete({ where: { id: project.id } });
+      await prisma.department.delete({ where: { id: department.id } });
     }
   });
 

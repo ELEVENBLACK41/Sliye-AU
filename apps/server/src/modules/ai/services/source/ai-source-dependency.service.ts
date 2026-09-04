@@ -79,8 +79,15 @@ export class AiSourceDependencyService {
   private toPrismaSourceType(
     sourceType: AiToolSourceRef['sourceType'],
   ): AiSourceType {
-    return sourceType === 'DECISION'
-      ? AiSourceType.DECISION
-      : AiSourceType.DECISION_RESOLUTION;
+    switch (sourceType) {
+      case 'DECISION':
+        return AiSourceType.DECISION;
+      case 'DECISION_PROPOSAL':
+        return AiSourceType.DECISION_PROPOSAL;
+      case 'DECISION_VOTE_ROUND':
+        return AiSourceType.DECISION_VOTE_ROUND;
+      case 'DECISION_RESOLUTION':
+        return AiSourceType.DECISION_RESOLUTION;
+    }
   }
 }

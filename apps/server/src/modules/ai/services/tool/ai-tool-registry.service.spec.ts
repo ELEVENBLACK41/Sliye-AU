@@ -87,7 +87,7 @@ const INVALID_DESCRIPTOR_CASES: Array<{
     overrides: {
       governance: {
         ...createToolDescriptor().governance!,
-        sourceTypes: ['DECISION_PROPOSAL' as never],
+        sourceTypes: ['UNKNOWN_SOURCE' as never],
       },
     },
     message: 'AI 工具来源类型非法',

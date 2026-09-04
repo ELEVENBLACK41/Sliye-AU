@@ -12,6 +12,12 @@ export type FindDecisionCandidatesInput = {
   /** 待发现的决策名称、别名或可见标识符；当前 Decision 数据模型只有 title 字段，
    * 因此实际按标题模糊匹配，纯数字查询词额外按主键精确匹配。 */
   query: string;
+  /** 可选的项目名称筛选词，用于多候选的跨 Run 安全重发现。 */
+  projectQuery?: string;
+  /** 可选的私有讨论分区名称筛选词，用于多候选的跨 Run 安全重发现。 */
+  areaQuery?: string;
+  /** 可选的项目级或私有小组级范围筛选。 */
+  scope?: DecisionContextScope;
 };
 
 /** 单条候选决策的受控摘要，只暴露消歧所需的最小字段。 */

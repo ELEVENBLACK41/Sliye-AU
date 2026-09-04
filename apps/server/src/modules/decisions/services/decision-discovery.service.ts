@@ -11,7 +11,10 @@ import { PrismaService } from '../../../database/prisma.service';
 import type { Prisma } from '../../../generated/prisma';
 import { AuthorizationService } from '../../auth/services/authorization.service';
 import type { AuthorizationContext } from '../../auth/types/auth.types';
-import type { DecisionDiscoveryCandidate } from '../types/decision-discovery.types';
+import type {
+  DecisionDiscoveryCandidate,
+  DecisionDiscoveryFilters,
+} from '../types/decision-discovery.types';
 
 /** 决策读取权限码，与决策中心现有查询保持一致。 */
 const DECISION_READ_PERMISSION: SystemPermissionCode = 'decision:read';
@@ -36,6 +39,7 @@ export class DecisionDiscoveryService {
     authorization: AuthorizationContext,
     trimmedQuery: string,
     limit: number,
+    filters: DecisionDiscoveryFilters = {},
   ): Promise<DecisionDiscoveryCandidate[]> {
     this.authorizationService.assertPermission(
       authorization,
@@ -51,7 +55,7 @@ export class DecisionDiscoveryService {
     );
 
     const decisions = await this.prisma.decision.findMany({
-      where: this.buildQueryWhere(decisionWhere, trimmedQuery),
+      where: this.buildQueryWhere(decisionWhere, trimmedQuery, filters),
       select: {
         id: true,
         title: true,
@@ -84,6 +88,7 @@ export class DecisionDiscoveryService {
   private buildQueryWhere(
     decisionWhere: Prisma.DecisionWhereInput,
     trimmedQuery: string,
+    filters: DecisionDiscoveryFilters,
   ): Prisma.DecisionWhereInput {
     const numericId = /^\d+$/.test(trimmedQuery) ? Number(trimmedQuery) : null;
 
@@ -94,8 +99,33 @@ export class DecisionDiscoveryService {
       matchConditions.push({ id: numericId });
     }
 
+    const filterConditions: Prisma.DecisionWhereInput[] = [];
+    if (filters.projectQuery !== undefined) {
+      filterConditions.push({
+        project: {
+          title: { contains: filters.projectQuery, mode: 'insensitive' },
+        },
+      });
+    }
+    if (filters.areaQuery !== undefined) {
+      filterConditions.push({
+        area: {
+          is: {
+            name: { contains: filters.areaQuery, mode: 'insensitive' },
+          },
+        },
+      });
+    }
+    if (filters.scope !== undefined) {
+      filterConditions.push(
+        filters.scope === 'PROJECT'
+          ? { areaId: null }
+          : { area: { is: { type: 'PRIVATE' } } },
+      );
+    }
+
     return {
-      AND: [decisionWhere, { OR: matchConditions }],
+      AND: [decisionWhere, ...filterConditions, { OR: matchConditions }],
     };
   }
 }

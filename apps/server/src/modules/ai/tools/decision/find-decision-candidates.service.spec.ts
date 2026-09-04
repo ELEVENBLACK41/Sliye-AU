@@ -76,6 +76,40 @@ describe('FindDecisionCandidatesToolService', () => {
     );
   });
 
+  it('多候选续接时把项目、分区和范围作为重新发现筛选传给业务域', async () => {
+    const { service, findCandidates } = createService();
+
+    await service.execute(EXECUTION_CONTEXT, {
+      query: '  缓存方案评审  ',
+      projectQuery: ' 基础设施项目 ',
+      areaQuery: ' 架构小组 ',
+      scope: 'AREA',
+    });
+
+    expect(findCandidates).toHaveBeenCalledWith(
+      { userId: 42 },
+      '缓存方案评审',
+      5,
+      {
+        projectQuery: '基础设施项目',
+        areaQuery: '架构小组',
+        scope: 'AREA',
+      },
+    );
+  });
+
+  it('拒绝非法决策范围筛选，不把未知值当作 AREA', async () => {
+    const { service, findCandidates } = createService();
+
+    await expect(
+      service.execute(EXECUTION_CONTEXT, {
+        query: '缓存方案评审',
+        scope: 'UNKNOWN' as never,
+      }),
+    ).rejects.toThrow('决策范围筛选值无效');
+    expect(findCandidates).not.toHaveBeenCalled();
+  });
+
   it('把 decisions 模块返回的候选映射为工具输出契约，并登记为本次读取的来源', async () => {
     const { service, findCandidates } = createService();
     const updatedAt = new Date('2026-08-25T08:00:00.000Z');

@@ -69,4 +69,52 @@ export class DecisionVisibilityService {
 
     return new Set(visible.map((resolution) => resolution.id));
   }
+
+  /** 从给定提案主键中筛出所属决策仍对当前用户可见的部分。 */
+  async filterVisibleProposalIds(
+    authorization: AuthorizationContext,
+    proposalIds: readonly number[],
+  ): Promise<Set<number>> {
+    if (proposalIds.length === 0) {
+      return new Set();
+    }
+
+    const scopeWhere = await this.authorizationService.buildDecisionWhere(
+      authorization,
+      'decision:read',
+    );
+    const visible = await this.prisma.decisionProposal.findMany({
+      where: {
+        id: { in: [...proposalIds] },
+        decision: { is: { AND: [scopeWhere] } },
+      },
+      select: { id: true },
+    });
+
+    return new Set(visible.map((proposal) => proposal.id));
+  }
+
+  /** 从给定投票轮次主键中筛出所属决策仍对当前用户可见的部分。 */
+  async filterVisibleVoteRoundIds(
+    authorization: AuthorizationContext,
+    voteRoundIds: readonly number[],
+  ): Promise<Set<number>> {
+    if (voteRoundIds.length === 0) {
+      return new Set();
+    }
+
+    const scopeWhere = await this.authorizationService.buildDecisionWhere(
+      authorization,
+      'decision:read',
+    );
+    const visible = await this.prisma.decisionVoteRound.findMany({
+      where: {
+        id: { in: [...voteRoundIds] },
+        decision: { is: { AND: [scopeWhere] } },
+      },
+      select: { id: true },
+    });
+
+    return new Set(visible.map((round) => round.id));
+  }
 }
