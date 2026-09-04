@@ -35,6 +35,7 @@ import { DecisionVoteService } from './services/decision-vote.service';
 function createDecisionsService(
   prisma: PrismaService,
   authorizationService: AuthorizationService,
+  areaType: DiscussionAreaType = DiscussionAreaType.PRIVATE,
 ): DecisionsService {
   const meetingContextService = {
     resolveWritableMeetingId: jest.fn(
@@ -51,7 +52,7 @@ function createDecisionsService(
     findArea: jest.fn().mockResolvedValue({
       id: 40,
       projectId: 10,
-      type: DiscussionAreaType.PRIVATE,
+      type: areaType,
       status: DiscussionAreaStatus.ACTIVE,
       projectStatus: ProjectStatus.ACTIVE,
       projectMemberRole: ProjectMemberRole.MEMBER,
@@ -1113,6 +1114,32 @@ describe('DecisionsService', () => {
         },
       },
     });
+  });
+
+  it('公共分区不能作为决策协作范围，项目级决策应省略 areaId', async () => {
+    const prisma = {
+      $transaction: jest.fn(),
+    };
+    const authorizationService = {
+      assertDepartmentInScope: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = createDecisionsService(
+      prisma as unknown as PrismaService,
+      authorizationService as unknown as AuthorizationService,
+      DiscussionAreaType.PUBLIC,
+    );
+
+    await expect(
+      service.create(createAuthorization(), 10, {
+        title: '公共群决策',
+        departmentId: 3,
+        areaId: 40,
+      }),
+    ).rejects.toMatchObject({
+      code: API_ERROR_CODES.DECISION_AREA_INVALID,
+      status: 400,
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('提案列表必须使用决策读取范围并按创建顺序返回', async () => {
