@@ -137,7 +137,6 @@ export function useAiThreadWorkspace() {
   const metadata = useAiThreadMetadata({
     threadId,
     setThreadState,
-    refreshThreadLists,
   });
 
   /** 跳转到 URL 唯一标识的目标会话，不在本地保存当前会话副本。 */

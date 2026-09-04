@@ -188,7 +188,7 @@ function AiActiveThreadView({
   onRenameThread: (threadId: string, title: string) => Promise<boolean>;
   onToggleArchived: (threadId: string, archived: boolean) => Promise<boolean>;
 }) {
-  if (data.listState === 'LOADING') return <p className="px-2 text-sm text-muted-foreground">正在加载会话…</p>;
+  if (data.listState === 'LOADING') return <div className="min-h-16" aria-busy="true" />;
   if (data.listState === 'ERROR') {
     return (
       <p role="alert" className="px-2 text-sm text-destructive">

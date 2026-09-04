@@ -43,6 +43,14 @@ const DISCOVERY_DESCRIPTOR: AiToolDescriptor = {
   description: '按用户可见范围查找候选决策。',
   accessMode: 'READ',
   timeoutMs: 3_000,
+  presentation: { displayName: '查找决策候选' },
+  governance: {
+    riskLevel: 'L0',
+    sourceTypes: ['DECISION'],
+    resultLimit: { maxItems: 5, maxChars: 3_000 },
+    retryPolicy: { maxRetries: 0 },
+    parallelPolicy: 'ALLOW',
+  },
   input: {
     description: '决策名称。',
     fields: [
@@ -73,6 +81,14 @@ const CONTEXT_DESCRIPTOR: AiToolDescriptor = {
   description: '读取一项决策的结构化上下文。',
   accessMode: 'READ',
   timeoutMs: 3_000,
+  presentation: { displayName: '读取决策上下文' },
+  governance: {
+    riskLevel: 'L0',
+    sourceTypes: ['DECISION'],
+    resultLimit: { maxItems: 1, maxChars: 8_000 },
+    retryPolicy: { maxRetries: 0 },
+    parallelPolicy: 'DENY',
+  },
   input: {
     description: '本 Run 已发现候选中唯一命中的决策主键。',
     fields: [
@@ -320,6 +336,43 @@ describe('AiToolInvocationService', () => {
     });
     expect(execute).not.toHaveBeenCalled();
     expect(settleToolCall).not.toHaveBeenCalled();
+  });
+
+  it('Gateway 网页检索结束时只落库公开来源摘要', async () => {
+    const { service, settleToolCall } = createService({
+      startResult: {
+        state: 'IN_PROGRESS',
+        toolCallId: 'tool-call-web-search',
+      },
+    });
+
+    await service.settleProviderWebSearch(EXECUTION_CONTEXT, {
+      providerToolCallId: 'provider-web-search-1',
+      input: { objective: '查询最新 AI SDK 文档' },
+      output: {
+        searchId: 'search-1',
+        results: [
+          {
+            title: 'AI SDK',
+            url: 'https://ai-sdk.dev',
+            excerpt: '不应进入工具摘要的网页正文',
+          },
+        ],
+      },
+      durationMs: 120,
+    });
+
+    expect(settleToolCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCallId: 'tool-call-web-search',
+        status: 'SUCCEEDED',
+        outputSummary: {
+          webSources: [{ title: 'AI SDK', url: 'https://ai-sdk.dev' }],
+        },
+        sources: [],
+        durationMs: 120,
+      }),
+    );
   });
 
   it('落库摘要被截断时不重放，返回可驱动模型重新调用的稳定失败', async () => {

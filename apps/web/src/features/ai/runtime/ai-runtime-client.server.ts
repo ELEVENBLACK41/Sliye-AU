@@ -7,6 +7,9 @@ import 'server-only';
 
 import type {
   AiEvent,
+  AiRuntimeProviderWebSearchResult,
+  AiRuntimeProviderWebSearchSettleInput,
+  AiRuntimeProviderWebSearchStartInput,
   AiRuntimeReconciliationResult,
   AiRuntimeRunStopResult,
   AiRuntimeSession,
@@ -136,6 +139,24 @@ export async function invokeAiRuntimeTool(input: {
     },
     { signal: input.signal },
   );
+}
+
+/** 登记一次由 AI Gateway 执行的网页检索开始事件。 */
+export async function startAiProviderWebSearch(
+  runId: string,
+  input: AiRuntimeProviderWebSearchStartInput,
+  signal?: AbortSignal,
+): Promise<AiRuntimeProviderWebSearchResult> {
+  return callRuntime<AiRuntimeProviderWebSearchResult>(`/${runId}/provider-tools/web-search/start`, input, { signal });
+}
+
+/** 持久化 AI Gateway 网页检索来源并结束对应工具调用。 */
+export async function settleAiProviderWebSearch(
+  runId: string,
+  input: AiRuntimeProviderWebSearchSettleInput,
+  signal?: AbortSignal,
+): Promise<AiRuntimeProviderWebSearchResult> {
+  return callRuntime<AiRuntimeProviderWebSearchResult>(`/${runId}/provider-tools/web-search/settle`, input, { signal });
 }
 
 /** 把 Run 收敛为完成或失败终态，并写入助手最终正文与用量。 */

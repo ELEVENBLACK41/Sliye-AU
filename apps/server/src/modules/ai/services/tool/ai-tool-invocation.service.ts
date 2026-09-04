@@ -8,7 +8,10 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import type { AiRuntimeToolInvocationResult } from '@workspace/contracts/ai';
+import type {
+  AiRuntimeProviderWebSearchResult,
+  AiRuntimeToolInvocationResult,
+} from '@workspace/contracts/ai';
 import type { ApiErrorCode } from '@workspace/contracts/common';
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import { BusinessException } from '../../../../common/exceptions/business.exception';
@@ -26,7 +29,11 @@ import type {
 } from '../../types/ai-tool-source.types';
 import { AiToolCallService } from './ai-tool-call.service';
 import { toAiToolOutputSummary } from '../../utils/ai-tool-output-summary';
+import { toAiWebSearchOutputSummary } from '../../utils/ai-web-search';
 import { AiToolRegistryService } from './ai-tool-registry.service';
+
+/** AI Gateway provider tool 使用的稳定网页检索名称。 */
+const WEB_SEARCH_TOOL_NAME = 'parallel_search';
 
 /** 模型发起一次工具调用时提供的最小请求数据。 */
 export type AiToolInvocationRequest = {
@@ -160,6 +167,63 @@ export class AiToolInvocationService {
         events: [started.event, ...(settledEvent ? [settledEvent] : [])],
       };
     }
+  }
+
+  /** 登记一次由 AI Gateway 执行的网页检索开始事件。 */
+  async startProviderWebSearch(
+    executionContext: AiToolExecutionContext,
+    request: { providerToolCallId: string; input: Record<string, unknown> },
+  ): Promise<AiRuntimeProviderWebSearchResult> {
+    const started = await this.toolCallService.startToolCall({
+      runId: executionContext.runId,
+      executionLeaseId: executionContext.executionLeaseId,
+      providerToolCallId: request.providerToolCallId,
+      toolName: WEB_SEARCH_TOOL_NAME,
+      input: request.input as Prisma.InputJsonValue,
+    });
+
+    return { events: started.state === 'CREATED' ? [started.event] : [] };
+  }
+
+  /** 持久化 Gateway 网页检索的公开来源摘要并结束工具调用。 */
+  async settleProviderWebSearch(
+    executionContext: AiToolExecutionContext,
+    request: {
+      providerToolCallId: string;
+      input: Record<string, unknown>;
+      output: Record<string, unknown>;
+      durationMs: number;
+    },
+  ): Promise<AiRuntimeProviderWebSearchResult> {
+    const started = await this.toolCallService.startToolCall({
+      runId: executionContext.runId,
+      executionLeaseId: executionContext.executionLeaseId,
+      providerToolCallId: request.providerToolCallId,
+      toolName: WEB_SEARCH_TOOL_NAME,
+      input: request.input as Prisma.InputJsonValue,
+    });
+    if (started.state !== 'CREATED' && started.state !== 'IN_PROGRESS') {
+      return { events: [] };
+    }
+
+    const settledEvent = await this.toolCallService.settleToolCall({
+      runId: executionContext.runId,
+      executionLeaseId: executionContext.executionLeaseId,
+      toolCallId: started.toolCallId,
+      status: 'SUCCEEDED',
+      outputSummary: toAiWebSearchOutputSummary(request.output),
+      failureCode: null,
+      failureReason: null,
+      sources: [],
+      durationMs: request.durationMs,
+    });
+
+    return {
+      events: [
+        ...(started.state === 'CREATED' ? [started.event] : []),
+        ...(settledEvent ? [settledEvent] : []),
+      ],
+    };
   }
 
   /** 解析已注册工具描述；未注册名称一律拒绝，不降级为自由查询。 */

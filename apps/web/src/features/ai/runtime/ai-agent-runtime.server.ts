@@ -32,6 +32,8 @@ import {
   isAiExecutionLeaseInvalid,
   recordAiRuntimeStep,
   renewAiRuntimeLease,
+  settleAiProviderWebSearch,
+  startAiProviderWebSearch,
 } from './ai-runtime-client.server.ts';
 import { runAiRunChain } from './ai-run-chain.ts';
 import type { AiRuntimeLiveSink } from './ai-runtime-live-sink.server.ts';
@@ -117,6 +119,7 @@ async function executeClaimedSession(session: AiRuntimeSession, liveSink?: AiRun
     });
     const { configuration } = resolvedModel;
     const stepStartedAt = { value: new Date() };
+    const webSearchStartedAt = new Map<string, number>();
     const result = streamText({
       model: resolvedModel.model,
       system: DECISION_HUB_AGENT_INSTRUCTIONS,
@@ -137,6 +140,39 @@ async function executeClaimedSession(session: AiRuntimeSession, liveSink?: AiRun
           onCommittedEvents: (events) => publishAiRuntimeLiveEvents(liveSink, events),
         },
       ),
+      onChunk: async ({ chunk }) => {
+        if (chunk.type === 'tool-call' && chunk.toolName === 'parallel_search' && chunk.providerExecuted === true) {
+          webSearchStartedAt.set(chunk.toolCallId, Date.now());
+          const recorded = await startAiProviderWebSearch(
+            execution.runId,
+            {
+              executionLeaseId: execution.executionLeaseId,
+              providerToolCallId: chunk.toolCallId,
+              input: toRecord(chunk.input),
+            },
+            abortController.signal,
+          );
+          publishAiRuntimeLiveEvents(liveSink, recorded.events);
+          return;
+        }
+
+        if (chunk.type === 'tool-result' && chunk.toolName === 'parallel_search' && chunk.providerExecuted === true) {
+          const startedAt = webSearchStartedAt.get(chunk.toolCallId) ?? Date.now();
+          webSearchStartedAt.delete(chunk.toolCallId);
+          const recorded = await settleAiProviderWebSearch(
+            execution.runId,
+            {
+              executionLeaseId: execution.executionLeaseId,
+              providerToolCallId: chunk.toolCallId,
+              input: toRecord(chunk.input),
+              output: toRecord(chunk.output),
+              durationMs: Date.now() - startedAt,
+            },
+            abortController.signal,
+          );
+          publishAiRuntimeLiveEvents(liveSink, recorded.events);
+        }
+      },
       onStepEnd: (step) => {
         const finishedAt = new Date();
         pendingSteps.push({
@@ -174,7 +210,7 @@ async function executeClaimedSession(session: AiRuntimeSession, liveSink?: AiRun
         delta,
       };
       publishAiRuntimeLiveDelta(liveSink, liveDelta);
-      await persistenceQueue.enqueue(liveDelta);//由于写入速度跟不上模型得生成速度 等待
+      await persistenceQueue.enqueue(liveDelta); //由于写入速度跟不上模型得生成速度 等待
     }
 
     await persistenceQueue.drain();
@@ -413,4 +449,9 @@ function toModelMessages(session: AiRuntimeSession): ModelMessage[] {
   );
 
   return [...history, { role: 'user', content: session.execution.userMessageContent }];
+}
+
+/** 把 AI SDK 工具输入输出收窄为内部接口接受的 JSON 对象。 */
+function toRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }

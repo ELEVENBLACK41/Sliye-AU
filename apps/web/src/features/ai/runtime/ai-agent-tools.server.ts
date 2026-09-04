@@ -1,10 +1,11 @@
 /**
- * 本文件把 NestJS 中心工具注册表的描述转换为 AI SDK 可用的动态工具。
- * Runtime 不自行定义任何工具能力：工具名称、说明、字段和超时全部来自服务端描述，
- * 执行同样回到 NestJS，由服务端做实时鉴权、串联规则校验和审计落库。
+ * 本文件组合 AI Gateway 网页检索与 NestJS 中心注册表提供的业务工具。
+ * 业务工具的名称、说明、字段和超时来自服务端描述，执行同样回到 NestJS，
+ * 由服务端做实时鉴权、串联规则校验和审计落库。
  */
 import 'server-only';
 
+import { gateway } from '@ai-sdk/gateway';
 import { dynamicTool, type ToolSet } from 'ai';
 import type { AiEvent, AiRuntimeToolDescriptor, AiRuntimeToolField } from '@workspace/contracts/ai';
 import { z } from 'zod';
@@ -35,7 +36,16 @@ export function buildAiAgentTools(
   context: AiAgentToolContext,
   liveOptions: AiAgentToolOptions = {},
 ): ToolSet {
-  const tools: ToolSet = {};
+  const tools: ToolSet = {
+    parallel_search: gateway.tools.parallelSearch({
+      mode: 'agentic',
+      maxResults: 5,
+      excerpts: {
+        maxCharsPerResult: 800,
+        maxCharsTotal: 4_000,
+      },
+    }),
+  };
 
   for (const descriptor of descriptors) {
     tools[descriptor.name] = dynamicTool({

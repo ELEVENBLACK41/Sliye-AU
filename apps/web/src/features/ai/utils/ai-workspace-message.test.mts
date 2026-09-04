@@ -120,6 +120,39 @@ test('来源失权消息只保留中性占位并清空工具摘要', () => {
   assert.deepEqual(messages[0]?.run?.toolCalls, []);
 });
 
+test('实时网页检索事件会恢复为可展示的来源列表', () => {
+  const started = reduceAiEvent(createAiEventReducerState('run-1', { status: 'RUNNING' }), {
+    runId: 'run-1',
+    sequence: 1,
+    type: 'TOOL_CALL_STARTED',
+    data: {
+      toolCallId: 'tool-web-1',
+      toolName: 'parallel_search',
+      input: { objective: '查询最新 AI SDK 文档' },
+    },
+  });
+  const settled = reduceAiEvent(started, {
+    runId: 'run-1',
+    sequence: 2,
+    type: 'TOOL_CALL_SETTLED',
+    data: {
+      toolCallId: 'tool-web-1',
+      toolName: 'parallel_search',
+      status: 'SUCCEEDED',
+      outputSummary: {
+        webSources: [{ title: 'AI SDK', url: 'https://ai-sdk.dev' }],
+      },
+      failureCode: null,
+      failureReason: null,
+      durationMs: 120,
+    },
+  });
+
+  const messages = toAiWorkspaceMessages([], settled);
+
+  assert.deepEqual(messages[0]?.run?.toolCalls[0]?.webSources, [{ title: 'AI SDK', url: 'https://ai-sdk.dev' }]);
+});
+
 test('排队用户输入从对话消息中移到输入框上方，并合并本地提交确认', () => {
   const queued = createMessage({
     id: 'message-queued',

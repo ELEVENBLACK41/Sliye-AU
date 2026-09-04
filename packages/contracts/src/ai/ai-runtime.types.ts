@@ -176,6 +176,36 @@ export type AiRuntimeToolInvocationResult =
       events: AiEvent[];
     };
 
+/** Runtime 开始记录一次 Gateway 网页检索时发送的内部请求。 */
+export type AiRuntimeProviderWebSearchStartInput = {
+  /** 当前执行器持有的租约标识。 */
+  executionLeaseId: string;
+  /** Gateway 生成的工具调用标识。 */
+  providerToolCallId: string;
+  /** 模型提交给网页检索工具的输入。 */
+  input: Record<string, unknown>;
+};
+
+/** Runtime 完成一次 Gateway 网页检索时发送的内部请求。 */
+export type AiRuntimeProviderWebSearchSettleInput = {
+  /** 当前执行器持有的租约标识。 */
+  executionLeaseId: string;
+  /** Gateway 生成的工具调用标识。 */
+  providerToolCallId: string;
+  /** 模型提交给网页检索工具的输入。 */
+  input: Record<string, unknown>;
+  /** Gateway 返回的网页检索结果。 */
+  output: Record<string, unknown>;
+  /** 从工具调用到结果返回的耗时，单位为毫秒。 */
+  durationMs: number;
+};
+
+/** Gateway 网页检索记录完成后返回给 Runtime 的已提交事件。 */
+export type AiRuntimeProviderWebSearchResult = {
+  /** 本次调用新提交的工具开始或结束事件；幂等重放时为空数组。 */
+  events: AiEvent[];
+};
+
 /** Run 进入终态后的内部响应。 */
 export type AiRuntimeRunStopResult = {
   /** 已收敛的 Run 标识。 */

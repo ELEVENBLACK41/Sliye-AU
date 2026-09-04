@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@workspace/
 const AI_TOOL_LABELS: Record<string, string> = {
   findDecisionCandidates: '查找决策候选',
   getDecisionContext: '读取决策上下文',
+  parallel_search: '网页检索',
 };
 
 /** AI SDK 工具消息在自定义 UI 中渲染所需的最小结构。 */

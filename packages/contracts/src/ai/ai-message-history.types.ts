@@ -5,8 +5,8 @@
  * 越权统一表现为“会话不存在”，不区分无权与不存在。
  *
  * 这里只返回渲染聊天记录所需的展示数据：消息正文、所属 Run 的状态，
- * 以及该 Run 的工具调用摘要（工具名与执行状态）。
- * **刻意不返回工具的输入与输出摘要**：工具输出承载真实业务事实
+ * 以及该 Run 的工具调用摘要（工具名、执行状态与公开网页来源）。
+ * **刻意不返回工具的输入与业务输出摘要**：业务工具输出承载真实业务事实
  * （例如决策上下文），一旦来源失权，历史接口就会成为泄漏面。
  * 这类内容属于来源失权投影的范围，在投影能力落地前不通过本接口暴露。
  */
@@ -20,6 +20,14 @@ import type {
 } from './ai-run.types.ts';
 import type { AiToolCallStatus } from './ai-tool.types.ts';
 
+/** 联网检索结果允许在消息历史中公开展示的最小来源信息。 */
+export type AiMessageWebSource = {
+  /** 可在新标签页打开的网页地址。 */
+  url: string;
+  /** 检索服务返回的网页标题。 */
+  title: string;
+};
+
 /** 消息列表单页默认返回条数。 */
 export const AI_MESSAGE_PAGE_DEFAULT_LIMIT = 30;
 
@@ -28,7 +36,7 @@ export const AI_MESSAGE_PAGE_MAX_LIMIT = 100;
 
 /**
  * 消息历史中的一次工具调用摘要。
- * 只包含工具卡渲染所需的名称与状态，不含模型输入和业务输出。
+ * 只包含工具卡渲染所需的状态和公开网页来源，不含模型输入和业务输出。
  */
 export type AiMessageToolCall = {
   /** 工具调用记录标识。 */
@@ -43,6 +51,8 @@ export type AiMessageToolCall = {
   failureCode: ApiErrorCode | null;
   /** 失败时可安全展示的说明；成功或运行中为 `null`。 */
   failureReason: string | null;
+  /** 联网检索返回的公开网页来源；其他工具固定为空数组。 */
+  webSources: AiMessageWebSource[];
 };
 
 /**
@@ -85,8 +95,8 @@ export type AiMessageContentVisibility =
 /**
  * 消息历史中的一条消息。
  *
- * 引用数据暂不提供：真实引用映射表尚未建立，本接口不返回占位或伪造的引用，
- * 客户端应按真实空状态渲染，不要据此推断“该回答没有依据”。
+ * 业务引用数据暂不提供：真实引用映射表尚未建立，本接口不返回占位或伪造的业务引用。
+ * 联网检索使用 `run.toolCalls.webSources` 返回实际网页来源。
  *
  * **来源失权时的呈现约定**：`contentVisibility` 为 `SOURCE_REVOKED` 时，
  * 服务端已经把 `content` 清空、`run.toolCalls` 清空，不返回任何可推断信息。
