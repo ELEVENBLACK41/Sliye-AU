@@ -4,7 +4,7 @@
  */
 'use client';
 
-import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { API_ERROR_CODES } from '@workspace/contracts/common';
 import type { AiThreadListItem } from '@workspace/contracts/ai';
@@ -18,19 +18,8 @@ import {
   setAiThreadArchived,
   setAiThreadPinned,
 } from '../services/ai-thread-client.service';
-import type {
-  AiWorkspaceLoadState,
-  AiWorkspaceThreadPreview,
-  AiWorkspaceThreadState,
-} from '../types/ai-workspace';
-
-/** 元数据 Hook 所需的工作区状态写入能力。 */
-type AiThreadMetadataOptions = {
-  /** 当前 URL 指向的 Thread 标识，用于计算归档列表选中态。 */
-  threadId: string | undefined;
-  /** 当前 Thread 状态的 React 写入器。 */
-  setThreadState: Dispatch<SetStateAction<AiWorkspaceThreadState>>;
-};
+import { useAiThreadWorkspaceStore } from '../store/ai-thread-workspace.store';
+import type { AiWorkspaceLoadState, AiWorkspaceThreadPreview } from '../types/ai-workspace';
 
 /** 将服务端列表项转换为侧栏使用的 URL 选中态模型。 */
 function toThreadPreview(item: AiThreadListItem, threadId: string | undefined): AiWorkspaceThreadPreview {
@@ -74,16 +63,9 @@ function toMetadataErrorMessage(error: unknown, fallback: string): string {
 }
 
 /** 管理固定列表、归档列表和会话元数据写操作。 */
-export function useAiThreadMetadata({
-  threadId,
-  setThreadState,
-}: AiThreadMetadataOptions) {
-  const {
-    pinnedThreads,
-    recentThreads,
-    applyThreadListItem,
-    restoreThreadListSnapshot,
-  } = useAiThreadLists();
+export function useAiThreadMetadata(threadId: string | undefined) {
+  const { pinnedThreads, recentThreads, applyThreadListItem, restoreThreadListSnapshot } = useAiThreadLists();
+  const updateThreadState = useAiThreadWorkspaceStore((state) => state.updateThreadState);
   const [archivedThreads, setArchivedThreads] = useState<AiThreadListItem[]>([]);
   const [archivedListState, setArchivedListState] = useState<AiWorkspaceLoadState>('IDLE');
   const [archivedListError, setArchivedListError] = useState<string | null>(null);
@@ -96,9 +78,7 @@ export function useAiThreadMetadata({
   const applyArchivedThreadItem = useCallback((thread: AiThreadListItem) => {
     setArchivedThreads((current) => {
       const withoutThread = current.filter((item) => item.id !== thread.id);
-      return thread.archivedAt === null
-        ? withoutThread
-        : sortArchivedThreads([...withoutThread, thread]);
+      return thread.archivedAt === null ? withoutThread : sortArchivedThreads([...withoutThread, thread]);
     });
   }, []);
 
@@ -129,7 +109,7 @@ export function useAiThreadMetadata({
   /** 将服务端确认的 Thread 元数据更新到当前详情，不修改消息或 Run reducer。 */
   const applyThreadMetadata = useCallback(
     (thread: AiThreadListItem) => {
-      setThreadState((current) => {
+      updateThreadState((current) => {
         if (current.thread?.id !== thread.id) return current;
 
         return {
@@ -139,7 +119,7 @@ export function useAiThreadMetadata({
         };
       });
     },
-    [setThreadState],
+    [updateThreadState],
   );
 
   /** 执行一次元数据变更，统一处理乐观更新、失败回滚和服务端确认。 */
@@ -193,18 +173,11 @@ export function useAiThreadMetadata({
   /** 置顶或取消置顶会话；先局部移动侧栏分组，失败时恢复原位置。 */
   const setThreadPinned = useCallback(
     (mutationThreadId: string, pinned: boolean) => {
-      const currentThread = findThreadListItem(
-        mutationThreadId,
-        pinnedThreads,
-        recentThreads,
-        archivedThreads,
-      );
+      const currentThread = findThreadListItem(mutationThreadId, pinnedThreads, recentThreads, archivedThreads);
 
       return runMetadataMutation(
         mutationThreadId,
-        currentThread
-          ? { ...currentThread, pinnedAt: pinned ? new Date().toISOString() : null }
-          : null,
+        currentThread ? { ...currentThread, pinnedAt: pinned ? new Date().toISOString() : null } : null,
         () => setAiThreadPinned(mutationThreadId, pinned),
         '会话固定状态更新失败，请稍后重试',
       );
@@ -215,12 +188,7 @@ export function useAiThreadMetadata({
   /** 重命名会话；先更新侧栏标题，失败时恢复原标题。 */
   const renameThread = useCallback(
     (mutationThreadId: string, title: string) => {
-      const currentThread = findThreadListItem(
-        mutationThreadId,
-        pinnedThreads,
-        recentThreads,
-        archivedThreads,
-      );
+      const currentThread = findThreadListItem(mutationThreadId, pinnedThreads, recentThreads, archivedThreads);
 
       return runMetadataMutation(
         mutationThreadId,
@@ -235,12 +203,7 @@ export function useAiThreadMetadata({
   /** 归档或恢复会话；先调整侧栏所属分组，失败时恢复原分组。 */
   const setThreadArchived = useCallback(
     (mutationThreadId: string, archived: boolean) => {
-      const currentThread = findThreadListItem(
-        mutationThreadId,
-        pinnedThreads,
-        recentThreads,
-        archivedThreads,
-      );
+      const currentThread = findThreadListItem(mutationThreadId, pinnedThreads, recentThreads, archivedThreads);
 
       return runMetadataMutation(
         mutationThreadId,

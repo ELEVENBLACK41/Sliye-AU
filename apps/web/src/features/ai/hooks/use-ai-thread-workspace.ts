@@ -1,35 +1,19 @@
 /**
- * 本文件维护 AI Thread 工作区的路由、持久化消息、命令和实时运行状态。
- *
- * 2.6-B 在同一入口补充已持久化 Run 的领域事件归约和 SSE 生命周期；
- * 2.6-C/D 的命令与元数据操作分别由同目录专用 Hook 维护。
- * 2.7-E 在已有 Thread 上补充 POST SSE 主流，并在 handoff 后复用 GET SSE 恢复。
- * 按计划这里仍是单一 Thread 状态入口：路由版本、历史消息和 SSE reducer
- * 共享同一个门禁，专用 Hook 通过该入口读写当前 Thread。
+ * 本文件协调 AI Thread 的路由加载、持久化消息、命令与实时运行状态。
+ * 客户端投影状态统一保存在 Zustand Store；URL、服务端历史与领域事件仍是权威来源。
  */
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import {
-  AI_RUN_STATUSES,
-  type AiThreadListItem,
-} from '@workspace/contracts/ai';
+import { AI_RUN_STATUSES, type AiThreadListItem } from '@workspace/contracts/ai';
 
-import { subscribeToAiRunStream, type AiRunStreamStatus } from '../services/ai-thread-stream.service';
-import {
-  getAiMessagePage,
-  getAiThreadDetail,
-} from '../services/ai-thread-client.service';
 import { useAiThreadLists } from '../components/ai-thread-list-provider';
-import type {
-  AiWorkspaceLoadState,
-  AiWorkspaceQueuedMessage,
-  AiWorkspaceStreamState,
-  AiWorkspaceThreadPreview,
-  AiWorkspaceThreadState,
-} from '../types/ai-workspace';
+import { getAiMessagePage, getAiThreadDetail } from '../services/ai-thread-client.service';
+import { subscribeToAiRunStream, type AiRunStreamStatus } from '../services/ai-thread-stream.service';
+import { useAiThreadWorkspaceStore } from '../store/ai-thread-workspace.store';
+import type { AiWorkspaceThreadPreview } from '../types/ai-workspace';
 import {
   applyAiRunSnapshot,
   createAiEventReducerState,
@@ -40,15 +24,6 @@ import {
 import { mergeAiWorkspaceMessages, toAiWorkspaceQueuedMessages } from '../utils/ai-workspace-message';
 import { useAiThreadCommands } from './use-ai-thread-commands';
 import { useAiThreadMetadata } from './use-ai-thread-metadata';
-
-/** 空工作区的初始 Thread 数据，避免新会话误显示为加载失败。 */
-const EMPTY_THREAD_STATE: AiWorkspaceThreadState = {
-  thread: null,
-  activeRun: null,
-  messages: [],
-  messageCursor: null,
-  hasMoreMessages: false,
-};
 
 /** 将服务端列表项映射为由 URL 驱动选中态的侧栏数据。 */
 function toThreadPreview(item: AiThreadListItem, threadId: string | undefined): AiWorkspaceThreadPreview {
@@ -63,60 +38,55 @@ function useRouteThreadId(): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/**
- * 加载并管理当前 AI 工作区的 Thread、消息、Run 和会话命令资源。
- *
- * 每次 Thread 路由变化都会中止旧详情/消息请求并清空旧状态，避免慢请求覆盖新会话。
- */
+/** 加载并管理当前 AI 工作区的 Thread、消息、Run 和会话命令资源。 */
 export function useAiThreadWorkspace() {
   const router = useRouter();
   const threadId = useRouteThreadId();
   const { pinnedThreads, recentThreads, listState, listError, refreshThreadLists } = useAiThreadLists();
-  const requestVersionRef = useRef(0);
-  const [threadState, setThreadState] = useState<AiWorkspaceThreadState>(EMPTY_THREAD_STATE);
-  const [threadLoadState, setThreadLoadState] = useState<AiWorkspaceLoadState>('IDLE');
-  const [threadError, setThreadError] = useState<string | null>(null);
-  const [messageLoadState, setMessageLoadState] = useState<AiWorkspaceLoadState>('IDLE');
-  const [messageError, setMessageError] = useState<string | null>(null);
-  const [runEventState, setRunEventState] = useState<AiEventReducerState | null>(null);
-  const runEventStateRef = useRef<AiEventReducerState | null>(null);
-  const [streamState, setStreamState] = useState<AiWorkspaceStreamState>('IDLE');
-  const [streamError, setStreamError] = useState<string | null>(null);
-  const [postStreamRunId, setPostStreamRunId] = useState<string | null>(null);
-  const [localQueuedMessages, setLocalQueuedMessages] = useState<AiWorkspaceQueuedMessage[]>([]);
-  const [steeringRunId, setSteeringRunId] = useState<string | null>(null);
-
-  /** 更新 Run 事件状态并同步游标引用，供断线重连读取最新序号。 */
-  const updateRunEventState = useCallback(
-    (updater: (current: AiEventReducerState | null) => AiEventReducerState | null) => {
-      setRunEventState((current) => {
-        const next = updater(current);
-        runEventStateRef.current = next;
-        return next;
-      });
-    },
-    [],
-  );
+  const threadState = useAiThreadWorkspaceStore((state) => state.threadState);
+  const threadLoadState = useAiThreadWorkspaceStore((state) => state.threadLoadState);
+  const threadError = useAiThreadWorkspaceStore((state) => state.threadError);
+  const messageLoadState = useAiThreadWorkspaceStore((state) => state.messageLoadState);
+  const messageError = useAiThreadWorkspaceStore((state) => state.messageError);
+  const runEventState = useAiThreadWorkspaceStore((state) => state.runEventState);
+  const streamState = useAiThreadWorkspaceStore((state) => state.streamState);
+  const streamError = useAiThreadWorkspaceStore((state) => state.streamError);
+  const postStreamRunId = useAiThreadWorkspaceStore((state) => state.postStreamRunId);
+  const localQueuedMessages = useAiThreadWorkspaceStore((state) => state.localQueuedMessages);
+  const steeringRunId = useAiThreadWorkspaceStore((state) => state.steeringRunId);
+  const updateThreadState = useAiThreadWorkspaceStore((state) => state.updateThreadState);
+  const setThreadLoadState = useAiThreadWorkspaceStore((state) => state.setThreadLoadState);
+  const setThreadError = useAiThreadWorkspaceStore((state) => state.setThreadError);
+  const setMessageLoadState = useAiThreadWorkspaceStore((state) => state.setMessageLoadState);
+  const setMessageError = useAiThreadWorkspaceStore((state) => state.setMessageError);
+  const updateRunEventState = useAiThreadWorkspaceStore((state) => state.updateRunEventState);
+  const setStreamState = useAiThreadWorkspaceStore((state) => state.setStreamState);
+  const setStreamError = useAiThreadWorkspaceStore((state) => state.setStreamError);
+  const setSteeringRunId = useAiThreadWorkspaceStore((state) => state.setSteeringRunId);
+  const updateLocalQueuedMessages = useAiThreadWorkspaceStore((state) => state.updateLocalQueuedMessages);
+  const markThreadRunStatus = useAiThreadWorkspaceStore((state) => state.markThreadRunStatus);
+  const markThreadActivitySeen = useAiThreadWorkspaceStore((state) => state.markThreadActivitySeen);
+  const resetForRouteChange = useAiThreadWorkspaceStore((state) => state.resetForRouteChange);
+  const isCurrentRequestVersion = useAiThreadWorkspaceStore((state) => state.isCurrentRequestVersion);
 
   /** 重新读取当前 Thread 的详情和最新消息，让刷新结果成为命令后的权威状态。 */
   const refreshCurrentThread = useCallback(async () => {
     if (!threadId) return;
 
-    const requestVersion = requestVersionRef.current;
+    const requestVersion = useAiThreadWorkspaceStore.getState().requestVersion;
 
     try {
-      const [detail, page] = await Promise.all([
-        getAiThreadDetail(threadId),
-        getAiMessagePage(threadId),
-      ]);
-      if (requestVersion !== requestVersionRef.current) return;
+      const [detail, page] = await Promise.all([getAiThreadDetail(threadId), getAiMessagePage(threadId)]);
+      if (!isCurrentRequestVersion(requestVersion)) return;
 
       const nextRunEventState = detail.activeRun
         ? createAiEventReducerState(detail.activeRun.runId, { status: detail.activeRun.status })
         : null;
-      runEventStateRef.current = nextRunEventState;
-      setRunEventState(nextRunEventState);
-      setThreadState({
+      if (detail.activeRun) {
+        markThreadRunStatus(threadId, detail.activeRun.runId, detail.activeRun.status);
+      }
+      updateRunEventState(nextRunEventState);
+      updateThreadState({
         thread: detail,
         activeRun: detail.activeRun,
         messages: page.items,
@@ -126,25 +96,35 @@ export function useAiThreadWorkspace() {
       setThreadLoadState('SUCCESS');
       setMessageLoadState('SUCCESS');
       setMessageError(null);
-      setLocalQueuedMessages([]);
+      updateLocalQueuedMessages([]);
       setSteeringRunId(null);
     } catch (error: unknown) {
-      if (requestVersion !== requestVersionRef.current) return;
+      if (!isCurrentRequestVersion(requestVersion)) return;
       setThreadError(toErrorMessage(error, 'AI 会话刷新失败，请稍后重试'));
     }
-  }, [threadId]);
-
-  const metadata = useAiThreadMetadata({
+  }, [
+    isCurrentRequestVersion,
+    setMessageError,
+    setMessageLoadState,
+    setSteeringRunId,
+    setThreadError,
+    setThreadLoadState,
     threadId,
-    setThreadState,
-  });
+    updateLocalQueuedMessages,
+    updateRunEventState,
+    updateThreadState,
+    markThreadRunStatus,
+  ]);
+
+  const metadata = useAiThreadMetadata(threadId);
 
   /** 跳转到 URL 唯一标识的目标会话，不在本地保存当前会话副本。 */
   const selectThread = useCallback(
     (nextThreadId: string) => {
+      markThreadActivitySeen(nextThreadId);
       router.push(`/ai/${encodeURIComponent(nextThreadId)}`);
     },
-    [router],
+    [markThreadActivitySeen, router],
   );
 
   /** 返回无 Thread 标识的新会话工作区；首条消息由命令入口创建 Thread。 */
@@ -155,15 +135,15 @@ export function useAiThreadWorkspace() {
   /** 使用当前游标补充更早消息，并保持服务端已定义的时间正序。 */
   const loadMoreMessages = useCallback(async () => {
     if (!threadId || !threadState.hasMoreMessages || !threadState.messageCursor) return;
-    const requestVersion = requestVersionRef.current;
+    const requestVersion = useAiThreadWorkspaceStore.getState().requestVersion;
 
     setMessageLoadState('LOADING');
     setMessageError(null);
 
     try {
       const page = await getAiMessagePage(threadId, { cursor: threadState.messageCursor });
-      if (requestVersion !== requestVersionRef.current) return;
-      setThreadState((current) => ({
+      if (!isCurrentRequestVersion(requestVersion)) return;
+      updateThreadState((current) => ({
         ...current,
         messages: mergeAiWorkspaceMessages(page.items, current.messages),
         messageCursor: page.nextCursor,
@@ -171,116 +151,98 @@ export function useAiThreadWorkspace() {
       }));
       setMessageLoadState('SUCCESS');
     } catch (error) {
-      if (requestVersion !== requestVersionRef.current) return;
+      if (!isCurrentRequestVersion(requestVersion)) return;
       setMessageLoadState('ERROR');
       setMessageError(toErrorMessage(error, '更早消息加载失败，请稍后重试'));
     }
-  }, [threadId, threadState.hasMoreMessages, threadState.messageCursor]);
+  }, [
+    isCurrentRequestVersion,
+    setMessageError,
+    setMessageLoadState,
+    threadId,
+    threadState.hasMoreMessages,
+    threadState.messageCursor,
+    updateThreadState,
+  ]);
 
   /** 路由切换时并发加载详情与首屏消息，并拒绝旧请求写回当前工作区。 */
   useEffect(() => {
-    const requestVersion = requestVersionRef.current + 1;
-    requestVersionRef.current = requestVersion;
+    const requestVersion = resetForRouteChange();
     const controller = new AbortController();
 
-    queueMicrotask(() => {
-      if (requestVersion !== requestVersionRef.current) return;
-      setThreadState(EMPTY_THREAD_STATE);
-      setThreadError(null);
-      setMessageError(null);
-      runEventStateRef.current = null;
-      setRunEventState(null);
-      setStreamState('IDLE');
-      setStreamError(null);
-      setPostStreamRunId(null);
-      setLocalQueuedMessages([]);
-      setSteeringRunId(null);
-    });
-
     if (!threadId) {
-      queueMicrotask(() => {
-        if (requestVersion !== requestVersionRef.current) return;
-        setThreadLoadState('IDLE');
-        setMessageLoadState('IDLE');
-      });
+      setThreadLoadState('IDLE');
+      setMessageLoadState('IDLE');
       return () => controller.abort();
     }
 
-    queueMicrotask(() => {
-      if (requestVersion !== requestVersionRef.current) return;
-      setThreadLoadState('LOADING');
-      setMessageLoadState('LOADING');
-    });
+    setThreadLoadState('LOADING');
+    setMessageLoadState('LOADING');
 
-    queueMicrotask(() => {
-      if (controller.signal.aborted || requestVersion !== requestVersionRef.current) return;
-
-      void getAiThreadDetail(threadId, controller.signal)
-        .then((detail) => {
-          if (requestVersion !== requestVersionRef.current) return;
-          const currentRunEventState = runEventStateRef.current;
-          const preservesPostStream =
-            currentRunEventState !== null &&
-            (!detail.activeRun || detail.activeRun.runId === currentRunEventState.runId);
-          const nextRunEventState = preservesPostStream
-            ? currentRunEventState
-            : detail.activeRun
-              ? createAiEventReducerState(detail.activeRun.runId, { status: detail.activeRun.status })
-              : null;
-          runEventStateRef.current = nextRunEventState;
-          setRunEventState(nextRunEventState);
-          setThreadState((current) => {
-            const activeRun = preservesPostStream ? current.activeRun : detail.activeRun;
-            const thread = preservesPostStream && currentRunEventState
+    void getAiThreadDetail(threadId, controller.signal)
+      .then((detail) => {
+        if (!isCurrentRequestVersion(requestVersion)) return;
+        const currentRunEventState = useAiThreadWorkspaceStore.getState().runEventState;
+        const preservesPostStream =
+          currentRunEventState !== null && (!detail.activeRun || detail.activeRun.runId === currentRunEventState.runId);
+        const nextRunEventState = preservesPostStream
+          ? currentRunEventState
+          : detail.activeRun
+            ? createAiEventReducerState(detail.activeRun.runId, { status: detail.activeRun.status })
+            : null;
+        if (detail.activeRun) {
+          markThreadRunStatus(threadId, detail.activeRun.runId, detail.activeRun.status);
+        }
+        updateRunEventState(nextRunEventState);
+        updateThreadState((current) => {
+          const activeRun = preservesPostStream ? current.activeRun : detail.activeRun;
+          const thread =
+            preservesPostStream && currentRunEventState
               ? { ...detail, activeRunId: currentRunEventState.runId }
               : detail;
-            return { ...current, thread, activeRun };
-          });
-          setThreadLoadState('SUCCESS');
-        })
-        .catch((error: unknown) => {
-          if (controller.signal.aborted || requestVersion !== requestVersionRef.current) return;
-          setThreadLoadState('ERROR');
-          setThreadError(toErrorMessage(error, 'AI 会话加载失败，请稍后重试'));
+          return { ...current, thread, activeRun };
         });
+        setThreadLoadState('SUCCESS');
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || !isCurrentRequestVersion(requestVersion)) return;
+        setThreadLoadState('ERROR');
+        setThreadError(toErrorMessage(error, 'AI 会话加载失败，请稍后重试'));
+      });
 
-      void getAiMessagePage(threadId, {}, controller.signal)
-        .then((page) => {
-          if (requestVersion !== requestVersionRef.current) return;
-          setThreadState((current) => ({
-            ...current,
-            messages: page.items,
-            messageCursor: page.nextCursor,
-            hasMoreMessages: page.hasMore,
-          }));
-          setMessageLoadState('SUCCESS');
-        })
-        .catch((error: unknown) => {
-          if (controller.signal.aborted || requestVersion !== requestVersionRef.current) return;
-          setMessageLoadState('ERROR');
-          setMessageError(toErrorMessage(error, 'AI 消息历史加载失败，请稍后重试'));
-        });
-    });
+    void getAiMessagePage(threadId, {}, controller.signal)
+      .then((page) => {
+        if (!isCurrentRequestVersion(requestVersion)) return;
+        updateThreadState((current) => ({
+          ...current,
+          messages: page.items,
+          messageCursor: page.nextCursor,
+          hasMoreMessages: page.hasMore,
+        }));
+        setMessageLoadState('SUCCESS');
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || !isCurrentRequestVersion(requestVersion)) return;
+        setMessageLoadState('ERROR');
+        setMessageError(toErrorMessage(error, 'AI 消息历史加载失败，请稍后重试'));
+      });
 
     return () => controller.abort();
-  }, [threadId]);
+  }, [
+    isCurrentRequestVersion,
+    markThreadRunStatus,
+    resetForRouteChange,
+    setMessageError,
+    setMessageLoadState,
+    setThreadError,
+    setThreadLoadState,
+    threadId,
+    updateRunEventState,
+    updateThreadState,
+  ]);
 
   /** 将发送、停止和重试命令接入当前 Thread 的统一状态入口。 */
-  const commands = useAiThreadCommands({
-    threadId,
-    threadState,
-    setThreadState,
-    runEventStateRef,
-    requestVersionRef,
-    updateRunEventState,
-    refreshCurrentThread,
-    refreshThreadLists,
-    setLocalQueuedMessages,
-    setPostStreamRunId,
-    setStreamError,
-    setStreamState,
-    setSteeringRunId,
-  });
+  const commands = useAiThreadCommands({ threadId, refreshCurrentThread, refreshThreadLists });
 
   /** 为当前详情中的活跃 Run 建立可恢复的标准领域 SSE 订阅。 */
   useEffect(() => {
@@ -302,14 +264,13 @@ export function useAiThreadWorkspace() {
 
     /** 获取当前 Run 的 reducer 状态；详情响应与流启动存在异步时序时补建初始状态。 */
     function ensureRunEventState(): AiEventReducerState {
-      const current = runEventStateRef.current;
+      const current = useAiThreadWorkspaceStore.getState().runEventState;
       if (current?.runId === runId) {
         return current;
       }
 
       const next = createAiEventReducerState(runId, { status: activeRunSnapshot.status });
-      runEventStateRef.current = next;
-      setRunEventState(next);
+      updateRunEventState(next);
       return next;
     }
 
@@ -363,6 +324,7 @@ export function useAiThreadWorkspace() {
         },
         onStatus: (snapshot) => {
           if (disposed || !isAiRunStreamStatus(snapshot)) return;
+          markThreadRunStatus(currentThreadId, snapshot.runId, snapshot.status);
           updateRunEventState((state) => {
             const current = state ?? createAiEventReducerState(runId, { status: activeRunSnapshot.status });
             return applyAiRunSnapshot(current, snapshot);
@@ -401,7 +363,17 @@ export function useAiThreadWorkspace() {
       subscription?.close();
       subscription = null;
     };
-  }, [postStreamRunId, refreshCurrentThread, threadId, threadState.activeRun, threadState.thread?.id, updateRunEventState]);
+  }, [
+    postStreamRunId,
+    refreshCurrentThread,
+    markThreadRunStatus,
+    setStreamError,
+    setStreamState,
+    threadId,
+    threadState.activeRun,
+    threadState.thread?.id,
+    updateRunEventState,
+  ]);
 
   return {
     threadId,
