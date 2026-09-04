@@ -15,8 +15,8 @@ export type AiToolCallStatus = (typeof AI_TOOL_CALL_STATUSES)[number];
 /** 已结束的工具调用状态，用于流事件和展示层收窄。 */
 export type AiToolCallSettledStatus = Exclude<AiToolCallStatus, 'RUNNING'>;
 
-/** 第二阶段最小工具链允许登记的业务来源类型。 */
-export const AI_SOURCE_TYPES = ['DECISION', 'DECISION_RESOLUTION'] as const;
+/** 当前已纳入只读决策过程工具允许登记的业务来源类型。 */
+export const AI_SOURCE_TYPES = ['DECISION', 'DECISION_PROPOSAL', 'DECISION_VOTE_ROUND', 'DECISION_RESOLUTION'] as const;
 
 /** 一条来源依赖的稳定业务来源类型。 */
 export type AiSourceType = (typeof AI_SOURCE_TYPES)[number];
