@@ -14,3 +14,4 @@ export * from './ai-event.types.ts';
 export * from './ai-post-stream.types.ts';
 export * from './ai-runtime.types.ts';
 export * from './ai-command.types.ts';
+export * from './ai-decision-participation.types.ts';
