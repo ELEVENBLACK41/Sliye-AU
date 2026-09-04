@@ -47,7 +47,7 @@ export const FIND_DECISION_CANDIDATES_DESCRIPTOR: AiToolDescriptor = {
         valueType: 'OBJECT',
         required: true,
         description:
-          '受控数量（当前上限 5 条）的候选决策摘要数组，每项包含决策主键、标题、所属项目标题、状态和最近更新时间。',
+          '受控数量（当前上限 5 条）的候选决策摘要数组，每项包含决策主键、标题、所属项目标题、项目或私有小组范围、状态和最近更新时间。',
       },
     ],
   },

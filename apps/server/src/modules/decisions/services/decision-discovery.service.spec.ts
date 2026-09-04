@@ -121,9 +121,11 @@ describe('DecisionDiscoveryService', () => {
       {
         id: 17,
         title: '缓存方案评审',
+        areaId: null,
         status: 'DISCUSSING',
         updatedAt,
         project: { title: '基础设施项目' },
+        area: null,
       },
     ]);
 
@@ -134,6 +136,38 @@ describe('DecisionDiscoveryService', () => {
         decisionId: 17,
         title: '缓存方案评审',
         projectTitle: '基础设施项目',
+        scope: 'PROJECT',
+        areaName: null,
+        status: 'DISCUSSING',
+        updatedAt,
+      },
+    ]);
+  });
+
+  it('私有小组决策候选应返回 AREA 范围和分区名称', async () => {
+    const { service, findMany } = createService();
+    const updatedAt = new Date('2026-08-25T08:00:00.000Z');
+    findMany.mockResolvedValue([
+      {
+        id: 18,
+        title: '缓存方案评审',
+        areaId: 5,
+        status: 'DISCUSSING',
+        updatedAt,
+        project: { title: '基础设施项目' },
+        area: { name: '架构小组' },
+      },
+    ]);
+
+    await expect(
+      service.findCandidates(AUTHORIZATION_CONTEXT, '缓存方案', 5),
+    ).resolves.toEqual([
+      {
+        decisionId: 18,
+        title: '缓存方案评审',
+        projectTitle: '基础设施项目',
+        scope: 'AREA',
+        areaName: '架构小组',
         status: 'DISCUSSING',
         updatedAt,
       },

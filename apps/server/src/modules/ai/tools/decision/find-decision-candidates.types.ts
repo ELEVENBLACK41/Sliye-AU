@@ -5,6 +5,8 @@
  * 本增量不接 BFF、HTTP 或前端展示，因此暂不放入 packages/contracts。
  */
 
+import type { DecisionContextScope } from '../../../decisions/types/decision-context.types';
+
 /** `findDecisionCandidates` 工具的窄输入：用户消息中已提取出的查询词。 */
 export type FindDecisionCandidatesInput = {
   /** 待发现的决策名称、别名或可见标识符；当前 Decision 数据模型只有 title 字段，
@@ -20,6 +22,10 @@ export type AiDecisionCandidate = {
   title: string;
   /** 决策所属项目标题，帮助用户在多个同名决策间消歧。 */
   projectTitle: string;
+  /** 决策归属范围；项目级决策为 PROJECT，私有小组决策为 AREA。 */
+  scope: DecisionContextScope;
+  /** 决策所属私有讨论分区名称；项目级决策为 null。 */
+  areaName: string | null;
   /** 决策当前状态。 */
   status: string;
   /** 决策最近更新时间的 ISO 字符串，用于候选排序展示。 */

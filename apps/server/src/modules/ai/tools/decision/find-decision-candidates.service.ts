@@ -64,6 +64,8 @@ export class FindDecisionCandidatesToolService implements AiToolExecutor<
       decisionId: candidate.decisionId,
       title: candidate.title,
       projectTitle: candidate.projectTitle,
+      scope: candidate.scope,
+      areaName: candidate.areaName,
       status: candidate.status,
       updatedAt: candidate.updatedAt.toISOString(),
     }));

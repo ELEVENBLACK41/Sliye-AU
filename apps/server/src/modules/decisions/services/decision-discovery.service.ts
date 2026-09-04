@@ -55,9 +55,11 @@ export class DecisionDiscoveryService {
       select: {
         id: true,
         title: true,
+        areaId: true,
         status: true,
         updatedAt: true,
         project: { select: { title: true } },
+        area: { select: { name: true } },
       },
       orderBy: [{ updatedAt: 'desc' }],
       take: boundedLimit,
@@ -67,6 +69,8 @@ export class DecisionDiscoveryService {
       decisionId: decision.id,
       title: decision.title,
       projectTitle: decision.project.title,
+      scope: decision.areaId === null ? 'PROJECT' : 'AREA',
+      areaName: decision.area?.name ?? null,
       status: decision.status,
       updatedAt: decision.updatedAt,
     }));
