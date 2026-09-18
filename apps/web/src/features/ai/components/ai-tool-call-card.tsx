@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@workspace/
 const AI_TOOL_LABELS: Record<string, string> = {
   findDecisionCandidates: '查找决策候选',
   getDecisionContext: '读取决策上下文',
+  getMyDecisionParticipationStats: '统计参与决策',
   parallel_search: '网页检索',
 };
 
@@ -87,7 +88,7 @@ function AiToolCallRow({ part }: { part: AiToolMessagePart }) {
   const toolName = part.type.slice('tool-'.length);
   const isCompleted = part.state === 'output-available';
   const isFailed = part.state === 'output-error';
-  const toolLabel = AI_TOOL_LABELS[toolName] ?? toolName;
+  const toolLabel = AI_TOOL_LABELS[toolName] ?? '只读信息查询';
 
   return (
     <div className="flex h-8 items-center gap-2 px-1 font-mono text-xs">

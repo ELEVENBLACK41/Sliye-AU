@@ -86,7 +86,20 @@ export class AiSourceVisibilityService {
       dependencies,
       AiSourceType.DECISION_RESOLUTION,
     );
-    const [visibleDecisionIds, visibleResolutionIds] = await Promise.all([
+    const proposalIds = this.collectNumericIds(
+      dependencies,
+      AiSourceType.DECISION_PROPOSAL,
+    );
+    const voteRoundIds = this.collectNumericIds(
+      dependencies,
+      AiSourceType.DECISION_VOTE_ROUND,
+    );
+    const [
+      visibleDecisionIds,
+      visibleResolutionIds,
+      visibleProposalIds,
+      visibleVoteRoundIds,
+    ] = await Promise.all([
       this.decisionVisibilityService.filterVisibleDecisionIds(
         authorization,
         decisionIds,
@@ -94,6 +107,14 @@ export class AiSourceVisibilityService {
       this.decisionVisibilityService.filterVisibleResolutionIds(
         authorization,
         resolutionIds,
+      ),
+      this.decisionVisibilityService.filterVisibleProposalIds(
+        authorization,
+        proposalIds,
+      ),
+      this.decisionVisibilityService.filterVisibleVoteRoundIds(
+        authorization,
+        voteRoundIds,
       ),
     ]);
 
@@ -103,6 +124,12 @@ export class AiSourceVisibilityService {
     }
     for (const resolutionId of visibleResolutionIds) {
       visibleKeys.add(`${AiSourceType.DECISION_RESOLUTION}:${resolutionId}`);
+    }
+    for (const proposalId of visibleProposalIds) {
+      visibleKeys.add(`${AiSourceType.DECISION_PROPOSAL}:${proposalId}`);
+    }
+    for (const voteRoundId of visibleVoteRoundIds) {
+      visibleKeys.add(`${AiSourceType.DECISION_VOTE_ROUND}:${voteRoundId}`);
     }
 
     return visibleKeys;

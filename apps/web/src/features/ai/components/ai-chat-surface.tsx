@@ -31,14 +31,15 @@ import {
 import type { AiWorkspaceMessage } from '../types/ai-message';
 import type { AiWorkspaceCommandState, AiWorkspaceQueuedMessage, AiWorkspaceStreamState } from '../types/ai-workspace';
 import { isAiRunActive } from '../utils/ai-event-reducer';
+import { toAiProcessSummary } from '../utils/ai-process-summary';
 
 /** 流式回答按字符淡入，保持模型小片段到达时的连续视觉反馈。 */
 const STREAMING_MESSAGE_ANIMATION = {
   // animation: 'fadeIn',
   // sep: 'char',
-  duration: 200,         // milliseconds (default: 150)
-  easing: "ease-out",    // CSS timing function (default: "ease")
-  sep: "word",
+  duration: 200, // milliseconds (default: 150)
+  easing: 'ease-out', // CSS timing function (default: "ease")
+  sep: 'word',
 } as const;
 
 /**
@@ -217,6 +218,7 @@ function AiConversationMessage({
   const messageText = message.content;
   const hasAssistantText = message.role === 'assistant' && message.content.trim().length > 0;
   const toolParts = toAiToolMessageParts(message);
+  const processSummary = toAiProcessSummary(message.run);
   const webSources = message.run?.toolCalls.flatMap((toolCall) => toolCall.webSources) ?? [];
 
   if (message.role === 'user') {
@@ -240,6 +242,11 @@ function AiConversationMessage({
           <p className="text-sm text-muted-foreground">这条回答当前无法显示。</p>
         ) : (
           <>
+            {processSummary ? (
+              <p className="text-xs text-muted-foreground" aria-live={isStreaming ? 'polite' : undefined}>
+                阶段摘要：{processSummary.text}
+              </p>
+            ) : null}
             {toolParts.length > 0 ? <AiToolCallGroup parts={toolParts} /> : null}
             {message.content ? (
               <MessageResponse

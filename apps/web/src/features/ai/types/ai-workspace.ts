@@ -7,6 +7,7 @@
 import type {
   AiMessageHistoryItem,
   AiMessageSubmissionMode,
+  AiRunStatus,
   AiThreadActiveRun,
   AiThreadListItem,
 } from '@workspace/contracts/ai';
@@ -19,6 +20,18 @@ export type AiWorkspaceStreamState = 'IDLE' | 'CONNECTING' | 'CONNECTED' | 'RECO
 
 /** 浏览器侧用户命令的生命周期；只反映当前请求，不替代服务端 Run 状态。 */
 export type AiWorkspaceCommandState = 'IDLE' | 'SUBMITTING' | 'STOPPING' | 'RETRYING';
+
+/** 当前浏览器会话内侧栏展示的单个 Thread 运行活动投影。 */
+export type AiWorkspaceThreadActivity = {
+  /** 最近一次活动 Run 标识。 */
+  runId: string;
+  /** 最近一次已知的 Run 状态。 */
+  status: AiRunStatus;
+  /** 当前 Run 是否仍在执行或等待执行。 */
+  isRunning: boolean;
+  /** 当前浏览器会话内是否存在尚未点击查看的完成提醒。 */
+  hasUnseenCompletion: boolean;
+};
 
 /** 已提交但服务端尚未领取的用户输入展示模型。 */
 export type AiWorkspaceQueuedMessage = {
@@ -35,7 +48,10 @@ export type AiWorkspaceQueuedMessage = {
 };
 
 /** 侧栏展示的会话预览，当前选中态仅由 URL 的 Thread 标识决定。 */
-export type AiWorkspaceThreadPreview = Pick<AiThreadListItem, 'id' | 'title' | 'activeRunId' | 'pinnedAt' | 'archivedAt'> & {
+export type AiWorkspaceThreadPreview = Pick<
+  AiThreadListItem,
+  'id' | 'title' | 'activeRunId' | 'pinnedAt' | 'archivedAt'
+> & {
   /** 该会话是否与当前 URL 中的 Thread 标识匹配。 */
   isActive: boolean;
 };

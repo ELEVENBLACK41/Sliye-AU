@@ -7,9 +7,11 @@
 
 import type { AiToolExecutionContext } from './ai-tool-registry.types';
 
-/** 第二阶段最小工具链允许登记的业务来源类型。 */
+/** 当前已纳入只读决策过程工具允许登记的业务来源类型。 */
 export const AI_TOOL_SOURCE_TYPES = [
   'DECISION',
+  'DECISION_PROPOSAL',
+  'DECISION_VOTE_ROUND',
   'DECISION_RESOLUTION',
 ] as const;
 

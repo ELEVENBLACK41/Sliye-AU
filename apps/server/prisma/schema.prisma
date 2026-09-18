@@ -315,9 +315,11 @@ enum AiToolCallStatus {
   FAILED
 }
 
-/// Run 实际读取或引用的稳定业务来源类型。
+/// Run 实际读取或引用的稳定业务来源类型；只增加已纳入工具所需的业务来源。
 enum AiSourceType {
   DECISION
+  DECISION_PROPOSAL
+  DECISION_VOTE_ROUND
   DECISION_RESOLUTION
 }
 

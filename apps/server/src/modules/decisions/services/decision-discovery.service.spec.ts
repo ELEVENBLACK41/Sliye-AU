@@ -98,6 +98,46 @@ describe('DecisionDiscoveryService', () => {
     );
   });
 
+  it('多候选重新发现时叠加项目、分区和范围筛选', async () => {
+    const { service, findMany } = createService();
+
+    await service.findCandidates(AUTHORIZATION_CONTEXT, '缓存方案', 5, {
+      projectQuery: '基础设施项目',
+      areaQuery: '架构小组',
+      scope: 'AREA',
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            { AND: [{ project: { members: { some: { userId: 42 } } } }] },
+            {
+              project: {
+                title: { contains: '基础设施项目', mode: 'insensitive' },
+              },
+            },
+            {
+              area: {
+                is: {
+                  name: { contains: '架构小组', mode: 'insensitive' },
+                },
+              },
+            },
+            { area: { is: { type: 'PRIVATE' } } },
+            {
+              OR: [
+                {
+                  title: { contains: '缓存方案', mode: 'insensitive' },
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+  });
+
   it('limit 会被限制在 1 到 20 之间，避免调用方传入越界数量', async () => {
     const { service, findMany } = createService();
 
@@ -121,9 +161,11 @@ describe('DecisionDiscoveryService', () => {
       {
         id: 17,
         title: '缓存方案评审',
+        areaId: null,
         status: 'DISCUSSING',
         updatedAt,
         project: { title: '基础设施项目' },
+        area: null,
       },
     ]);
 
@@ -134,6 +176,38 @@ describe('DecisionDiscoveryService', () => {
         decisionId: 17,
         title: '缓存方案评审',
         projectTitle: '基础设施项目',
+        scope: 'PROJECT',
+        areaName: null,
+        status: 'DISCUSSING',
+        updatedAt,
+      },
+    ]);
+  });
+
+  it('私有小组决策候选应返回 AREA 范围和分区名称', async () => {
+    const { service, findMany } = createService();
+    const updatedAt = new Date('2026-08-25T08:00:00.000Z');
+    findMany.mockResolvedValue([
+      {
+        id: 18,
+        title: '缓存方案评审',
+        areaId: 5,
+        status: 'DISCUSSING',
+        updatedAt,
+        project: { title: '基础设施项目' },
+        area: { name: '架构小组' },
+      },
+    ]);
+
+    await expect(
+      service.findCandidates(AUTHORIZATION_CONTEXT, '缓存方案', 5),
+    ).resolves.toEqual([
+      {
+        decisionId: 18,
+        title: '缓存方案评审',
+        projectTitle: '基础设施项目',
+        scope: 'AREA',
+        areaName: '架构小组',
         status: 'DISCUSSING',
         updatedAt,
       },

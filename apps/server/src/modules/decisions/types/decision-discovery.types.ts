@@ -5,6 +5,17 @@
  */
 
 import type { DecisionStatus } from '../../../generated/prisma';
+import type { DecisionContextScope } from './decision-context.types';
+
+/** 决策候选发现的可选范围筛选；筛选条件只用于重新查询，不是权限凭据。 */
+export type DecisionDiscoveryFilters = {
+  /** 项目名称筛选词。 */
+  projectQuery?: string;
+  /** 私有讨论分区名称筛选词。 */
+  areaQuery?: string;
+  /** 决策归属范围。 */
+  scope?: DecisionContextScope;
+};
 
 /** 一条候选 Decision 的最小摘要，只包含消歧所需字段。 */
 export type DecisionDiscoveryCandidate = {
@@ -14,6 +25,10 @@ export type DecisionDiscoveryCandidate = {
   title: string;
   /** 决策所属项目标题，帮助在多个同名决策间消歧。 */
   projectTitle: string;
+  /** 决策归属范围；项目级决策为 PROJECT，私有小组决策为 AREA。 */
+  scope: DecisionContextScope;
+  /** 决策所属私有讨论分区名称；项目级决策为 null。 */
+  areaName: string | null;
   /** 决策当前状态。 */
   status: DecisionStatus;
   /** 决策最近更新时间。 */

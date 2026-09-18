@@ -37,6 +37,25 @@ export const FIND_DECISION_CANDIDATES_DESCRIPTOR: AiToolDescriptor = {
         required: true,
         description: '待发现的决策名称、别名或可见标识符。',
       },
+      {
+        name: 'projectQuery',
+        valueType: 'STRING',
+        required: false,
+        description: '可选的项目名称筛选词，仅用于多候选后的安全重新发现。',
+      },
+      {
+        name: 'areaQuery',
+        valueType: 'STRING',
+        required: false,
+        description:
+          '可选的私有讨论分区名称筛选词，仅用于多候选后的安全重新发现。',
+      },
+      {
+        name: 'scope',
+        valueType: 'STRING',
+        required: false,
+        description: '可选范围：PROJECT 表示项目级，AREA 表示私有小组级。',
+      },
     ],
   },
   output: {
@@ -47,7 +66,7 @@ export const FIND_DECISION_CANDIDATES_DESCRIPTOR: AiToolDescriptor = {
         valueType: 'OBJECT',
         required: true,
         description:
-          '受控数量（当前上限 5 条）的候选决策摘要数组，每项包含决策主键、标题、所属项目标题、状态和最近更新时间。',
+          '受控数量（当前上限 5 条）的候选决策摘要数组，每项包含决策主键、标题、所属项目标题、项目或私有小组范围、状态和最近更新时间。',
       },
     ],
   },

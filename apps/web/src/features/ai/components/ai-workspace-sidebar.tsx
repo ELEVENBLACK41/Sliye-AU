@@ -4,7 +4,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Archive, MoreHorizontal, PanelLeft, Pencil, Pin, Plus } from 'lucide-react';
+import { Archive, LoaderCircle, MoreHorizontal, PanelLeft, Pencil, Pin, Plus } from 'lucide-react';
 
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -25,9 +25,17 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@workspace/ui/components/sheet';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@workspace/ui/components/sheet';
 
 import type { AiWorkspaceLoadState, AiWorkspaceThreadPreview } from '../types/ai-workspace';
+import { useAiThreadWorkspaceStore } from '../store/ai-thread-workspace.store';
 
 /** 侧栏展示所需的真实 Thread 列表与加载状态。 */
 type AiWorkspaceSidebarData = {
@@ -327,6 +335,9 @@ function AiThreadPreview({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [renameTitle, setRenameTitle] = useState(thread.title);
+  const threadActivity = useAiThreadWorkspaceStore((state) => state.threadActivityById[thread.id]);
+  const isRunActive = threadActivity?.isRunning ?? thread.activeRunId !== null;
+  const hasUnseenCompletion = threadActivity?.hasUnseenCompletion ?? false;
 
   /** 打开重命名弹窗时以服务端当前标题初始化表单。 */
   function handleRenameOpenChange(open: boolean): void {
@@ -354,7 +365,14 @@ function AiThreadPreview({
           className="h-9 w-full justify-start rounded-lg px-2.5 pr-16 text-left text-sm"
           onClick={() => onThreadSelect(thread.id)}
         >
-          <span className="truncate">{thread.title}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            {isRunActive ? <LoaderCircle className="size-3.5 shrink-0 animate-spin" aria-hidden /> : null}
+            {!isRunActive && hasUnseenCompletion ? (
+              <span className="size-2 shrink-0 rounded-full bg-amber-400" title="有新的回答" aria-hidden />
+            ) : null}
+            {!isRunActive && hasUnseenCompletion ? <span className="sr-only">有新的回答</span> : null}
+            <span className="truncate">{thread.title}</span>
+          </span>
         </Button>
         <div
           className={`absolute top-1/2 right-1 z-10 flex -translate-y-1/2 items-center gap-0.5 transition-opacity ${
@@ -441,7 +459,11 @@ function AiThreadPreview({
                 取消
               </Button>
             </DialogClose>
-            <Button type="button" disabled={!renameTitle.trim() || isMetadataPending} onClick={() => void handleRenameSubmit()}>
+            <Button
+              type="button"
+              disabled={!renameTitle.trim() || isMetadataPending}
+              onClick={() => void handleRenameSubmit()}
+            >
               {isMetadataPending ? '保存中…' : '保存'}
             </Button>
           </DialogFooter>

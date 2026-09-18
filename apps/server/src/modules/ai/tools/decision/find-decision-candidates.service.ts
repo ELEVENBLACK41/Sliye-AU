@@ -6,7 +6,9 @@
  * 重复实现或悄悄漂移各业务域自己的查询与权限规则。
  */
 
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { API_ERROR_CODES } from '@workspace/contracts/common';
+import { BusinessException } from '../../../../common/exceptions/business.exception';
 import { DecisionDiscoveryService } from '../../../decisions/services/decision-discovery.service';
 import { AiPermissionPolicyService } from '../../policies/ai-permission-policy';
 import type { AiToolExecutionContext } from '../../types/ai-tool-registry.types';
@@ -51,19 +53,55 @@ export class FindDecisionCandidatesToolService implements AiToolExecutor<
   ): Promise<AiToolExecutionResult<FindDecisionCandidatesResult>> {
     assertAiRequiredText(input.query, '决策发现查询词');
     const trimmedQuery = input.query.trim();
+    if (input.projectQuery !== undefined) {
+      assertAiRequiredText(input.projectQuery, '项目筛选词');
+    }
+    if (input.areaQuery !== undefined) {
+      assertAiRequiredText(input.areaQuery, '分区筛选词');
+    }
+    if (
+      input.scope !== undefined &&
+      input.scope !== 'PROJECT' &&
+      input.scope !== 'AREA'
+    ) {
+      throw new BusinessException({
+        code: API_ERROR_CODES.COMMON_VALIDATION_FAILED,
+        message: '决策范围筛选值无效',
+        status: HttpStatus.BAD_REQUEST,
+      });
+    }
 
     const authorization = await this.permissionPolicy.buildAuthorizationContext(
       executionContext.ownerUserId,
     );
-    const discovered = await this.decisionDiscoveryService.findCandidates(
-      authorization,
-      trimmedQuery,
-      MAX_DECISION_CANDIDATES,
-    );
+    const filters = {
+      ...(input.projectQuery === undefined
+        ? {}
+        : { projectQuery: input.projectQuery.trim() }),
+      ...(input.areaQuery === undefined
+        ? {}
+        : { areaQuery: input.areaQuery.trim() }),
+      ...(input.scope === undefined ? {} : { scope: input.scope }),
+    };
+    const discovered =
+      Object.keys(filters).length === 0
+        ? await this.decisionDiscoveryService.findCandidates(
+            authorization,
+            trimmedQuery,
+            MAX_DECISION_CANDIDATES,
+          )
+        : await this.decisionDiscoveryService.findCandidates(
+            authorization,
+            trimmedQuery,
+            MAX_DECISION_CANDIDATES,
+            filters,
+          );
     const candidates: AiDecisionCandidate[] = discovered.map((candidate) => ({
       decisionId: candidate.decisionId,
       title: candidate.title,
       projectTitle: candidate.projectTitle,
+      scope: candidate.scope,
+      areaName: candidate.areaName,
       status: candidate.status,
       updatedAt: candidate.updatedAt.toISOString(),
     }));
